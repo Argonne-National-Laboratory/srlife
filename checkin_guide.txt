@@ -1,0 +1,7 @@
+For now these are manual steps.  When we move to the public repository 
+they will be automatically done on pull requests.
+
+1) Add tests to the test/ folder and ensure all tests (new + old) pass
+2) Run "coverage run -m nose" and then "coverage report" and make sure the test coverage remains reasonable (say > 80%).
+3) Run "pylint srlife" and ensure there are no style errors (require 10/10)
+4) TODO: generate the documentation and ensure it is correct and adequate
