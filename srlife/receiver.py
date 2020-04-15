@@ -357,11 +357,11 @@ class Tube:
     if loc == "inner":
       if not np.isclose(bc.r, self.r - self.t) or not np.isclose(bc.h, self.h):
         raise ValueError("Inner BC radius must match inner tube radius!")
-      self.inner_flux = bc
+      self.inner_bc = bc
     elif loc == "outer":
       if not np.isclose(bc.r, self.r) or not np.isclose(bc.h, self.h):
         raise ValueError("Outer BC radius must match outer tube radius!")
-      self.outer_flux = bc
+      self.outer_bc = bc
     else:
       raise ValueError("Wall location must be either inner or outer")
 

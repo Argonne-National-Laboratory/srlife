@@ -134,6 +134,7 @@ class TestTube(unittest.TestCase):
   def test_valid_bc(self):
     tube = valid_tube()
     tube.set_bc(valid_heatflux_bc("outer"), "outer")
+    tube.set_bc(valid_heatflux_bc("inner"), "inner")
 
   def test_invalid_bc(self):
     tube = valid_tube()
