@@ -250,6 +250,10 @@ class Tube:
     The receiver package uses the metal temperatures, stresses, 
     mechanical strains, and inelastic strains.
 
+    Analysis results can be provided over the full 3D grid (default),
+    a single 2D plane (identified by a height), or a single 1D line
+    (identified by a height and a theta position)
+
     Boundary conditions may be provided in two ways, either
     as fluid conditions or net heat fluxes.  These are defined
     in the HeatFluxBC or ConvectionBC objects below.
@@ -272,11 +276,43 @@ class Tube:
     self.nt = nt
     self.nz = nz
 
+    self.abstraction = "3D"
+
     self.times = []
     self.results = {}
 
     self.outer_bc = None
     self.inner_bc = None
+
+  def make_2d(self, height):
+    """
+      Reduce to a 2D abstraction by slicing the tube at the
+      indicated height
+
+      Parameters:
+        height      the height at which to slice
+    """
+    if height < 0.0 or height > self.h:
+      raise ValueError("2D slice height must be within the tube height")
+
+    self.abstraction = "2D"
+    self.plane = height
+
+  def make_1D(self, height, angle):
+    """
+      Reduce to a 1D abstraction along a ray given by the provided
+      height and angle.
+
+      Parameters:
+        height      the height of the ray
+        angle       the angle, in radians
+    """
+    if height < 0.0 or height > self.h:
+      raise ValueError("Ray height must be within the tube height")
+
+    self.abstraction = "1D"
+    self.plane = height
+    self.angle = angle
 
   def close(self, other):
     """
@@ -311,6 +347,12 @@ class Tube:
         return False
       base = (base and self.inner_bc.close(other.inner_bc))
 
+    base = (base and self.abstraction == other.abstraction)
+    if self.abstraction == "2D" or self.abstraction == "1D":
+      base = (base and np.isclose(self.plane, other.plane))
+    if self.abstraction == "1D":
+      base = (base and np.isclose(self.angle, other.angle))
+
     return base
 
   @property
@@ -341,10 +383,29 @@ class Tube:
         name:       parameter set name
         data:       actual results data
     """
-    if data.shape != (self.ntime, self.nr, self.nt, self.nz):
-      raise ValueError("Data array shape must equal ntime x nr x nt x nz!")
-
+    self._check_rdim(data)
     self.results[name] = data
+
+  def _check_rdim(self, data):
+    """
+      Make sure the results array aligns with the correct dimension for the
+      abstraction
+
+      Parameters:
+        name:       parameter set name
+    """
+    if self.abstraction == "3D":
+      if data.shape != (self.ntime, self.nr, self.nt, self.nz):
+        raise ValueError("Data array shape must equal ntime x nr x nt x nz!")
+    elif self.abstraction == "2D":
+      if data.shape != (self.ntime, self.nr, self.nt):
+        raise ValueError("Data array shape must equal ntime x nr x nt!")
+    elif self.abstraction == "1D":
+      if data.shape != (self.ntime, self.nr):
+        raise ValueError("Data array shape must equal ntime x nr!")
+    else:
+      raise ValueError("Internal error: unknown abstraction type %s" % 
+          self.abstraction)
 
   def set_bc(self, bc, loc):
     """
@@ -380,6 +441,12 @@ class Tube:
     fobj.attrs["nt"] = self.nt
     fobj.attrs["nz"] = self.nz
 
+    fobj.attrs["abstraction"] = self.abstraction
+    if self.abstraction == "2D" or self.abstraction == "1D":
+      fobj.attrs["plane"] = self.plane
+    if self.abstraction == "1D":
+      fobj.attrs["angle"] = self.angle
+
     fobj.create_dataset("times", data = self.times)
 
     grp = fobj.create_group("results")
@@ -404,6 +471,12 @@ class Tube:
     """
     res = cls(fobj.attrs["r"], fobj.attrs["t"], fobj.attrs["h"], fobj.attrs["nr"], fobj.attrs["nt"],
         fobj.attrs["nz"])
+
+    res.abstraction = fobj.attrs["abstraction"]
+    if res.abstraction == "2D" or res.abstraction == "1D":
+      res.plane = fobj.attrs["plane"]
+    if res.abstraction == "1D":
+      res.angle = fobj.attrs["angle"]
 
     res.set_times(np.copy(fobj["times"]))
 

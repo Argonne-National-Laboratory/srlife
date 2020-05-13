@@ -56,6 +56,18 @@ def valid_tube(results = []):
 
   return tube
 
+def valid_tube_1D(results = []):
+  tube = receiver.Tube(outer_radius, thickness, height, nr, nt, nz)
+
+  tube.set_times(times)
+
+  tube.make_1D(height/2, np.pi/3)
+
+  for res in results:
+    tube.add_results(res, np.zeros((len(times), nr)))
+
+  return tube
+
 def valid_panel(n = 0, results = []):
   panel = receiver.Panel(tube_k)
 
@@ -148,6 +160,16 @@ class TestTube(unittest.TestCase):
 
   def test_store(self):
     tube = valid_tube(['stress'])
+    tube.set_bc(valid_heatflux_bc("outer"), "outer")
+    
+    f = get_temp_hdf()
+    tube.save(f)
+    new = receiver.Tube.load(f)
+
+    self.assertTrue(tube.close(new))
+
+  def test_store_1d(self):
+    tube = valid_tube_1D(['stress'])
     tube.set_bc(valid_heatflux_bc("outer"), "outer")
     
     f = get_temp_hdf()
