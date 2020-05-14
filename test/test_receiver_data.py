@@ -194,7 +194,7 @@ class TestHeatFluxBC(unittest.TestCase):
     f = get_temp_hdf()
     orig = valid_heatflux_bc("outer")
     orig.save(f)
-    new = receiver.BC.load(f)
+    new = receiver.ThermalBC.load(f)
     self.assertTrue(orig.close(new))
 
 class TestConvectiveBC(unittest.TestCase):
@@ -213,6 +213,6 @@ class TestConvectiveBC(unittest.TestCase):
     f = get_temp_hdf()
     orig = valid_convective_bc("outer")
     orig.save(f)
-    new = receiver.BC.load(f)
+    new = receiver.ThermalBC.load(f)
     self.assertTrue(orig.close(new))
 

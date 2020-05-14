@@ -258,7 +258,8 @@ class Tube:
     as fluid conditions or net heat fluxes.  These are defined
     in the HeatFluxBC or ConvectionBC objects below.
   """
-  def __init__(self, outer_radius, thickness, height, nr, nt, nz):
+  def __init__(self, outer_radius, thickness, height, nr, nt, nz, 
+      T0 = 0.0):
     """
       Parameters:
         outer_radius:        tube outer radius
@@ -267,6 +268,9 @@ class Tube:
         nr:                  number of radial increments
         nt:                  number of circumferential increments
         nz:                  number of axial increments
+
+      Other Parameters:
+        T0                   initial temperature
     """
     self.r = outer_radius
     self.t = thickness
@@ -283,6 +287,8 @@ class Tube:
 
     self.outer_bc = None
     self.inner_bc = None
+
+    self.T0 = T0
 
   def make_2d(self, height):
     """
@@ -352,6 +358,8 @@ class Tube:
       base = (base and np.isclose(self.plane, other.plane))
     if self.abstraction == "1D":
       base = (base and np.isclose(self.angle, other.angle))
+
+    base = (base and np.isclose(self.T0, other.T0))
 
     return base
 
@@ -461,6 +469,8 @@ class Tube:
       grp = fobj.create_group("inner_bc")
       self.inner_bc.save(grp)
 
+    fobj.attrs["T0"] = self.T0
+
   @classmethod
   def load(cls, fobj):
     """
@@ -470,7 +480,7 @@ class Tube:
         fobj        h5py group
     """
     res = cls(fobj.attrs["r"], fobj.attrs["t"], fobj.attrs["h"], fobj.attrs["nr"], fobj.attrs["nt"],
-        fobj.attrs["nz"])
+        fobj.attrs["nz"], T0 = fobj.attrs["T0"])
 
     res.abstraction = fobj.attrs["abstraction"]
     if res.abstraction == "2D" or res.abstraction == "1D":
@@ -485,14 +495,14 @@ class Tube:
       res.add_results(name, np.copy(grp[name]))
 
     if "outer_bc" in fobj:
-      res.set_bc(BC.load(fobj["outer_bc"]), "outer")
+      res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")
 
     if "inner_bc" in fobj:
-      res.set_bc(BC.load(fobj["inner_bc"]), "inner")
+      res.set_bc(ThermalBC.load(fobj["inner_bc"]), "inner")
 
     return res
 
-class BC:
+class ThermalBC:
   """
     Superclass for thermal boundary conditions.
 
@@ -513,7 +523,7 @@ class BC:
     else:
       raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
 
-class HeatFluxBC(BC):
+class HeatFluxBC(ThermalBC):
   """
     A net heat flux on the radius of a tube.  Positive is heat input,
     negative is heat output.
@@ -603,7 +613,7 @@ class HeatFluxBC(BC):
         and np.allclose(self.data, other.data)
         )
 
-class ConvectiveBC(BC):
+class ConvectiveBC(ThermalBC):
   """
     A convective BC on the surface of a tube defined by a radius and height.
 
