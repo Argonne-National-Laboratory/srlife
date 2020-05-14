@@ -118,7 +118,80 @@ class FluidMaterial:
       2) A map between a ThermalMaterial name and the corresponding
          temperature-dependent film coefficient and its derivative
   """
-  pass
+  @classmethod
+  def load(cls, fname):
+    """
+      Load a FluidMaterial object from a file
+
+      Parameters:
+        fname       file name to load from
+    """
+    root, data = load_dict_xml(fname)
+
+    if root == "PiecewiseLinearFluidMaterial":
+      return PiecewiseLinearFluidMaterial.load(data)
+    else:
+      raise ValueError("Unknown FluidMaterial type %s" % root)
+
+class PiecewiseLinearFluidMaterial:
+  """
+    Supply a mapping between the material type and a piecewise linear
+    interpolate defining the film coefficient as a function of temperature.
+  """
+  def __init__(self, data):
+    """
+      Dictionary of the form {name: (temperatures, values)} mapping
+      a material name to the definition of the piecewise linear map
+
+      Parameters:
+        data:       the dictionary
+    """
+    self.data = data
+
+    self.fns = {name: make_piecewise(T, v) for name, (T,v) in data.items()}
+
+  def save(self, fname):
+    """
+      Save to an XML file
+
+      Parameters:
+        fname       file name to save to
+    """
+    dictrep = {k: {'temp': string_array(T), 'values': string_array(v)} for k, (T, v) in self.data.items()} 
+    save_dict_xml(dictrep, fname, "PiecewiseLinearFluidMaterial")
+
+  @classmethod
+  def load(cls, values):
+    """
+      Load from a dictionary
+
+      Parameters:
+        values      dictionary data
+    """
+    data = {k: (destring_array(pair['temp']), destring_array(pair['values'])) for k, pair in values.items()}
+    return cls(data)
+
+  def coefficient(self, material, T):
+    """
+      Return the film coefficient for the given material and temperature
+
+      Parameters:
+        material:       material name
+        T:              temperatures
+        
+    """
+    return self.fns[material][0](T)
+
+  def dcoefficient(self, material, T):
+    """
+      Return the derivative of the film coefficient with respect to
+      temperature for the give material and temperature.
+
+      Parameters:
+        material:       material name
+        T:              temperatures
+    """
+    return self.fns[material][1](T)
 
 def make_piecewise(x, y):
   """
