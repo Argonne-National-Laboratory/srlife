@@ -3,6 +3,7 @@
 """
 
 import numpy as np
+import scipy.interpolate as inter
 import h5py
 
 class Receiver:
@@ -290,7 +291,7 @@ class Tube:
 
     self.T0 = T0
 
-  def make_2d(self, height):
+  def make_2D(self, height):
     """
       Reduce to a 2D abstraction by slicing the tube at the
       indicated height
@@ -520,8 +521,31 @@ class ThermalBC:
       return HeatFluxBC.load(fobj)
     elif fobj.attrs["type"] == "Convective":
       return ConvectiveBC.load(fobj)
+    elif fobj.attrs["type"] == "FixedTemp":
+      return FixedTempBC.load(fobj)
     else:
       raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
+
+  def _generate_surface_mesh(self):
+    """
+      Generate the appropriate finite difference mesh for a particular problem
+    """
+    ts = np.linspace(0, 2*np.pi, self.nt + 1)
+    ts = (ts[1:] + ts[:-1]) / 2.0
+    zs = np.linspace(0, self.h, self.nz + 1)
+    zs = (zs[1:] + zs[:-1]) / 2.0
+    
+    return self.times, ts, zs
+
+  def _generate_ifn(self, data):
+    """
+      Generate an interpolation function for the given data array
+
+      Parameters:
+        data            (ntime, ntheta, nz) array
+    """
+    return inter.RegularGridInterpolator(self._generate_surface_mesh(),
+        data, method = "linear", bounds_error = False, fill_value = None)
 
 class HeatFluxBC(ThermalBC):
   """
@@ -575,6 +599,108 @@ class HeatFluxBC(ThermalBC):
         fobj        h5py group
     """
     fobj.attrs["type"] = "HeatFlux"
+    fobj.attrs["r"] = self.r
+    fobj.attrs["h"] = self.h
+
+    fobj.attrs["nt"] = self.nt
+    fobj.attrs["nz"] = self.nz
+
+    fobj.create_dataset("times", data = self.times)
+    fobj.create_dataset("data", data = self.data)
+
+  @classmethod
+  def load(cls, fobj):
+    """
+      Load from an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nt"], fobj.attrs["nz"],
+        np.copy(fobj["times"]), np.copy(fobj["data"]))
+
+  def close(self, other):
+    """
+      Check to see if two objects are nearly equal.
+
+      Primarily used for testing
+
+      Parameters:
+        other:      the object to compare against
+    """
+    return (
+        np.isclose(self.r, other.r)
+        and np.isclose(self.h, other.h)
+        and (self.nt == other.nt)
+        and (self.nz == other.nz)
+        and np.allclose(self.times, other.times)
+        and np.allclose(self.data, other.data)
+        )
+
+class FixedTempBC(ThermalBC):
+  """
+    Fixed temperature BC.
+
+    These conditions are defined on the surface of a tube at fixed
+    times given by
+    a radius and a height.  The radius is not used in defining the 
+    BC but is used to ensure the BC is consistent with the Tube object.
+
+    The heat flux is given on a regular grid of theta, z points each defined
+    but a number of increments.  This grid need not agree with the Tube
+    solid grid.
+  """
+  def __init__(self, radius, height, nt, nz, times, data):
+    """
+       Parameters:
+        radius:          boundary condition application radius
+        height:          tube height
+        nt:              number of circumferential increments
+        nz:              number of axial increments
+        times:           fixed temperature times
+        data:            fixed temperature data
+    """
+    self.r = radius
+    self.h = height
+
+    self.nt = nt
+    self.nz = nz
+
+    self.times = times
+
+    if data.shape != (len(self.times), nt, nz):
+      raise ValueError("Discrete temperature shape must equal ntime x ntheta x nz!")
+
+    self.data = data
+
+    self.ifn = self._generate_ifn(self.data)
+
+  @property
+  def ntime(self):
+    """
+      Number of time steps
+    """
+    return len(self.times)
+
+  def temperature(self, t, theta, z):
+    """
+      Key method: return the temperature at a given time and position
+
+      Parameters:
+        t       time
+        theta   angle
+        z       height
+    """
+    return self.ifn([t, theta, z])
+
+  def save(self, fobj):
+    """
+      Save to an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    fobj.attrs["type"] = "FixedTemp"
     fobj.attrs["r"] = self.r
     fobj.attrs["h"] = self.h
 

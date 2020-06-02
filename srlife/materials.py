@@ -25,6 +25,8 @@ class ThermalMaterial:
 
     if root == "PiecewiseLinearThermalMaterial":
       return PiecewiseLinearThermalMaterial.load(data)
+    elif root == "ConstantThermalMaterial":
+      return ConstantThermalMaterial.load(data)
     else:
       raise ValueError("Unknown ThermalMaterial type %s" % root)
 
@@ -109,6 +111,78 @@ class PiecewiseLinearThermalMaterial(ThermalMaterial):
     return cls(values["name"], destring_array(values["temps"]), destring_array(values["cond"]), 
         destring_array(values["diff"]))
 
+class ConstantThermalMaterial(ThermalMaterial):
+  """
+    Constant thermal properties
+  """
+  def __init__(self, name, k, alpha):
+    """
+      Properties:
+        name:           material name
+        k:              conductivity
+        alpha:          diffusivity
+    """
+    self.name = name
+    self.cond = k
+    self.diff = alpha
+
+  def conductivity(self, T):
+    """
+      Conductivity as a function of temperature
+
+      Parameters:
+        T       temperature
+    """
+    return T * 0.0 + self.cond
+
+  def diffusivity(self, T):
+    """
+      Diffusivity as a function of temperature
+
+      Parameters:
+        T       temperature
+    """
+    return T * 0.0 + self.diff
+
+  def dconductivity(self, T):
+    """
+      Derivative of conductivity as a function of temperature
+
+      Parameters:
+        T       temperature
+    """
+    return T * 0.0
+
+  def ddiffusivity(self, T):
+    """
+      Derivative of diffusivity as a function of temperature
+
+      Parameters:
+        T       temperature
+    """
+    return T * 0.0
+
+  def save(self, fname):
+    """
+      Save to an XML file
+
+      Parameters:
+        fname       filename
+    """
+    dictrep = {"name": self.name, "k": str(self.cond), 
+        "alpha": str(self.diff)}
+    save_dict_xml(dictrep, fname, "PiecewiseConstantThermalMaterial")
+
+  @classmethod
+  def load(cls, values):
+    """
+      Load from a dictionary
+
+      Parameters:
+        values  dictionary values
+    """
+    return cls(values["name"], float(values["k"]), float(values["alpha"]))
+
 class FluidMaterial:
   """
     Properties for convective heat transfer.
@@ -130,8 +204,68 @@ class FluidMaterial:
 
     if root == "PiecewiseLinearFluidMaterial":
       return PiecewiseLinearFluidMaterial.load(data)
+    elif root == "ConstantFluidMaterial":
+      return ConstantFluidMaterial.load(data)
     else:
       raise ValueError("Unknown FluidMaterial type %s" % root)
+
+class ConstantFluidMaterial:
+  """
+    Supply a mapping between the material type and a constant
+    film coefficient
+  """
+  def __init__(self, data):
+    """
+      Dictionary of the form {name: value} mapping
+      a material name to the definition of the piecewise linear map
+
+      Parameters:
+        data:       the dictionary
+    """
+    self.data = data
+
+  def save(self, fname):
+    """
+      Save to an XML file
+
+      Parameters:
+        fname       file name to save to
+    """
+    dictrep = {k: str(v) for k, v in self.data.items()} 
+    save_dict_xml(dictrep, fname, "ConstantFluidMaterial")
+
+  @classmethod
+  def load(cls, values):
+    """
+      Load from a dictionary
+
+      Parameters:
+        values      dictionary data
+    """
+    data = {k: float(val) for k, val in values.items()}
+    return cls(data)
+
+  def coefficient(self, material, T):
+    """
+      Return the film coefficient for the given material and temperature
+
+      Parameters:
+        material:       material name
+        T:              temperatures
+        
+    """
+    return T*0.0 + self.data[material]
+
+  def dcoefficient(self, material, T):
+    """
+      Return the derivative of the film coefficient with respect to
+      temperature for the give material and temperature.
+
+      Parameters:
+        material:       material name
+        T:              temperatures
+    """
+    return T * 0.0
 
 class PiecewiseLinearFluidMaterial:
   """
