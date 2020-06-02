@@ -584,12 +584,25 @@ class HeatFluxBC(ThermalBC):
 
     self.data = data
 
+    self.ifn = self._generate_ifn(self.data)
+
   @property
   def ntime(self):
     """
       Number of time steps
     """
     return len(self.times)
+
+  def flux(self, t, theta, z):
+    """
+      Flux as a function of time, angle, and height
+
+      Parameters:
+        t       time
+        theta   angle
+        z       height
+    """
+    return self.ifn([t, theta, z])
 
   def save(self, fobj):
     """
@@ -772,12 +785,27 @@ class ConvectiveBC(ThermalBC):
 
     self.data = data
 
+    zs = np.linspace(0, self.h, self.nz + 1)
+    zs = (zs[1:] + zs[:-1]) / 2.0
+    self.ifn = inter.RegularGridInterpolator((self.times, zs), self.data, 
+        bounds_error=False, fill_value = None)
+
   @property
   def ntime(self):
     """
       Number of time steps
     """
     return len(self.times)
+
+  def fluid_temperature(self, t, theta, z):
+    """
+      Key method: return the fluid temperature at a given time and position
+
+      Parameters:
+        t       time
+        z       height
+    """
+    return self.ifn([t, z])
 
   def save(self, fobj):
     """

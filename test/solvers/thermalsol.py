@@ -22,7 +22,7 @@ class ManufacturedSolution:
     self.soln = solution
     self.source = source
 
-  def solve(self, solver, thermal, r = 1.0, t = 0.2, h = 1, time = 1, 
+  def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
       ntime = 11, nr = 10, nt = 20, nz = 10, T0 = 0.0):
     """
       Generate the appropriate tube and solve with the provided solver
@@ -78,13 +78,12 @@ class ManufacturedSolution:
 
     return tube
 
-  def plot_comparison(self, soln, thermal):
+  def plot_comparison(self, soln):
     """
       Plot a comparison to a manufactured solution
 
       Parameters:
         soln:           particular tube object with the solution
-        thermal:        thermal model used
     """
     mesh = self._generate_mesh(soln.r, soln.t, soln.h, soln.times, 
         soln.nr, soln.nt, soln.nz)
@@ -100,6 +99,19 @@ class ManufacturedSolution:
       plt.ylabel("Temperature")
       plt.title("1D: left, middle, right")
 
+  def assess_comparison(self, soln, tol):
+    """
+      Return true if solution matches, false otherwise
+
+      Parameters:
+        soln:           particular tube object with the solution
+        tol:            relative tolerance
+    """
+    mesh = self._generate_mesh(soln.r, soln.t, soln.h, soln.times, 
+        soln.nr, soln.nt, soln.nz)
+    T = self.soln(*mesh)
+
+    return np.allclose(T, soln.results['temperature'], rtol = tol)
 
   def _generate_mesh(self, r, t, h, times, nr, nt, nz):
     """

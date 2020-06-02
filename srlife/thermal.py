@@ -157,7 +157,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
     T = np.copy(T_n)
 
-    sol = opt.root(lambda x: self.RJ(x, T_n, time, dt), T.flatten(), method = 'lm')
+    sol = opt.root(lambda x: self.RJ(x, T_n, time, dt)[0], T.flatten(), method = 'lm')
     T = sol.x.reshape(T_n.shape)
 
     return T
@@ -172,6 +172,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     """
     # Some setup
+    n = len(T)
     T = T.reshape(T_n.shape)
 
     k = self.material.conductivity(T)
@@ -183,9 +184,13 @@ class FiniteDifferenceImplicitThermalProblem:
     dkdr = (k[2:] - k[:-2]) / (2.0 * self.dr)
 
     R = np.zeros(T.shape)
+    J = np.zeros(T.shape + T.shape)
 
     # 1) The inertia term
     R[1:-1] += k[1:-1] / a[1:-1] * (T[1:-1] - T_n[1:-1])
+    dk = self.material.dconductivity(T)
+    da = self.material.ddiffusivity(T)
+    J[1:-1,1:-1] += k[1:-1] / a[1:-1] * (T[1:-1] - T_n[1:-1]) 
 
     # 2) The r term
     R[1:-1] -= (dkdr * dTdr + k[1:-1] / self.r[1:-1]*dTdr + k[1:-1]*d2Tdr2) * dt
@@ -196,13 +201,27 @@ class FiniteDifferenceImplicitThermalProblem:
       R[0] = T[2] - T[0]
     elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
       R[0] = T[0] - self.tube.inner_bc.temperature(time, self.theta, self.z)
+    elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+      R[0] = k[0] * (T[2] - T[0]) / (2.0 * self.dr) - self.tube.inner_bc.flux(time, self.theta, self.z)
+    elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      R[0] = k[0] * (T[2] - T[0]) / (2.0 * self.dr) - self.fluid.coefficient(self.material.name, T[0]) * (
+          self.tube.inner_bc.fluid_temperature(time, self.z) - T[0]) * dt
+    else:
+      raise ValueError("Unknown boundary condition!")
 
     # The right BC
     # Zero flux
     if self.tube.outer_bc is None:
       R[-1] = T[-1] - T[-3]
-    elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
+    elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
       R[-1] = T[-1] - self.tube.outer_bc.temperature(time, self.theta, self.z)
+    elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+      R[-1] = k[-1] * (T[-1] - T[-3]) / (2.0 * self.dr) - self.tube.inner_bc.flux(time, self.theta, self.z)
+    elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      R[-1] = k[-1] * (T[-1] - T[-3]) / (2.0 * self.dr) - self.fluid.coefficient(self.material.name, T[-1]) * (
+          self.tube.inner_bc.fluid_temperature(time, self.z) - T[-1]) * dt
+    else:
+      raise ValueError("Unknown boundary condition!")
 
     # 3) The theta term
     if self.ndim == 2:
@@ -216,7 +235,7 @@ class FiniteDifferenceImplicitThermalProblem:
     if self.source is not None:
       R[1:-1] -= self.source(time, *self.mesh)[1:-1] * dt
     
-    return R.flatten()
+    return R.flatten(), J.reshape(n,n)
   
   def _generate_mesh(self):
     """

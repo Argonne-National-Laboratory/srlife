@@ -23,15 +23,16 @@ problems = [
     ]
 
 
-def run_with(solver, material):
+def run_with(solver, material, fluid):
   """
     Run the standard problems with the provided solver and material
   """
   for problem in problems:
-    res = problem.solve(solver, material)
-    problem.plot_comparison(res, material)
+    res = problem.solve(solver, material, fluid)
+    problem.plot_comparison(res)
     plt.show()
 
 if __name__ == "__main__":
   run_with(thermal.FiniteDifferenceImplicitThermalSolver(), 
-      materials.ConstantThermalMaterial("Test", 10.0, 5.0))
+      materials.ConstantThermalMaterial("Test", 10.0, 5.0),
+      materials.ConstantFluidMaterial({"Test": 7.5}))
