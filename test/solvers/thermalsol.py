@@ -48,14 +48,13 @@ class ManufacturedSolution:
     tube.set_times(times)
 
     # Set the temperatures on the edges
-    dr = t / nr
     smesh = self._generate_surface_mesh(t, h, times, nt, nz)
     bc1 = receiver.FixedTempBC(r - t, h, nt, nz, times, 
-        self.soln(smesh[0], (r-t-dr/2)*np.ones(smesh[0].shape),
+        self.soln(smesh[0], (r-t)*np.ones(smesh[0].shape),
           *smesh[1:self.dim]))
     tube.set_bc(bc1, "inner")
     bc2 = receiver.FixedTempBC(r, h, nt, nz, times,
-        self.soln(smesh[0], (r+dr/2)*np.ones(smesh[0].shape),
+        self.soln(smesh[0], r*np.ones(smesh[0].shape),
           *smesh[1:self.dim]))
     tube.set_bc(bc2, "outer")
 
@@ -88,18 +87,29 @@ class ManufacturedSolution:
     mesh = self._generate_mesh(soln.r, soln.t, soln.h, soln.times, 
         soln.nr, soln.nt, soln.nz)
     T = self.soln(*mesh)
-
+    
     plt.figure()
     if self.dim == 1:
-      plot = [0, soln.nr // 2, -1]
+      plot = [1, soln.nr // 2, -2]
       for p in plot:
         l, = plt.plot(mesh[0][:,p], soln.results['temperature'][:,p])
         plt.plot(mesh[0][:,p], T[:,p], ls = '--', color = l.get_color())
       plt.xlabel("Time")
       plt.ylabel("Temperature")
       plt.title("1D: left, middle, right")
+    elif self.dim == 2:
+      plot_r = [0,1, soln.nr // 2, -2,-1]
+      plot_t = [0,1, soln.nt // 2, -2,-1]
+      for rp in plot_r:
+        for tp in plot_t:
+          l, = plt.plot(mesh[0][:,rp,tp], soln.results['temperature'][:,rp,tp])
+          plt.plot(mesh[0][:,rp,tp], T[:,rp, tp], ls = '--', color = l.get_color())
+      plt.xlabel("Time")
+      plt.ylabel("Temperature")
+      plt.title("2D, r/theta slices")
 
-  def assess_comparison(self, soln, tol):
+
+  def assess_comparison(self, soln, tol, atol):
     """
       Return true if solution matches, false otherwise
 
@@ -111,7 +121,9 @@ class ManufacturedSolution:
         soln.nr, soln.nt, soln.nz)
     T = self.soln(*mesh)
 
-    return np.allclose(T, soln.results['temperature'], rtol = tol)
+    print(np.max(np.abs(T - soln.results['temperature'])))
+
+    return np.allclose(T, soln.results['temperature'], rtol = tol, atol = atol)
 
   def _generate_mesh(self, r, t, h, times, nr, nt, nz):
     """
@@ -126,12 +138,9 @@ class ManufacturedSolution:
         nt          number of circumferential increments
         nz          number of axial increments
     """
-    rs = np.linspace(r-t, r, nr + 1)
-    rs = (rs[1:] + rs[:-1]) / 2.0
-    ts = np.linspace(0, 2*np.pi, nt + 1)
-    ts = (ts[1:] + ts[:-1]) / 2.0
-    zs = np.linspace(0, h, nz + 1)
-    zs = (zs[1:] + zs[:-1]) / 2.0
+    rs = np.linspace(r-t, r, nr)
+    ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
+    zs = np.linspace(0, h, nz)
 
     geom = [rs, ts, zs]
 
@@ -149,10 +158,8 @@ class ManufacturedSolution:
         nt          number of circumferential increments
         nz          number of axial increments
     """
-    ts = np.linspace(0, 2*np.pi, nt + 1)
-    ts = (ts[1:] + ts[:-1]) / 2.0
-    zs = np.linspace(0, h, nz + 1)
-    zs = (zs[1:] + zs[:-1]) / 2.0
+    ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
+    zs = np.linspace(0, h, nz)
 
     geom = [ts, zs]
 

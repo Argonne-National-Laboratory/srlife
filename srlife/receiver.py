@@ -530,10 +530,8 @@ class ThermalBC:
     """
       Generate the appropriate finite difference mesh for a particular problem
     """
-    ts = np.linspace(0, 2*np.pi, self.nt + 1)
-    ts = (ts[1:] + ts[:-1]) / 2.0
-    zs = np.linspace(0, self.h, self.nz + 1)
-    zs = (zs[1:] + zs[:-1]) / 2.0
+    ts = np.linspace(0, 2*np.pi, self.nt + 1)[:-1]
+    zs = np.linspace(0, self.h, self.nz)
     
     return self.times, ts, zs
 
@@ -785,8 +783,7 @@ class ConvectiveBC(ThermalBC):
 
     self.data = data
 
-    zs = np.linspace(0, self.h, self.nz + 1)
-    zs = (zs[1:] + zs[:-1]) / 2.0
+    zs = np.linspace(0, self.h, self.nz)
     self.ifn = inter.RegularGridInterpolator((self.times, zs), self.data, 
         bounds_error=False, fill_value = None)
 
