@@ -96,7 +96,18 @@ class ManufacturedSolution:
       plt.xlabel("Time")
       plt.ylabel("Temperature")
       plt.title("2D, r/theta slices")
-
+    elif self.dim == 3:
+      plot_r = [0,1, soln.nr // 2, -2,-1]
+      plot_t = [0,1, soln.nt // 2, -2,-1]
+      plot_z = [0,1, soln.nz // 2, -2,-1]
+      for rp in plot_r:
+        for tp in plot_t:
+          for zp in plot_z:
+            l, = plt.plot(mesh[0][:,rp,tp,zp], soln.results['temperature'][:,rp,tp,zp])
+            plt.plot(mesh[0][:,rp,tp,zp], T[:,rp, tp,zp], ls = '--', color = l.get_color())
+      plt.xlabel("Time")
+      plt.ylabel("Temperature")
+      plt.title("3D, r/theta/z slices")
 
   def assess_comparison(self, soln, tol, atol):
     """

@@ -166,9 +166,12 @@ class FiniteDifferenceImplicitThermalProblem:
 
     if self.ndim == 1:
       A, b = self.form_1D_system(T_n, time, dt)
-
     elif self.ndim == 2:
       A, b = self.form_2D_system(T_n, time, dt)
+    elif self.ndim == 3:
+      A, b = self.form_3D_system(T_n, time, dt)
+    else:
+      raise ValueError("Unknown dimension %i!" % self.ndim)
 
     T_np1 =  sla.spsolve(A, b).reshape(self.dim)
     
@@ -252,7 +255,6 @@ class FiniteDifferenceImplicitThermalProblem:
     l3 = -(self.nt-2)
     lower3 = np.zeros((self.ndof + l3,))
 
-    
     # Radial contribution
     U, D, L = self.radial(T_n, time)
     for i in range(self.nr-2):
@@ -304,6 +306,146 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return A, RHS
 
+  def form_3D_system(self, T_n, time, dt):
+    """
+      Form the 3D implicit system of equations
+
+      Parameters:
+        T_n:        previous temperature
+        time:       current time
+        dt:         time increment
+      
+      Returns:
+        A matrix and b vector
+    """
+    # Matrix entries
+    RHS = np.zeros((self.ndof,))
+    main = np.zeros((self.ndof,))
+    u1 = self.nt * self.nz
+    upper1 = np.zeros((self.ndof - u1,))
+    l1 = -self.nt * self.nz
+    lower1 = np.zeros((self.ndof + l1,))
+    u2 = self.nz
+    upper2 = np.zeros((self.ndof - u2,))
+    l2 = -self.nz
+    lower2 = np.zeros((self.ndof + l2,))
+    u3 = 1
+    upper3 = np.zeros((self.ndof - u3,))
+    l3 = -1
+    lower3 = np.zeros((self.ndof + l3,))
+    u4 = self.nz * (self.nt - 2)
+    upper4 = np.zeros((self.ndof - u4,))
+    l4 = -self.nz * (self.nt - 2)
+    lower4 = np.zeros((self.ndof + l4,))
+
+    # Useful: number of entries to insert at a time
+    n = self.nz - 2
+
+    # Radial contribution
+    U, D, L = self.radial(T_n, time)
+
+    k = 0
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        main[st:st+n] += D[k:k+n] * dt
+        upper1[st:st+n] += U[k:k+n] * dt
+        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] += L[k:k+n] * dt
+        k += n
+
+    # Circumferential contribution
+    U, D, L = self.circumfrential(T_n, time)
+    
+    k = 0
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        main[st:st+n] += D[k:k+n] * dt
+        upper2[st:st+n] += U[k:k+n] * dt
+        lower2[st-self.nz:st-self.nz+n] += L[k:k+n] * dt
+        k += n
+
+    # Axial contribution
+    U, D, L = self.axial(T_n, time)
+
+    k = 0
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        main[st:st+n] += D[k:k+n] * dt
+        upper3[st:st+n] += U[k:k+n] * dt
+        lower3[st-1:st-1+n] += L[k:k+n] * dt
+        k += n
+
+    # Source and T_n contribution
+    R = self.source(T_n, time)
+    Tf = T_n.flatten()
+
+    k = 0
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
+        k += n
+   
+    # Add 1 to the diagonal
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        main[st:st+n] += 1.0
+
+    # BCs apply uniformly
+    n = self.nz
+
+    # Radial left BC
+    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[0], time)
+    main[:self.nt*self.nz] = D
+    upper1[:self.nt*self.nz] = U
+    RHS[:self.nt*self.nz] = R
+
+    # Radial right BC
+    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-1], time)
+    main[-self.nt*self.nz:] = D
+    lower1[-self.nt*self.nz:] = L
+    RHS[-self.nt*self.nz:] = R
+
+    # Theta left BC
+    k = 0
+    for i in range(0,self.nr):
+      st = i * self.nt * self.nz + 1
+      main[st:st+n] = 1.0
+      upper4[st:st+n] = -1.0
+      RHS[st:st+n] = 0
+      k += n
+
+    # Theta right BC
+    k = 0
+    for i in range(0,self.nr):
+      st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
+      main[st:st+n] = 1.0
+      RHS[st:st+n] = 0
+      st = i * self.nt * self.nz + self.nt + 1
+      lower4[st:st+n] = -1.0
+      k += n
+
+    # Axial left BC
+    D, U, R = self.impose_left_axial_bc(time)
+    main[::self.nz] = D
+    upper3[::self.nz] = U
+    RHS[::self.nz] = R
+
+    # Axial right BC
+    D, L, R = self.impose_right_axial_bc(time)
+    main[self.nz-1::self.nz] = D
+    lower3[self.nz-2::self.nz] = L
+    RHS[self.nz-1::self.nz] = R
+
+    # Setup matrix and RHS
+    A = sp.diags((upper1,upper2,upper3,upper4,main,lower1,lower2,lower3,lower4), (u1,u2,u3,u4,0,l1,l2,l3,l4), 
+        shape = (self.ndof, self.ndof)).tocsr()
+
+    return A, RHS
+
   def setup_step(self, T, time, dt):
     """
       Setup common reusable arrays
@@ -323,11 +465,17 @@ class FiniteDifferenceImplicitThermalProblem:
 
     self.ndof = T.size
 
-    if self.ndim == 2:
+    if self.ndim > 1:
       ae = np.pad(self.a, self._pad_values(1), mode = 'edge')
       self.a_t = 0.5*(ae[:,1:] + ae[:,:-1])
       re = np.pad(self.r, self._pad_values(1), mode = 'edge')
       self.r_t = 0.5*(re[:,1:] + re[:,:-1])
+
+    if self.ndim > 2:
+      ae = np.pad(self.a, self._pad_values(2), mode = 'edge')
+      self.a_z = 0.5*(ae[:,:,1:] + ae[:,:,:-1])
+      re = np.pad(self.r, self._pad_values(2), mode = 'edge')
+      self.r_z = 0.5*(re[:,:,1:] + re[:,:,:-1])
 
   def _pad_values(self, axis):
     """
@@ -452,7 +600,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
   def circumfrential(self, T, time):
     """
-      The tridiagonal + periodic theta contributions to the problem
+      The tridiagonal theta contributions to the problem
 
       Parameters:
         T:      full temperature field at which we want to calculate coefficients
@@ -470,8 +618,78 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return U, D, L
 
-  def axial(self, T, time, dt):
-    pass
+  def axial(self, T, time):
+    """
+      The tridiagonal z contributions to the problem
+
+      Parameters:
+        T:      full temperature field at which we want to calculate coefficients
+        time:   current time
+
+      Returns:
+        upper, diagonal, and lower entries
+    """
+    p1 = self.a_z[:,:,1:]
+    p2 = self.a_z[:,:,:-1]
+
+    U = self.adofs(1.0 / self.dz**2.0 * p1).flatten()
+    D = self.adofs(-1.0 / self.dz**2.0 * (p1 + p2)).flatten()
+    L = self.adofs(1.0 / self.dz**2.0 * p2).flatten()
+
+    return U, D, L
+
+  def _edge_axial_mesh(self, ind):
+    """
+      Return the edge z mesh, just for evaluating BCs for testing
+    """
+    return tuple(self.mesh[i][:,:,ind] for i in range(self.ndim))
+
+  def impose_left_axial_bc(self, time):
+    """
+      Impose the radial BC on the left side of the domain
+
+      Parameters:
+        time:   time
+
+      Returns:
+        Upper, diagonal, and RHS entries
+    """
+    # For testing we can impose a fixed solution on the edges
+    if self.fix_edge:
+      D = 0.0
+      U = 1.0
+      # 1 not 0 b/c of ghosting
+      RHS = self.fix_edge(time, *self._edge_axial_mesh(1)).flatten()
+    # Zero flux
+    else:
+      D = -1.0
+      U = 1.0
+      RHS = 0.0
+
+    return D, U, RHS
+
+  def impose_right_axial_bc(self, time):
+    """
+      Impose the radial BC on the right side of the domain
+
+      Parameters:
+        time:   time
+
+      Returns:
+        diagonal, lower, and RHS entries
+    """
+    if self.fix_edge:
+      D = 0.0
+      L = 1.0
+      # -2 instead of -1 because of ghosting
+      RHS = self.fix_edge(time, *self._edge_axial_mesh(-2)).flatten()
+    # Zero flux
+    else:
+      D = -1.0
+      L = 1.0
+      RHS = 0.0
+
+    return D, L, RHS
 
   def source(self, T, time):
     """
