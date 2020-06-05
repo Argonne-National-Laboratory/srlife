@@ -47,17 +47,6 @@ class ManufacturedSolution:
     times = np.linspace(0, time, ntime)
     tube.set_times(times)
 
-    # Set the temperatures on the edges
-    smesh = self._generate_surface_mesh(t, h, times, nt, nz)
-    bc1 = receiver.FixedTempBC(r - t, h, nt, nz, times, 
-        self.soln(smesh[0], (r-t)*np.ones(smesh[0].shape),
-          *smesh[1:self.dim]))
-    tube.set_bc(bc1, "inner")
-    bc2 = receiver.FixedTempBC(r, h, nt, nz, times,
-        self.soln(smesh[0], r*np.ones(smesh[0].shape),
-          *smesh[1:self.dim]))
-    tube.set_bc(bc2, "outer")
-
     if self.dim == 2:
       tube.make_2D(tube.h/2)
     elif self.dim == 1:
@@ -73,7 +62,7 @@ class ManufacturedSolution:
       return self.source(t, k, a, *args)
 
     solver.solve(tube, thermal, materials.ConstantFluidMaterial({}), 
-        source = sfn, T0 = T0)
+        source = sfn, T0 = T0, fix_edge = self.soln)
 
     return tube
 
@@ -120,8 +109,6 @@ class ManufacturedSolution:
     mesh = self._generate_mesh(soln.r, soln.t, soln.h, soln.times, 
         soln.nr, soln.nt, soln.nz)
     T = self.soln(*mesh)
-
-    print(np.max(np.abs(T - soln.results['temperature'])))
 
     return np.allclose(T, soln.results['temperature'], rtol = tol, atol = atol)
 

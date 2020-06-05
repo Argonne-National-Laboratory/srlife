@@ -42,7 +42,7 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def solve(self, tube, material, fluid, source = None, 
-      T0 = None):
+      T0 = None, fix_edge = None):
     """
       Solve the thermal problem defined for a single tube
 
@@ -59,9 +59,10 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
                     then the coordinates
         T0:         if present override the tube IC with a function of
                     the coordinates
+        fix_edge:   an exact solution to fix edge BCs for testing
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
-        material, fluid, source, T0).solve()
+        material, fluid, source, T0, fix_edge).solve()
 
     tube.add_results("temperature", temperatures)
 
@@ -70,7 +71,8 @@ class FiniteDifferenceImplicitThermalProblem:
     The actual finite difference solver created to solve a single
     tube problem
   """
-  def __init__(self, tube, material, fluid, source = None, T0 = None):
+  def __init__(self, tube, material, fluid, source = None, T0 = None,
+      fix_edge = None):
     """
       Parameters:
         tube        Tube object to solve
@@ -80,6 +82,7 @@ class FiniteDifferenceImplicitThermalProblem:
       Other Parameters:
         source      source function (t, r, ...)
         T0          initial condition function
+        fix_edge:   an exact solution to fix edge BCs for testing
     """
     self.tube = tube
     self.material = material
@@ -87,6 +90,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     self.source_term = source
     self.T0 = T0
+    self.fix_edge = fix_edge
 
     self.dr = self.tube.t / (self.tube.nr-1)
     self.dt = 2.0 * np.pi / (self.tube.nt)
@@ -387,8 +391,14 @@ class FiniteDifferenceImplicitThermalProblem:
       Returns:
         Upper, diagonal, and RHS entries
     """
+    # For testing we can impose a fixed solution on the edges
+    if self.fix_edge:
+      D = 0.0
+      U = 1.0
+      # 1 not 0 b/c of ghosting
+      RHS = self.fix_edge(time, *self._edge_mesh(1)).flatten()
     # Zero flux
-    if self.tube.inner_bc is None:
+    elif self.tube.inner_bc is None:
       D = -1.0
       U = 1.0
       RHS = 0.0
@@ -414,8 +424,13 @@ class FiniteDifferenceImplicitThermalProblem:
       Returns:
         diagonal, lower, and RHS entries
     """
+    if self.fix_edge:
+      D = 0.0
+      L = 1.0
+      # -2 instead of -1 because of ghosting
+      RHS = self.fix_edge(time, *self._edge_mesh(-2)).flatten()
     # Zero flux
-    if self.tube.outer_bc is None:
+    elif self.tube.outer_bc is None:
       D = -1.0
       L = 1.0
       RHS = 0.0
@@ -428,6 +443,12 @@ class FiniteDifferenceImplicitThermalProblem:
       raise ValueError("Unknown boundary condition!")
 
     return D, L, RHS
+
+  def _edge_mesh(self, ind):
+    """
+      Return the edge r mesh, just for evaluating BCs for testing
+    """
+    return tuple(self.mesh[i][ind] for i in range(self.ndim))
 
   def circumfrential(self, T, time):
     """
