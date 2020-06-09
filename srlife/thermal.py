@@ -342,59 +342,32 @@ class FiniteDifferenceImplicitThermalProblem:
     # Useful: number of entries to insert at a time
     n = self.nz - 2
 
-    # Radial contribution
-    U, D, L = self.radial(T_n, time)
+    # Radial, axial, and circumferential contributions
+    Ur, Dr, Lr = self.radial(T_n, time)
+    Uc, Dc, Lc = self.circumfrential(T_n, time)
+    Ua, Da, La = self.axial(T_n, time)
 
-    k = 0
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] += D[k:k+n] * dt
-        upper1[st:st+n] += U[k:k+n] * dt
-        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] += L[k:k+n] * dt
-        k += n
-
-    # Circumferential contribution
-    U, D, L = self.circumfrential(T_n, time)
-    
-    k = 0
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] += D[k:k+n] * dt
-        upper2[st:st+n] += U[k:k+n] * dt
-        lower2[st-self.nz:st-self.nz+n] += L[k:k+n] * dt
-        k += n
-
-    # Axial contribution
-    U, D, L = self.axial(T_n, time)
-
-    k = 0
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] += D[k:k+n] * dt
-        upper3[st:st+n] += U[k:k+n] * dt
-        lower3[st-1:st-1+n] += L[k:k+n] * dt
-        k += n
-
-    # Source and T_n contribution
+    # Source and T_n contributions
     R = self.source(T_n, time)
     Tf = T_n.flatten()
-
+    
+    # Stick into diagonals
     k = 0
     for i in range(1, self.nr-1):
       for j in range(1, self.nt-1):
         st = i*self.nt*self.nz + j*self.nz + 1
+        main[st:st+n] = (1.0 + Dr[k:k+n] + Dc[k:k+n] + Da[k:k+n]) * dt
+        upper1[st:st+n] = Ur[k:k+n] * dt
+        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] = Lr[k:k+n] * dt
+        upper2[st:st+n] = Uc[k:k+n] * dt
+        lower2[st-self.nz:st-self.nz+n] = Lc[k:k+n] * dt
+        upper3[st:st+n] = Ua[k:k+n] * dt
+        lower3[st-1:st-1+n] = La[k:k+n] * dt
+
         RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
+
         k += n
    
-    # Add 1 to the diagonal
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] += 1.0
-
     # BCs apply uniformly
     n = self.nz
 
