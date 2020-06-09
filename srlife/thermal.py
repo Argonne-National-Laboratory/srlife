@@ -173,8 +173,12 @@ class FiniteDifferenceImplicitThermalProblem:
       A, b = self.form_3D_system(T_n, time, dt)
     else:
       raise ValueError("Unknown dimension %i!" % self.ndim)
-
-    T_np1 =  sla.spsolve(A, b).reshape(self.dim)
+    
+    if self.ndim == 3:
+      T_np1 = sla.gmres(A, b, x0 = T_n.flatten(), restart = 20)[0].reshape(
+          self.dim)
+    else:
+      T_np1 =  sla.spsolve(A, b).reshape(self.dim)
 
     return T_np1
 
