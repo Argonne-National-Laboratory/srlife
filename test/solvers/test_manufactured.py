@@ -14,7 +14,7 @@ class TestThermal(unittest.TestCase):
         ManufacturedSolution(1, 
           lambda t, r: t, 
           lambda t, k, alpha, r: k/alpha * (r*0.0+1)),
-            ManufacturedSolution(1, 
+        ManufacturedSolution(1, 
           lambda t, r: np.sin(t)*np.log(r), 
           lambda t, k, alpha, r: k/alpha * np.log(r) * np.cos(t)),
         ManufacturedSolution(1,
@@ -35,6 +35,9 @@ class TestThermal(unittest.TestCase):
         ManufacturedSolution(2,
           lambda t, r, th: np.log(r) * np.sin(th) / (t+1),
           lambda t, k, alpha, r, th: k*np.log(r)*np.sin(th)/((t+1)*r**2.0) - k/alpha * np.log(r) * np.sin(th) / (t+1)**2.0),
+        ManufacturedSolution(3,
+          lambda t, r, th, z: t,
+          lambda t, k, alpha, r, th, z: k/alpha * (r*0.0+1)),
         ]
 
     self.solver = thermal.FiniteDifferenceImplicitThermalSolver()
@@ -42,12 +45,13 @@ class TestThermal(unittest.TestCase):
     self.fluid = materials.ConstantFluidMaterial({"Test": 7.5})
 
     self.tol = 1e-2
-    self.atol = 1e-4
+    self.atol = 1e-1
 
   def _check_case(self, case):
     res = case.solve(self.solver, self.material, self.fluid)
     self.assertTrue(case.assess_comparison(res, self.tol, self.atol))
 
   def test_all_problems(self):
-    for case in self.problems:
+    for i,case in enumerate(self.problems):
+      print(i)
       self._check_case(case)

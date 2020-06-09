@@ -5,6 +5,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import numpy.linalg as la
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
@@ -174,7 +175,7 @@ class FiniteDifferenceImplicitThermalProblem:
       raise ValueError("Unknown dimension %i!" % self.ndim)
 
     T_np1 =  sla.spsolve(A, b).reshape(self.dim)
-    
+
     return T_np1
 
   def form_1D_system(self, T_n, time, dt):
@@ -414,8 +415,9 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in range(0,self.nr):
       st = i * self.nt * self.nz + 1
       main[st:st+n] = 1.0
-      upper4[st:st+n] = -1.0
       RHS[st:st+n] = 0
+      st = i *self.nt * self.nz
+      upper4[st:st+n] = -1.0
       k += n
 
     # Theta right BC
@@ -424,7 +426,7 @@ class FiniteDifferenceImplicitThermalProblem:
       st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
       main[st:st+n] = 1.0
       RHS[st:st+n] = 0
-      st = i * self.nt * self.nz + self.nt + 1
+      st = i * self.nt * self.nz + self.nz
       lower4[st:st+n] = -1.0
       k += n
 
@@ -443,7 +445,7 @@ class FiniteDifferenceImplicitThermalProblem:
     # Setup matrix and RHS
     A = sp.diags((upper1,upper2,upper3,upper4,main,lower1,lower2,lower3,lower4), (u1,u2,u3,u4,0,l1,l2,l3,l4), 
         shape = (self.ndof, self.ndof)).tocsr()
-
+    
     return A, RHS
 
   def setup_step(self, T, time, dt):
@@ -541,10 +543,9 @@ class FiniteDifferenceImplicitThermalProblem:
     """
     # For testing we can impose a fixed solution on the edges
     if self.fix_edge:
-      D = 0.0
-      U = 1.0
-      # 1 not 0 b/c of ghosting
-      RHS = self.fix_edge(time, *self._edge_mesh(1)).flatten()
+      D = 1.0
+      U = 0.0
+      RHS = self.fix_edge(time, *self._edge_mesh(0)).flatten()
     # Zero flux
     elif self.tube.inner_bc is None:
       D = -1.0
@@ -573,10 +574,9 @@ class FiniteDifferenceImplicitThermalProblem:
         diagonal, lower, and RHS entries
     """
     if self.fix_edge:
-      D = 0.0
-      L = 1.0
-      # -2 instead of -1 because of ghosting
-      RHS = self.fix_edge(time, *self._edge_mesh(-2)).flatten()
+      D = 1.0
+      L = 0.0
+      RHS = self.fix_edge(time, *self._edge_mesh(-1)).flatten()
     # Zero flux
     elif self.tube.outer_bc is None:
       D = -1.0
@@ -656,10 +656,9 @@ class FiniteDifferenceImplicitThermalProblem:
     """
     # For testing we can impose a fixed solution on the edges
     if self.fix_edge:
-      D = 0.0
-      U = 1.0
-      # 1 not 0 b/c of ghosting
-      RHS = self.fix_edge(time, *self._edge_axial_mesh(1)).flatten()
+      D = 1.0
+      U = 0.0
+      RHS = self.fix_edge(time, *self._edge_axial_mesh(0)).flatten()
     # Zero flux
     else:
       D = -1.0
@@ -679,10 +678,9 @@ class FiniteDifferenceImplicitThermalProblem:
         diagonal, lower, and RHS entries
     """
     if self.fix_edge:
-      D = 0.0
-      L = 1.0
-      # -2 instead of -1 because of ghosting
-      RHS = self.fix_edge(time, *self._edge_axial_mesh(-2)).flatten()
+      D = 1.0
+      L = 0.0
+      RHS = self.fix_edge(time, *self._edge_axial_mesh(-1)).flatten()
     # Zero flux
     else:
       D = -1.0
