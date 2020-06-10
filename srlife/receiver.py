@@ -525,7 +525,8 @@ class ThermalBC:
       return FixedTempBC.load(fobj)
     else:
       raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
-
+  
+  # pylint: disable=no-member
   def _generate_surface_mesh(self):
     """
       Generate the appropriate finite difference mesh for a particular problem
@@ -809,7 +810,7 @@ class ConvectiveBC(ThermalBC):
       Save to an HDF5 file
 
       Parameters:
-        fobj        h5py group
+        fobj:        h5py group
     """
     fobj.attrs["type"] = "Convective"
     fobj.attrs["r"] = self.r
@@ -827,7 +828,7 @@ class ConvectiveBC(ThermalBC):
       Load from an HDF5 file
 
       Parameters:
-        fobj        h5py group
+        fobj:        h5py group
     """
     return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nz"], 
         np.copy(fobj["times"]), np.copy(fobj["data"]))

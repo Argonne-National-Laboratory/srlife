@@ -32,14 +32,14 @@ class ManufacturedSolution:
         thermal:        the thermal model to test
 
       Other Parameters:
-        r               tube radius
-        t               tube thickness
-        h               tube height
-        time            maximum time
-        ntime           number of time steps
-        nr              number of radial increments
-        nt              number of circumferential increments
-        nz              number of axial increments
+        r:              tube radius
+        t:              tube thickness
+        h:              tube height
+        time:           maximum time
+        ntime:          number of time steps
+        nr:             number of radial increments
+        nt:             number of circumferential increments
+        nz:             number of axial increments
         T0:             initial temperature
     """
     tube = receiver.Tube(r, t, h, nr, nt, nz, T0)
@@ -128,13 +128,13 @@ class ManufacturedSolution:
       Generate the appropriate finite difference mesh for a particular problem
       
       Parameters:
-        r           radius
-        t           thickness
+        r:           radius
+        t:           thickness
         h           height
-        times       discrete time steps
-        nr          number of radial increments
-        nt          number of circumferential increments
-        nz          number of axial increments
+        times:       discrete time steps
+        nr:          number of radial increments
+        nt:          number of circumferential increments
+        nz:          number of axial increments
     """
     rs = np.linspace(r-t, r, nr)
     ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
@@ -149,12 +149,12 @@ class ManufacturedSolution:
       Generate the appropriate finite difference mesh for a particular problem
       
       Parameters:
-        t           thickness
-        h           height
-        times       discrete time steps
-        nr          number of radial increments
-        nt          number of circumferential increments
-        nz          number of axial increments
+        t:           thickness
+        h:           height
+        times:       discrete time steps
+        nr:          number of radial increments
+        nt:          number of circumferential increments
+        nz:          number of axial increments
     """
     ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
     zs = np.linspace(0, h, nz)

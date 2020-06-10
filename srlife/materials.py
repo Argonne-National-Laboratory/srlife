@@ -1,3 +1,9 @@
+"""
+  This module contains material models containing thermal, fluid, and
+  material properties.  These models can be stored to and recalled from 
+  XML files for archiving.
+"""
+
 import xml.etree.ElementTree as ET
 from collections import ChainMap
 
@@ -43,7 +49,8 @@ class PiecewiseLinearThermalMaterial(ThermalMaterial):
         diff:           list of diffusivity values
     """
     if len(temps) != len(cond) or len(temps) != len(diff):
-      raise ValueError("The lists of temperatures, conductivity, and diffusivity values must have equal lengths!")
+      raise ValueError("The lists of temperatures, conductivity,"
+          "and diffusivity values must have equal lengths!")
     
     self.name = name
     self.temps = np.array(temps)
@@ -255,7 +262,8 @@ class ConstantFluidMaterial:
         
     """
     return T*0.0 + self.data[material]
-
+  
+  # pylint: disable=unused-argument
   def dcoefficient(self, material, T):
     """
       Return the derivative of the film coefficient with respect to
@@ -291,7 +299,8 @@ class PiecewiseLinearFluidMaterial:
       Parameters:
         fname       file name to save to
     """
-    dictrep = {k: {'temp': string_array(T), 'values': string_array(v)} for k, (T, v) in self.data.items()} 
+    dictrep = {k: {'temp': string_array(T),
+      'values': string_array(v)} for k, (T, v) in self.data.items()} 
     save_dict_xml(dictrep, fname, "PiecewiseLinearFluidMaterial")
 
   @classmethod
@@ -302,7 +311,8 @@ class PiecewiseLinearFluidMaterial:
       Parameters:
         values      dictionary data
     """
-    data = {k: (destring_array(pair['temp']), destring_array(pair['values'])) for k, pair in values.items()}
+    data = {k: (destring_array(pair['temp']),
+      destring_array(pair['values'])) for k, pair in values.items()}
     return cls(data)
 
   def coefficient(self, material, T):
