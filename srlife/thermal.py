@@ -129,7 +129,7 @@ class FiniteDifferenceImplicitThermalProblem:
     if self.ndim > 2:
       self.z = self.mesh[2]
     else:
-      self.z = self.tube.plane
+      self.z = np.array([[self.tube.plane]])
     
   def solve(self):
     """
@@ -533,6 +533,16 @@ class FiniteDifferenceImplicitThermalProblem:
       D = 0.0
       U = 1.0
       RHS = np.array([self.tube.inner_bc.temperature(time, t, self.z) for t in self.theta[0]]).flatten()
+    # Fixed flux
+    elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+      D = 1.0
+      U = -1.0
+      RHS = self.dr * (np.array([self.tube.inner_bc.flux(time, t, self.z) for t in self.theta[0]]) / self.k[1]).flatten()
+    # Convection
+    elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      D = 1.0
+      U = -1.0
+      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb)*(Tb - self.tube.inner_bc.fluid_temperature(time, self.z[0])) / self.k[1]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
 
@@ -564,6 +574,16 @@ class FiniteDifferenceImplicitThermalProblem:
       D = 0.0
       L = 1.0
       RHS = np.array([self.tube.outer_bc.temperature(time, t, self.z) for t in self.theta[-1]]).flatten()
+    # Fixed flux
+    elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+      D = 1.0
+      L = -1.0
+      RHS = self.dr * (np.array([self.tube.outer_bc.flux(time, t, self.z) for t in self.theta[-1]]) / self.k[-2]).flatten()
+    # Convection
+    elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+      D = 1.0
+      L = -1.0
+      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb)*(Tb - self.tube.outer_bc.fluid_temperature(time, self.z[-1])) / self.k[-2]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
 
@@ -678,7 +698,10 @@ class FiniteDifferenceImplicitThermalProblem:
       Returns:
         source contribution
     """
-    return self.adofs(self.a / self.k * self.source_term(time, *self.mesh)).flatten()
+    if self.source_term:
+      return self.adofs(self.a / self.k * self.source_term(time, *self.mesh)).flatten()
+    else:
+      return self.adofs(np.zeros(self.a.shape)).flatten()
 
   def _generate_mesh(self):
     """

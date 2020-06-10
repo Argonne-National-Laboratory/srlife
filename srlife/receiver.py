@@ -794,7 +794,7 @@ class ConvectiveBC(ThermalBC):
     """
     return len(self.times)
 
-  def fluid_temperature(self, t, theta, z):
+  def fluid_temperature(self, t, z):
     """
       Key method: return the fluid temperature at a given time and position
 
