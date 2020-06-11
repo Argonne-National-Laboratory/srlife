@@ -221,3 +221,51 @@ class TestThermalBCs(unittest.TestCase):
     Texact = C1 * np.log(self.rs) + C2
 
     self.assertTrue(np.allclose(T,Texact, rtol = 1.0e-2))
+
+class TestFunction(unittest.TestCase):
+  def setUp(self):
+    self.k = 15.0
+    self.a = 5.0
+    self.hcoef = 1.0
+
+    self.solver = thermal.FiniteDifferenceImplicitThermalSolver()
+    self.material = materials.ConstantThermalMaterial("Test", self.k, self.a)
+    self.fluid = materials.ConstantFluidMaterial({"Test": self.hcoef})
+
+    self.t = 0.2
+    self.r = 2.0
+    self.h = 1.0
+
+    self.nr = 5
+
+    self.nt = 10
+    self.nz = 5
+
+    self.tmax = 10.0
+    self.ntime = 10
+
+    self.tube = receiver.Tube(self.r, self.t, self.h, self.nr, self.nt, self.nz, 0)
+    
+    self.times = np.linspace(0, self.tmax, self.ntime+1)
+    self.tube.set_times(self.times)
+
+    self.T_inner = 100
+
+    Tin = receiver.ConvectiveBC(self.r-self.t, self.h, self.nz,
+        self.times, np.ones((self.ntime+1,self.nz))*self.T_inner)
+    self.tube.set_bc(Tin, "inner")
+
+    Tright = receiver.HeatFluxBC(self.r, self.h, self.nt, self.nz,
+        self.times, np.zeros((self.ntime+1,self.nt,self.nz)))
+    self.tube.set_bc(Tright, "outer")
+
+  def test_1D(self):
+    self.tube.make_1D(self.tube.h/2, 0)
+    self.solver.solve(self.tube, self.material, self.fluid)
+
+  def test_2D(self):
+    self.tube.make_2D(self.tube.h/2)
+    self.solver.solve(self.tube, self.material, self.fluid)
+
+  def test_3D(self):
+    self.solver.solve(self.tube, self.material, self.fluid)

@@ -503,6 +503,38 @@ class Tube:
 
     return res
 
+def _vector_interpolate(base, data):
+  """
+    Interpolate as a vector
+  """
+  res = np.zeros(data[0].shape)
+  
+  # pylint: disable=not-an-iterable
+  for ind in np.ndindex(*res.shape):
+    res[ind] = base([d[ind] for d in data])
+
+  return res
+
+def _make_ifn(base):
+  """
+    Helper to deal with getting both a scalar and a vector input
+  """
+  def ifn(mdata):
+    allscalar = all(map(np.isscalar, mdata))
+    anyscalar = any(map(np.isscalar, mdata))
+    if allscalar:
+      return base(mdata)
+    elif anyscalar:
+      shapes = [a.shape for a in mdata if not np.isscalar(a)]
+      # Could check they are all the same, but eh
+      shape = shapes[0]
+      ndata = [np.ones(shape) * d for d in mdata]
+      return _vector_interpolate(base, ndata)
+    else:
+      return _vector_interpolate(base, ndata)
+
+  return ifn
+
 class ThermalBC:
   """
     Superclass for thermal boundary conditions.
@@ -543,8 +575,10 @@ class ThermalBC:
       Parameters:
         data            (ntime, ntheta, nz) array
     """
-    return inter.RegularGridInterpolator(self._generate_surface_mesh(),
+    base = inter.RegularGridInterpolator(self._generate_surface_mesh(),
         data, method = "linear", bounds_error = False, fill_value = None)
+
+    return _make_ifn(base)
 
 class HeatFluxBC(ThermalBC):
   """
@@ -785,8 +819,10 @@ class ConvectiveBC(ThermalBC):
     self.data = data
 
     zs = np.linspace(0, self.h, self.nz)
-    self.ifn = inter.RegularGridInterpolator((self.times, zs), self.data, 
-        bounds_error=False, fill_value = None)
+    base = inter.RegularGridInterpolator((self.times, zs), self.data, 
+        bounds_error=False, fill_value = None, method = 'linear')
+
+    self.ifn = _make_ifn(base)
 
   @property
   def ntime(self):
@@ -803,6 +839,8 @@ class ConvectiveBC(ThermalBC):
         t       time
         z       height
     """
+    print(z.shape)
+    print(t)
     return self.ifn([t, z])
 
   def save(self, fobj):

@@ -124,12 +124,12 @@ class FiniteDifferenceImplicitThermalProblem:
     if self.ndim > 1:
       self.theta = self.mesh[1]
     else:
-      self.theta = np.array([[self.tube.angle]])
+      self.theta = np.ones(self.r.shape) * self.tube.angle
 
     if self.ndim > 2:
       self.z = self.mesh[2]
     else:
-      self.z = np.array([[self.tube.plane]])
+      self.z = np.ones(self.r.shape) * self.tube.plane
     
   def solve(self):
     """
@@ -173,12 +173,8 @@ class FiniteDifferenceImplicitThermalProblem:
       A, b = self.form_3D_system(T_n, time, dt)
     else:
       raise ValueError("Unknown dimension %i!" % self.ndim)
-    
-    if self.ndim == 3:
-      T_np1 = sla.gmres(A, b, x0 = T_n.flatten(), restart = 20)[0].reshape(
-          self.dim)
-    else:
-      T_np1 =  sla.spsolve(A, b).reshape(self.dim)
+
+    T_np1 =  sla.spsolve(A, b).reshape(self.dim)
 
     return T_np1
 
@@ -543,20 +539,19 @@ class FiniteDifferenceImplicitThermalProblem:
     elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
       D = 0.0
       U = 1.0
-      RHS = np.array([self.tube.inner_bc.temperature(time, t, self.z) 
-        for t in self.theta[0]]).flatten()
+      RHS = self.tube.inner_bc.temperature(time, self.theta[0], self.z[0]).flatten()
     # Fixed flux
     elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
       D = 1.0
       U = -1.0
-      RHS = self.dr * (np.array([self.tube.inner_bc.flux(time, t, self.z) 
-        for t in self.theta[0]]) / self.k[1]).flatten()
+      RHS = (self.dr * self.tube.inner_bc.flux(time, self.theta[1], 
+        self.z[1]) / self.k[1]).flatten()
     # Convection
     elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
       D = 1.0
       U = -1.0
       RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb
-        )*(Tb - self.tube.inner_bc.fluid_temperature(time, self.z[0])
+        )*(Tb - self.tube.inner_bc.fluid_temperature(time, self.z[1])
           ) / self.k[1]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
@@ -587,20 +582,19 @@ class FiniteDifferenceImplicitThermalProblem:
     elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
       D = 0.0
       L = 1.0
-      RHS = np.array([self.tube.outer_bc.temperature(time, t, self.z) 
-        for t in self.theta[-1]]).flatten()
+      RHS = self.tube.outer_bc.temperature(time, self.theta[-2], self.z[-2]).flatten()
     # Fixed flux
     elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
       D = 1.0
       L = -1.0
-      RHS = self.dr * (np.array([self.tube.outer_bc.flux(time, t, self.z) 
-        for t in self.theta[-1]]) / self.k[-2]).flatten()
+      RHS = (self.dr * self.tube.outer_bc.flux(time, self.theta[-2], 
+        self.z[-2]) / self.k[-2]).flatten()
     # Convection
     elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
       D = 1.0
       L = -1.0
       RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb
-        )*(Tb - self.tube.outer_bc.fluid_temperature(time, self.z[-1])
+        )*(Tb - self.tube.outer_bc.fluid_temperature(time, self.z[-2])
           ) / self.k[-2]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
