@@ -3,6 +3,7 @@
 """
 
 import numpy as np
+import scipy.interpolate as inter
 import h5py
 
 class Receiver:
@@ -250,11 +251,16 @@ class Tube:
     The receiver package uses the metal temperatures, stresses, 
     mechanical strains, and inelastic strains.
 
+    Analysis results can be provided over the full 3D grid (default),
+    a single 2D plane (identified by a height), or a single 1D line
+    (identified by a height and a theta position)
+
     Boundary conditions may be provided in two ways, either
     as fluid conditions or net heat fluxes.  These are defined
     in the HeatFluxBC or ConvectionBC objects below.
   """
-  def __init__(self, outer_radius, thickness, height, nr, nt, nz):
+  def __init__(self, outer_radius, thickness, height, nr, nt, nz, 
+      T0 = 0.0):
     """
       Parameters:
         outer_radius:        tube outer radius
@@ -263,6 +269,9 @@ class Tube:
         nr:                  number of radial increments
         nt:                  number of circumferential increments
         nz:                  number of axial increments
+
+      Other Parameters:
+        T0                   initial temperature
     """
     self.r = outer_radius
     self.t = thickness
@@ -272,11 +281,45 @@ class Tube:
     self.nt = nt
     self.nz = nz
 
+    self.abstraction = "3D"
+
     self.times = []
     self.results = {}
 
     self.outer_bc = None
     self.inner_bc = None
+
+    self.T0 = T0
+
+  def make_2D(self, height):
+    """
+      Reduce to a 2D abstraction by slicing the tube at the
+      indicated height
+
+      Parameters:
+        height      the height at which to slice
+    """
+    if height < 0.0 or height > self.h:
+      raise ValueError("2D slice height must be within the tube height")
+
+    self.abstraction = "2D"
+    self.plane = height
+
+  def make_1D(self, height, angle):
+    """
+      Reduce to a 1D abstraction along a ray given by the provided
+      height and angle.
+
+      Parameters:
+        height      the height of the ray
+        angle       the angle, in radians
+    """
+    if height < 0.0 or height > self.h:
+      raise ValueError("Ray height must be within the tube height")
+
+    self.abstraction = "1D"
+    self.plane = height
+    self.angle = angle
 
   def close(self, other):
     """
@@ -311,6 +354,14 @@ class Tube:
         return False
       base = (base and self.inner_bc.close(other.inner_bc))
 
+    base = (base and self.abstraction == other.abstraction)
+    if self.abstraction == "2D" or self.abstraction == "1D":
+      base = (base and np.isclose(self.plane, other.plane))
+    if self.abstraction == "1D":
+      base = (base and np.isclose(self.angle, other.angle))
+
+    base = (base and np.isclose(self.T0, other.T0))
+
     return base
 
   @property
@@ -341,10 +392,29 @@ class Tube:
         name:       parameter set name
         data:       actual results data
     """
-    if data.shape != (self.ntime, self.nr, self.nt, self.nz):
-      raise ValueError("Data array shape must equal ntime x nr x nt x nz!")
-
+    self._check_rdim(data)
     self.results[name] = data
+
+  def _check_rdim(self, data):
+    """
+      Make sure the results array aligns with the correct dimension for the
+      abstraction
+
+      Parameters:
+        name:       parameter set name
+    """
+    if self.abstraction == "3D":
+      if data.shape != (self.ntime, self.nr, self.nt, self.nz):
+        raise ValueError("Data array shape must equal ntime x nr x nt x nz!")
+    elif self.abstraction == "2D":
+      if data.shape != (self.ntime, self.nr, self.nt):
+        raise ValueError("Data array shape must equal ntime x nr x nt!")
+    elif self.abstraction == "1D":
+      if data.shape != (self.ntime, self.nr):
+        raise ValueError("Data array shape must equal ntime x nr!")
+    else:
+      raise ValueError("Internal error: unknown abstraction type %s" % 
+          self.abstraction)
 
   def set_bc(self, bc, loc):
     """
@@ -380,6 +450,12 @@ class Tube:
     fobj.attrs["nt"] = self.nt
     fobj.attrs["nz"] = self.nz
 
+    fobj.attrs["abstraction"] = self.abstraction
+    if self.abstraction == "2D" or self.abstraction == "1D":
+      fobj.attrs["plane"] = self.plane
+    if self.abstraction == "1D":
+      fobj.attrs["angle"] = self.angle
+
     fobj.create_dataset("times", data = self.times)
 
     grp = fobj.create_group("results")
@@ -394,6 +470,8 @@ class Tube:
       grp = fobj.create_group("inner_bc")
       self.inner_bc.save(grp)
 
+    fobj.attrs["T0"] = self.T0
+
   @classmethod
   def load(cls, fobj):
     """
@@ -403,7 +481,13 @@ class Tube:
         fobj        h5py group
     """
     res = cls(fobj.attrs["r"], fobj.attrs["t"], fobj.attrs["h"], fobj.attrs["nr"], fobj.attrs["nt"],
-        fobj.attrs["nz"])
+        fobj.attrs["nz"], T0 = fobj.attrs["T0"])
+
+    res.abstraction = fobj.attrs["abstraction"]
+    if res.abstraction == "2D" or res.abstraction == "1D":
+      res.plane = fobj.attrs["plane"]
+    if res.abstraction == "1D":
+      res.angle = fobj.attrs["angle"]
 
     res.set_times(np.copy(fobj["times"]))
 
@@ -412,14 +496,46 @@ class Tube:
       res.add_results(name, np.copy(grp[name]))
 
     if "outer_bc" in fobj:
-      res.set_bc(BC.load(fobj["outer_bc"]), "outer")
+      res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")
 
     if "inner_bc" in fobj:
-      res.set_bc(BC.load(fobj["inner_bc"]), "inner")
+      res.set_bc(ThermalBC.load(fobj["inner_bc"]), "inner")
 
     return res
 
-class BC:
+def _vector_interpolate(base, data):
+  """
+    Interpolate as a vector
+  """
+  res = np.zeros(data[0].shape)
+  
+  # pylint: disable=not-an-iterable
+  for ind in np.ndindex(*res.shape):
+    res[ind] = base([d[ind] for d in data])
+
+  return res
+
+def _make_ifn(base):
+  """
+    Helper to deal with getting both a scalar and a vector input
+  """
+  def ifn(mdata):
+    allscalar = all(map(np.isscalar, mdata))
+    anyscalar = any(map(np.isscalar, mdata))
+    if allscalar:
+      return base(mdata)
+    elif anyscalar:
+      shapes = [a.shape for a in mdata if not np.isscalar(a)]
+      # Could check they are all the same, but eh
+      shape = shapes[0]
+      ndata = [np.ones(shape) * d for d in mdata]
+      return _vector_interpolate(base, ndata)
+    else:
+      return _vector_interpolate(base, ndata)
+
+  return ifn
+
+class ThermalBC:
   """
     Superclass for thermal boundary conditions.
 
@@ -437,10 +553,34 @@ class BC:
       return HeatFluxBC.load(fobj)
     elif fobj.attrs["type"] == "Convective":
       return ConvectiveBC.load(fobj)
+    elif fobj.attrs["type"] == "FixedTemp":
+      return FixedTempBC.load(fobj)
     else:
       raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
+  
+  # pylint: disable=no-member
+  def _generate_surface_mesh(self):
+    """
+      Generate the appropriate finite difference mesh for a particular problem
+    """
+    ts = np.linspace(0, 2*np.pi, self.nt + 1)[:-1]
+    zs = np.linspace(0, self.h, self.nz)
+    
+    return self.times, ts, zs
 
-class HeatFluxBC(BC):
+  def _generate_ifn(self, data):
+    """
+      Generate an interpolation function for the given data array
+
+      Parameters:
+        data            (ntime, ntheta, nz) array
+    """
+    base = inter.RegularGridInterpolator(self._generate_surface_mesh(),
+        data, method = "linear", bounds_error = False, fill_value = None)
+
+    return _make_ifn(base)
+
+class HeatFluxBC(ThermalBC):
   """
     A net heat flux on the radius of a tube.  Positive is heat input,
     negative is heat output.
@@ -477,12 +617,25 @@ class HeatFluxBC(BC):
 
     self.data = data
 
+    self.ifn = self._generate_ifn(self.data)
+
   @property
   def ntime(self):
     """
       Number of time steps
     """
     return len(self.times)
+
+  def flux(self, t, theta, z):
+    """
+      Flux as a function of time, angle, and height
+
+      Parameters:
+        t       time
+        theta   angle
+        z       height
+    """
+    return self.ifn([t, theta, z])
 
   def save(self, fobj):
     """
@@ -530,7 +683,109 @@ class HeatFluxBC(BC):
         and np.allclose(self.data, other.data)
         )
 
-class ConvectiveBC(BC):
+class FixedTempBC(ThermalBC):
+  """
+    Fixed temperature BC.
+
+    These conditions are defined on the surface of a tube at fixed
+    times given by
+    a radius and a height.  The radius is not used in defining the 
+    BC but is used to ensure the BC is consistent with the Tube object.
+
+    The heat flux is given on a regular grid of theta, z points each defined
+    but a number of increments.  This grid need not agree with the Tube
+    solid grid.
+  """
+  def __init__(self, radius, height, nt, nz, times, data):
+    """
+       Parameters:
+        radius:          boundary condition application radius
+        height:          tube height
+        nt:              number of circumferential increments
+        nz:              number of axial increments
+        times:           fixed temperature times
+        data:            fixed temperature data
+    """
+    self.r = radius
+    self.h = height
+
+    self.nt = nt
+    self.nz = nz
+
+    self.times = times
+
+    if data.shape != (len(self.times), nt, nz):
+      raise ValueError("Discrete temperature shape must equal ntime x ntheta x nz!")
+
+    self.data = data
+
+    self.ifn = self._generate_ifn(self.data)
+
+  @property
+  def ntime(self):
+    """
+      Number of time steps
+    """
+    return len(self.times)
+
+  def temperature(self, t, theta, z):
+    """
+      Key method: return the temperature at a given time and position
+
+      Parameters:
+        t       time
+        theta   angle
+        z       height
+    """
+    return self.ifn([t, theta, z])
+
+  def save(self, fobj):
+    """
+      Save to an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    fobj.attrs["type"] = "FixedTemp"
+    fobj.attrs["r"] = self.r
+    fobj.attrs["h"] = self.h
+
+    fobj.attrs["nt"] = self.nt
+    fobj.attrs["nz"] = self.nz
+
+    fobj.create_dataset("times", data = self.times)
+    fobj.create_dataset("data", data = self.data)
+
+  @classmethod
+  def load(cls, fobj):
+    """
+      Load from an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nt"], fobj.attrs["nz"],
+        np.copy(fobj["times"]), np.copy(fobj["data"]))
+
+  def close(self, other):
+    """
+      Check to see if two objects are nearly equal.
+
+      Primarily used for testing
+
+      Parameters:
+        other:      the object to compare against
+    """
+    return (
+        np.isclose(self.r, other.r)
+        and np.isclose(self.h, other.h)
+        and (self.nt == other.nt)
+        and (self.nz == other.nz)
+        and np.allclose(self.times, other.times)
+        and np.allclose(self.data, other.data)
+        )
+
+class ConvectiveBC(ThermalBC):
   """
     A convective BC on the surface of a tube defined by a radius and height.
 
@@ -563,6 +818,12 @@ class ConvectiveBC(BC):
 
     self.data = data
 
+    zs = np.linspace(0, self.h, self.nz)
+    base = inter.RegularGridInterpolator((self.times, zs), self.data, 
+        bounds_error=False, fill_value = None, method = 'linear')
+
+    self.ifn = _make_ifn(base)
+
   @property
   def ntime(self):
     """
@@ -570,12 +831,24 @@ class ConvectiveBC(BC):
     """
     return len(self.times)
 
+  def fluid_temperature(self, t, z):
+    """
+      Key method: return the fluid temperature at a given time and position
+
+      Parameters:
+        t       time
+        z       height
+    """
+    print(z.shape)
+    print(t)
+    return self.ifn([t, z])
+
   def save(self, fobj):
     """
       Save to an HDF5 file
 
       Parameters:
-        fobj        h5py group
+        fobj:        h5py group
     """
     fobj.attrs["type"] = "Convective"
     fobj.attrs["r"] = self.r
@@ -593,7 +866,7 @@ class ConvectiveBC(BC):
       Load from an HDF5 file
 
       Parameters:
-        fobj        h5py group
+        fobj:        h5py group
     """
     return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nz"], 
         np.copy(fobj["times"]), np.copy(fobj["data"]))

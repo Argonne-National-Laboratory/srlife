@@ -143,7 +143,11 @@ disable=print-statement,
         bad-whitespace,
         bad-continuation,
         attribute-defined-outside-init,
-        no-else-return
+        no-else-return,
+        invalid-name,
+        arguments-differ,
+        no-self-use,
+        too-many-instance-attributes
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

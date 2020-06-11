@@ -46,6 +46,14 @@ def valid_heatflux_bc(loc):
   return receiver.HeatFluxBC(r, height, nt, nz, times, 
       np.zeros((len(times), nt, nz)))
 
+def valid_fixedtemp_bc(loc):
+  if loc == "outer":
+    r = outer_radius
+  else:
+    r = inner_radius
+  return receiver.FixedTempBC(r, height, nt, nz, times, 
+      np.zeros((len(times), nt, nz)))
+
 def valid_tube(results = []):
   tube = receiver.Tube(outer_radius, thickness, height, nr, nt, nz)
 
@@ -53,6 +61,18 @@ def valid_tube(results = []):
 
   for res in results:
     tube.add_results(res, np.zeros((len(times), nr, nt, nz)))
+
+  return tube
+
+def valid_tube_1D(results = []):
+  tube = receiver.Tube(outer_radius, thickness, height, nr, nt, nz)
+
+  tube.set_times(times)
+
+  tube.make_1D(height/2, np.pi/3)
+
+  for res in results:
+    tube.add_results(res, np.zeros((len(times), nr)))
 
   return tube
 
@@ -156,6 +176,16 @@ class TestTube(unittest.TestCase):
 
     self.assertTrue(tube.close(new))
 
+  def test_store_1d(self):
+    tube = valid_tube_1D(['stress'])
+    tube.set_bc(valid_heatflux_bc("outer"), "outer")
+    
+    f = get_temp_hdf()
+    tube.save(f)
+    new = receiver.Tube.load(f)
+
+    self.assertTrue(tube.close(new))
+
 class TestHeatFluxBC(unittest.TestCase):
   """
     Test basic setup of a HeatFluxBC
@@ -172,7 +202,26 @@ class TestHeatFluxBC(unittest.TestCase):
     f = get_temp_hdf()
     orig = valid_heatflux_bc("outer")
     orig.save(f)
-    new = receiver.BC.load(f)
+    new = receiver.ThermalBC.load(f)
+    self.assertTrue(orig.close(new))
+
+class TestFixedTempBC(unittest.TestCase):
+  """
+    Test basic setup of a FixedTempBC
+  """
+  def test_construct(self):
+    bc = valid_fixedtemp_bc("outer")
+
+  def test_wrong_size(self):
+    with self.assertRaises(ValueError):
+      bc = receiver.FixedTempBC(inner_radius, height, nt, nz, times,
+          np.zeros((1,)))
+
+  def test_store(self):
+    f = get_temp_hdf()
+    orig = valid_fixedtemp_bc("outer")
+    orig.save(f)
+    new = receiver.ThermalBC.load(f)
     self.assertTrue(orig.close(new))
 
 class TestConvectiveBC(unittest.TestCase):
@@ -191,6 +240,6 @@ class TestConvectiveBC(unittest.TestCase):
     f = get_temp_hdf()
     orig = valid_convective_bc("outer")
     orig.save(f)
-    new = receiver.BC.load(f)
+    new = receiver.ThermalBC.load(f)
     self.assertTrue(orig.close(new))
 
