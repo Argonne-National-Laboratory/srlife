@@ -9,12 +9,12 @@ from helpers import differentiate
 
 class TestLoadStore(unittest.TestCase):
   def setUp(self):
-    self.example = {"one": {"two" : {"three": "data", "four": "yaydata"}, 
+    self.example = {"one": {"two" : {"three": "data", "four": "yaydata"},
       "five": "moredata"}, "six": "evenmore"}
 
   def test_recover(self):
     tf = tempfile.mktemp()
-    
+
     materials.save_dict_xml(self.example, tf)
     rn, comp = materials.load_dict_xml(tf)
 
@@ -37,21 +37,21 @@ class TestPiecewiseLinearThermalMaterial(CommonThermalMaterial, unittest.TestCas
     self.cond = np.array([25.0,50.0,10.0,30.0])
     self.diff = np.array([100.0,20.0,50.0,60.0])
 
-    self.obj = materials.PiecewiseLinearThermalMaterial(self.name, 
+    self.obj = materials.PiecewiseLinearThermalMaterial(self.name,
         self.T, self.cond, self.diff)
 
   def test_interpolate(self):
     T = 125.0
-    self.assertTrue(np.isclose(inter.interp1d(self.T, self.cond)(T), 
+    self.assertTrue(np.isclose(inter.interp1d(self.T, self.cond)(T),
       self.obj.conductivity(T)))
-    self.assertTrue(np.isclose(inter.interp1d(self.T, self.diff)(T), 
+    self.assertTrue(np.isclose(inter.interp1d(self.T, self.diff)(T),
       self.obj.diffusivity(T)))
 
   def test_store_receover(self):
     tf = tempfile.mktemp()
 
     self.obj.save(tf)
-    
+
     rep = materials.ThermalMaterial.load(tf)
 
     self.assertEqual(rep.name, self.obj.name)
@@ -80,7 +80,7 @@ class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
     self.obj.save(tfile)
 
     comp = materials.FluidMaterial.load(tfile)
-    
+
     for k, (T, vals) in self.obj.data.items():
       self.assertTrue(k in comp.data)
       self.assertTrue(np.allclose(T, comp.data[k][0]))
@@ -93,3 +93,57 @@ class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
     v1 = inter.interp1d(self.data[mat][0], self.data[mat][1])(T)
 
     self.assertAlmostEqual(v1, self.obj.coefficient(mat, T))
+
+class TestRuptureTime(unittest.TestCase):
+    def setUp(self):
+        self.mat="Computonium"
+        self.prop="Rupture"
+        self.T = 850.15
+        self.stress=100
+        self.C=17.16
+        self.a=np.array([-1475.23, 7289.41, -16642.64, 35684.60])
+        self.n=np.array([3,2,1,0])
+        self.data={self.mat: {self.prop: {"C": "17.16",
+        "a": "-1475.23 7289.41 -16642.64 35684.60", "n": "3 2 1 0"}}}
+
+    def test_rupturetime(self):
+        tfrupture = tempfile.mktemp()
+        materials.save_dict_xml(self.data, tfrupture)
+        rtime=materials.rupturetime(tfrupture, self.mat, self.prop, self.T, self.stress)
+
+        sum = 0
+        for (b,m) in zip(self.a,self.n):
+              sum+=b*np.log10(self.stress)**m
+        sum=10**(sum/self.T-self.C)
+
+        self.assertTrue(np.isclose(sum, rtime))
+
+class TestCyclesToFail(unittest.TestCase):
+    def setUp(self):
+        self.mat="Computonium"
+        self.prop="Fatigue"
+        self.T = 850.15
+        self.erange=5e-3
+        self.a=np.array([-9.2e-01, -3.8e+00, -8.4e+00, -4.1e+00])
+        self.n=np.array([3,2,1,0])
+        self.cutoff=1.5e-3
+        self.data={self.mat: {self.prop: {"curve1": {"T": "950",
+        "a": "-9.2e-01 -3.8e+00 -8.4e+00 -4.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        "curve2": {"T": "800", "a": "-19.2e-01 -3.8e+00 -18.4e+00 -14.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        "curve3": {"T": "500", "a": "-0.2e-01 -0.8e+00 -0.4e+00 -0.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"}}}}
+
+    def test_cyclestofail(self):
+        tffatigue = tempfile.mktemp()
+        materials.save_dict_xml(self.data, tffatigue)
+        fcycles=materials.cyclestofail(tffatigue, self.mat, self.prop, self.T, self.erange)
+
+        sum = 0
+        if self.erange<=self.cutoff:
+            for (b,m) in zip(self.a,self.n):
+                sum+=b*np.log10(self.cutoff)**m
+        else:
+            for (b,m) in zip(self.a,self.n):
+                sum+=b*np.log10(self.erange)**m
+        return 10**sum
+
+        self.assertTrue(np.isclose(sum, fcycles))
