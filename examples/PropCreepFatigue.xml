@@ -157,12 +157,12 @@
     <averageRupture>
       <C>15.251919550811756</C>
       <a>-2266.06411839 5185.40208367 19889.7514795</a>
-      <n></n>
+      <n>2 1 0</n>
     </averageRupture>
     <lowerboundRupture>
       <C>15.251919550811756</C>
       <a>-2291.66474549 5303.87278052 19264.73603888</a>
-      <n></n>
+      <n>2 1 0</n>
     </lowerboundRupture>
     <nominalFatigue>
       <curve1>
