@@ -839,8 +839,6 @@ class ConvectiveBC(ThermalBC):
         t       time
         z       height
     """
-    print(z.shape)
-    print(t)
     return self.ifn([t, z])
 
   def save(self, fobj):
