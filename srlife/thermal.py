@@ -5,8 +5,10 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import numpy.linalg as la
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
+import scipy.optimize as opt
 
 from srlife import receiver
 
@@ -42,7 +44,7 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def solve(self, tube, material, fluid, source = None, 
-      T0 = None, fix_edge = None):
+      T0 = None, fix_edge = None, atol = 1e-2, miter = 100):
     """
       Solve the thermal problem defined for a single tube
 
@@ -60,9 +62,11 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         T0:         if present override the tube IC with a function of
                     the coordinates
         fix_edge:   an exact solution to fix edge BCs for testing
+        atol        iteration absolute tolerance
+        miter       maximum iterations
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
-        material, fluid, source, T0, fix_edge).solve()
+        material, fluid, source, T0, fix_edge, atol, miter).solve()
 
     tube.add_results("temperature", temperatures)
 
@@ -72,7 +76,7 @@ class FiniteDifferenceImplicitThermalProblem:
     tube problem
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
-      fix_edge = None):
+      fix_edge = None, atol = 1e-2, miter= 50):
     """
       Parameters:
         tube        Tube object to solve
@@ -83,10 +87,15 @@ class FiniteDifferenceImplicitThermalProblem:
         source      source function (t, r, ...)
         T0          initial condition function
         fix_edge:   an exact solution to fix edge BCs for testing
+        atol        absolute tolerance
+        miter       maximum iterations
     """
     self.tube = tube
     self.material = material
     self.fluid = fluid
+
+    self.atol = atol
+    self.miter = miter
 
     self.source_term = source
     self.T0 = T0
@@ -97,6 +106,9 @@ class FiniteDifferenceImplicitThermalProblem:
     self.dz = self.tube.h / (self.tube.nz-1)
 
     self.dts = np.diff(self.tube.times)
+
+    self.requires_iteration = (isinstance(self.tube.inner_bc, receiver.ConvectiveBC) or
+        isinstance(self.tube.outer_bc, receiver.ConvectiveBC))
   
     # Ghost
     self.dim = (self.tube.nr + 2, self.tube.nt + 2, self.tube.nz + 2)
@@ -162,21 +174,97 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
         dt          current dt
     """
+    if self.requires_iteration:
+      return self._solve_step_iter(T_n, time, dt)
+    else:
+      return self._solve_step_noiter(T_n, time, dt)
+
+  def _solve_step_iter(self, T_n, time, dt):
+    """
+      Solve a single step when iteration is required
+
+      Parameters:
+        T_n         previous temperatures
+        time        current time
+        dt          current dt
+    """
     # Store reusable stuff
     self.setup_step(T_n)
+    A = self._get_system(T_n, time, dt)
 
+    def RJ(T):
+      b, J = self._get_rhs(T, T_n, time, dt, deriv = True)
+      return A.dot(T.flatten()) - b, A - J
+    
+    # Newton's method
+    T = np.copy(T_n)    
+    R, J = RJ(T)
+    for i in range(self.miter):
+      print(la.norm(R))
+      if la.norm(R) < self.atol:
+        break
+      T -= sla.spsolve(J, R).reshape(self.dim)
+      R, J = RJ(T)
+    else:
+      raise Exception("Too many iterations in Newton loop!")
+    
+    return T
+
+  def _solve_step_noiter(self, T_n, time, dt):
+    """
+      Solve a single step when no iteration is required
+
+      Parameters:
+        T_n         previous temperatures
+        time        current time
+        dt          current dt
+    """
+    # Store reusable stuff
+    self.setup_step(T_n)
+    A = self._get_system(T_n, time, dt)
+    b = self._get_rhs(T_n, T_n, time, dt)
+
+    return sla.spsolve(A, b).reshape(self.dim)
+
+  def _get_system(self, T_n, time, dt):
+    """
+      Helper method to get the linear system of equations
+
+      Parameters:
+        T_n     previous temperature
+        time    current time
+        dts     current dt
+    """
     if self.ndim == 1:
-      A, b = self.form_1D_system(T_n, time, dt)
+      return self.form_1D_system(T_n, time, dt)
     elif self.ndim == 2:
-      A, b = self.form_2D_system(T_n, time, dt)
+      return self.form_2D_system(T_n, time, dt)
     elif self.ndim == 3:
-      A, b = self.form_3D_system(T_n, time, dt)
+      return self.form_3D_system(T_n, time, dt)
     else:
       raise ValueError("Unknown dimension %i!" % self.ndim)
 
-    T_np1 =  sla.spsolve(A, b).reshape(self.dim)
+  def _get_rhs(self, T, T_n, time, dt, deriv = False):
+    """
+      Helper method to get the RHS part of the system of equations
 
-    return T_np1
+      Parameters:
+        T       current temperature
+        T_n     previous temperature
+        time    current time
+        dts     current dt
+
+      Additional Parameters:
+        deriv   also return the derivative of the RHS
+    """
+    if self.ndim == 1:
+      return self.form_1D_RHS(T, T_n, time, dt, deriv = deriv)
+    elif self.ndim == 2:
+      return self.form_2D_RHS(T, T_n, time, dt, deriv = deriv)
+    elif self.ndim == 3:
+      return self.form_3D_RHS(T, T_n, time, dt, deriv = deriv)
+    else:
+      raise ValueError("Unknown dimension %i!" % self.ndim)
 
   def form_1D_system(self, T_n, time, dt):
     """
@@ -191,7 +279,6 @@ class FiniteDifferenceImplicitThermalProblem:
     main = np.zeros((self.ndof,))
     upper = np.zeros((self.ndof-1,))
     lower = np.zeros((self.ndof-1,))
-    RHS = np.zeros((self.ndof,))
     
     # Form matrix and source
     # Radial contribution
@@ -200,19 +287,14 @@ class FiniteDifferenceImplicitThermalProblem:
     main[1:-1] = D
     lower[:-1] = L
 
-    # Source
-    RHS[1:-1] = -self.source(time)
-    
     # Impose r BCs
-    D, U, R = self.impose_left_radial_bc(T_n[1], time)
+    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:1] = D
     upper[:1] = U
-    RHS[:1] = R
 
-    D, L, R = self.impose_right_radial_bc(T_n[-2], time)
+    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-1:] = D
     lower[-1:] = L
-    RHS[-1:] = R
 
     # Apply the dt and 1.0+
     upper[1:] *= dt
@@ -220,14 +302,54 @@ class FiniteDifferenceImplicitThermalProblem:
     main[1:-1] += 1
     lower[:-1] *= dt
     
-    # Setup matrix and RHS
+    # Setup matrix
     A = sp.diags((upper,main,lower), (1,0,-1), shape = (self.ndof, self.ndof)).tocsr()
+
+    return A
+
+  def form_1D_RHS(self, T, T_n, time, dt, deriv = False):
+    """
+      Form the 1D RHS and, if requested, the derivative of the RHS
+
+      Parameters:
+        T       temperature
+        T_n     previous temperature
+        time    current time
+        dt      current increment
+
+      Optional parameters:
+        deriv   also form the derivative of the RHS vector
+    """
+    RHS = np.zeros((self.ndof,))
+
+    # Source
+    RHS[1:-1] = -self.source(time)
+
+    # Impose r BCs
+    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    RHS[:1] = R
+
+    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    RHS[-1:] = R
+
     b = RHS
     b[1:-1] *= dt
     b[1:-1] += T_n[1:-1].flatten()
 
-    return A, b
-  
+    if deriv:
+      upper = np.zeros((self.ndof-1,))
+      lower = np.zeros((self.ndof-1,))
+      
+      L = self.left_radial_derivative(T[1], T_n[1], time)
+      R = self.right_radial_derivative(T[-2], T_n[-2], time)
+
+      upper[:1] = L
+      lower[-1:] = R
+
+      return b, sp.diags((upper,lower),(1,-1), shape = (self.ndof, self.ndof)).tocsr()
+
+    return b
+
   # pylint: disable=too-many-locals
   def form_2D_system(self, T_n, time, dt):
     """
@@ -242,7 +364,6 @@ class FiniteDifferenceImplicitThermalProblem:
         A matrix and b vector
     """
     # Matrix entries
-    RHS = np.zeros((self.ndof,))
     main = np.zeros((self.ndof,))
     u1 = self.nt
     upper1 = np.zeros((self.ndof - u1,))
@@ -277,35 +398,23 @@ class FiniteDifferenceImplicitThermalProblem:
       lower2[self.nt+i*self.nt:self.nt+(i+1)*self.nt-2] += L[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
     
-    # Source and T_n contribution
-    R = self.source(time)
-    Tf = T_n.flatten()
-    for i in range(self.nr-2):
-      RHS[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += (
-          -R[i*(self.nt-2):(i+1)*(self.nt-2)] * dt + 
-          Tf[i*(self.nt-2):(i+1)*(self.nt-2)])
-
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T_n[1], time)
+    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:self.nt] = D
     upper1[:self.nt] = U
-    RHS[:self.nt] = R
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T_n[-2], time)
+    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-self.nt:] = D
     lower1[-self.nt:] = L
-    RHS[-self.nt:] = R
 
     # Theta left BC
     main[::self.nt] = 1.0
     upper3[::self.nt] = -1.0
-    RHS[::self.nt] = 0
 
     # Theta right BC
     main[self.nt-1::self.nt] = 1.0
     lower3[1::self.nt] = -1.0
-    RHS[self.nt-1::self.nt] = 0
 
     # Add 1 to the diagonal
     for i in range(self.nr-2):
@@ -315,8 +424,61 @@ class FiniteDifferenceImplicitThermalProblem:
     A = sp.diags((upper1,upper2,upper3,main,lower1,lower2,lower3), 
         (u1,u2,u3,0,l1,l2,l3), shape = (self.ndof, self.ndof)).tocsr()
 
-    return A, RHS
-  
+    return A
+ 
+  def form_2D_RHS(self, T, T_n, time, dt, deriv = False):
+    """
+      Form the 1D RHS
+
+      Parameters:
+        T       temperature
+        T_n     previous temperature
+        time    current time
+        dt      current increment
+
+      Additional parameters:
+        deriv   also form the derivative of the RHS
+    """
+    RHS = np.zeros((self.ndof,))
+
+    # Source and T_n contribution
+    R = self.source(time)
+    Tf = T_n.flatten()
+    for i in range(self.nr-2):
+      RHS[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += (
+          -R[i*(self.nt-2):(i+1)*(self.nt-2)] * dt + 
+          Tf[i*(self.nt-2):(i+1)*(self.nt-2)])
+
+    # Radial left BC
+    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    RHS[:self.nt] = R
+
+    # Radial right BC
+    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    RHS[-self.nt:] = R
+
+    # Theta left BC
+    RHS[::self.nt] = 0
+
+    # Theta right BC
+    RHS[self.nt-1::self.nt] = 0
+
+    if deriv:
+      u1 = self.nt
+      upper1 = np.zeros((self.ndof - u1,))
+      l1 = -self.nt
+      lower1 = np.zeros((self.ndof + l1,))
+      
+      L = self.left_radial_derivative(T[1], T_n[1], time)
+      R = self.right_radial_derivative(T[-2], T_n[-2], time)
+
+      upper1[:self.nt] = L
+      lower1[-self.nt:] = R
+
+      return RHS, sp.diags((upper1,lower1),(u1,l1), shape = (self.ndof, self.ndof)).tocsr()
+
+    return RHS
+
   # pylint: disable=too-many-statements
   def form_3D_system(self, T_n, time, dt):
     """
@@ -331,7 +493,6 @@ class FiniteDifferenceImplicitThermalProblem:
         A matrix and b vector
     """
     # Matrix entries
-    RHS = np.zeros((self.ndof,))
     main = np.zeros((self.ndof,))
     u1 = self.nt * self.nz
     upper1 = np.zeros((self.ndof - u1,))
@@ -375,31 +536,26 @@ class FiniteDifferenceImplicitThermalProblem:
         upper3[st:st+n] = Ua[k:k+n] * dt
         lower3[st-1:st-1+n] = La[k:k+n] * dt
 
-        RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
-
         k += n
    
     # BCs apply uniformly
     n = self.nz
 
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T_n[1], time)
+    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:self.nt*self.nz] = D
     upper1[:self.nt*self.nz] = U
-    RHS[:self.nt*self.nz] = R
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T_n[-2], time)
+    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-self.nt*self.nz:] = D
     lower1[-self.nt*self.nz:] = L
-    RHS[-self.nt*self.nz:] = R
 
     # Theta left BC
     k = 0
     for i in range(0,self.nr):
       st = i * self.nt * self.nz + 1
       main[st:st+n] = 1.0
-      RHS[st:st+n] = 0
       st = i *self.nt * self.nz
       upper4[st:st+n] = -1.0
       k += n
@@ -409,7 +565,6 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in range(0,self.nr):
       st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
       main[st:st+n] = 1.0
-      RHS[st:st+n] = 0
       st = i * self.nt * self.nz + self.nz
       lower4[st:st+n] = -1.0
       k += n
@@ -418,20 +573,100 @@ class FiniteDifferenceImplicitThermalProblem:
     D, U, R = self.impose_left_axial_bc(time)
     main[::self.nz] = D
     upper3[::self.nz] = U
-    RHS[::self.nz] = R
 
     # Axial right BC
     D, L, R = self.impose_right_axial_bc(time)
     main[self.nz-1::self.nz] = D
     lower3[self.nz-2::self.nz] = L
-    RHS[self.nz-1::self.nz] = R
 
     # Setup matrix and RHS
     A = sp.diags((upper1,upper2,upper3,upper4,main,lower1,lower2,lower3,lower4),
         (u1,u2,u3,u4,0,l1,l2,l3,l4), 
         shape = (self.ndof, self.ndof)).tocsr()
     
-    return A, RHS
+    return A
+
+  def form_3D_RHS(self, T, T_n, time, dt, deriv = False):
+    """
+      Form the 3D RHS
+
+      Parameters:
+        T       temperature
+        T_n     previous temperature
+        time    current time
+        dt      current increment
+
+      Additional parameters:
+        deriv   also form the derivative of the RHS
+    """
+    # Matrix entries
+    RHS = np.zeros((self.ndof,))
+
+    # Useful: number of entries to insert at a time
+    n = self.nz - 2
+
+    # Source and T_n contributions
+    R = self.source(time)
+    Tf = T_n.flatten()
+    
+    # Stick into diagonals
+    k = 0
+    for i in range(1, self.nr-1):
+      for j in range(1, self.nt-1):
+        st = i*self.nt*self.nz + j*self.nz + 1
+        RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
+        k += n
+   
+    # BCs apply uniformly
+    n = self.nz
+
+    # Radial left BC
+    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    RHS[:self.nt*self.nz] = R
+
+    # Radial right BC
+    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    RHS[-self.nt*self.nz:] = R
+
+    # Theta left BC
+    k = 0
+    for i in range(0,self.nr):
+      st = i * self.nt * self.nz + 1
+      RHS[st:st+n] = 0
+      st = i *self.nt * self.nz
+      k += n
+
+    # Theta right BC
+    k = 0
+    for i in range(0,self.nr):
+      st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
+      RHS[st:st+n] = 0
+      st = i * self.nt * self.nz + self.nz
+      k += n
+
+    # Axial left BC
+    D, U, R = self.impose_left_axial_bc(time)
+    RHS[::self.nz] = R
+
+    # Axial right BC
+    D, L, R = self.impose_right_axial_bc(time)
+    RHS[self.nz-1::self.nz] = R
+
+    if deriv:
+      u1 = self.nt * self.nz
+      upper1 = np.zeros((self.ndof - u1,))
+      l1 = -self.nt * self.nz
+      lower1 = np.zeros((self.ndof + l1,))
+      
+      L = self.left_radial_derivative(T[1], T_n[1], time)
+      R = self.right_radial_derivative(T[-2], T_n[-2], time)
+
+      upper1[:self.nt*self.nz] = L
+      lower1[-self.nt*self.nz:] = R
+
+      return RHS, sp.diags((upper1,lower1),(u1,l1), shape = (self.ndof, self.ndof)).tocsr()
+
+    return RHS
 
   def setup_step(self, T):
     """
@@ -514,12 +749,13 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return U,D,L
 
-  def impose_left_radial_bc(self, Tb, time):
+  def impose_left_radial_bc(self, Tb, Tb_n, time):
     """
       Impose the radial BC on the left side of the domain
 
       Parameters:
         Tb:     temperatures on actual boundary
+        Tb_n:   previous temperatures on the boundary
         time:   time
 
       Returns:
@@ -550,7 +786,7 @@ class FiniteDifferenceImplicitThermalProblem:
     elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
       D = 1.0
       U = -1.0
-      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb
+      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
         )*(Tb - self.tube.inner_bc.fluid_temperature(time, self.z[1])
           ) / self.k[1]).flatten()
     else:
@@ -558,12 +794,28 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return D, U, RHS
 
-  def impose_right_radial_bc(self, Tb, time):
+  def left_radial_derivative(self, Tb, Tb_n, time):
+    """
+      The Jacobian contribution of the left radial derivative
+
+      Parameters:
+        Tb:     temperatures on the boundary
+        Tb_n:   previous temperature on the boundary
+        time:   time
+    """
+    if isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      return -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
+        ) / self.k[1]).flatten()
+    else:
+      return np.zeros(Tb.shape).flatten() 
+
+  def impose_right_radial_bc(self, Tb, Tb_n, time):
     """
       Impose the radial BC on the right side of the domain
 
       Parameters:
         Tb:     temperatures on actual boundary
+        Tb_n:   previous temperature on the boundary
         time:   time
 
       Returns:
@@ -593,13 +845,28 @@ class FiniteDifferenceImplicitThermalProblem:
     elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
       D = 1.0
       L = -1.0
-      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb
+      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
         )*(Tb - self.tube.outer_bc.fluid_temperature(time, self.z[-2])
           ) / self.k[-2]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
 
     return D, L, RHS
+
+  def right_radial_derivative(self, Tb, Tb_n, time):
+    """
+      The diagonal Jacobian contribution of the right radial derivative
+
+      Parameters:
+        Tb:     temperatures on the boundary
+        Tb_n:   previous temperatures on the boundary
+        time:   time
+    """
+    if isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+      return -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
+        ) / self.k[-2]).flatten()
+    else:
+      return np.zeros(Tb.shape).flatten() 
 
   def _edge_mesh(self, ind):
     """
