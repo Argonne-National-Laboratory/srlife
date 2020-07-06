@@ -8,7 +8,6 @@ import numpy as np
 import numpy.linalg as la
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
-import scipy.optimize as opt
 
 from srlife import receiver
 
@@ -200,13 +199,12 @@ class FiniteDifferenceImplicitThermalProblem:
     T = np.copy(T_n)    
     R, J = RJ(T)
     for i in range(self.miter):
-      print(la.norm(R))
       if la.norm(R) < self.atol:
         break
       T -= sla.spsolve(J, R).reshape(self.dim)
       R, J = RJ(T)
     else:
-      raise Exception("Too many iterations in Newton loop!")
+      raise Exception("Too many iterations (%i) in Newton loop!" % i)
     
     return T
 
@@ -288,11 +286,11 @@ class FiniteDifferenceImplicitThermalProblem:
     lower[:-1] = L
 
     # Impose r BCs
-    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
+    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:1] = D
     upper[:1] = U
 
-    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
+    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-1:] = D
     lower[-1:] = L
 
@@ -326,10 +324,10 @@ class FiniteDifferenceImplicitThermalProblem:
     RHS[1:-1] = -self.source(time)
 
     # Impose r BCs
-    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
     RHS[:1] = R
 
-    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
     RHS[-1:] = R
 
     b = RHS
@@ -399,12 +397,12 @@ class FiniteDifferenceImplicitThermalProblem:
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
     
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
+    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:self.nt] = D
     upper1[:self.nt] = U
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
+    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-self.nt:] = D
     lower1[-self.nt:] = L
 
@@ -450,11 +448,11 @@ class FiniteDifferenceImplicitThermalProblem:
           Tf[i*(self.nt-2):(i+1)*(self.nt-2)])
 
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
     RHS[:self.nt] = R
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
     RHS[-self.nt:] = R
 
     # Theta left BC
@@ -519,10 +517,6 @@ class FiniteDifferenceImplicitThermalProblem:
     Uc, Dc, Lc = self.circumfrential()
     Ua, Da, La = self.axial()
 
-    # Source and T_n contributions
-    R = self.source(time)
-    Tf = T_n.flatten()
-    
     # Stick into diagonals
     k = 0
     for i in range(1, self.nr-1):
@@ -542,12 +536,12 @@ class FiniteDifferenceImplicitThermalProblem:
     n = self.nz
 
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T_n[1], T_n[1], time)
+    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
     main[:self.nt*self.nz] = D
     upper1[:self.nt*self.nz] = U
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
+    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
     main[-self.nt*self.nz:] = D
     lower1[-self.nt*self.nz:] = L
 
@@ -570,12 +564,12 @@ class FiniteDifferenceImplicitThermalProblem:
       k += n
 
     # Axial left BC
-    D, U, R = self.impose_left_axial_bc(time)
+    D, U, _ = self.impose_left_axial_bc(time)
     main[::self.nz] = D
     upper3[::self.nz] = U
 
     # Axial right BC
-    D, L, R = self.impose_right_axial_bc(time)
+    D, L, _ = self.impose_right_axial_bc(time)
     main[self.nz-1::self.nz] = D
     lower3[self.nz-2::self.nz] = L
 
@@ -621,11 +615,11 @@ class FiniteDifferenceImplicitThermalProblem:
     n = self.nz
 
     # Radial left BC
-    D, U, R = self.impose_left_radial_bc(T[1], T_n[1], time)
+    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
     RHS[:self.nt*self.nz] = R
 
     # Radial right BC
-    D, L, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
+    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
     RHS[-self.nt*self.nz:] = R
 
     # Theta left BC
@@ -645,11 +639,11 @@ class FiniteDifferenceImplicitThermalProblem:
       k += n
 
     # Axial left BC
-    D, U, R = self.impose_left_axial_bc(time)
+    _, _, R = self.impose_left_axial_bc(time)
     RHS[::self.nz] = R
 
     # Axial right BC
-    D, L, R = self.impose_right_axial_bc(time)
+    _, _, R = self.impose_right_axial_bc(time)
     RHS[self.nz-1::self.nz] = R
 
     if deriv:
