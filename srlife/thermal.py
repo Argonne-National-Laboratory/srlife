@@ -43,7 +43,8 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def solve(self, tube, material, fluid, source = None, 
-      T0 = None, fix_edge = None, atol = 1e-2, miter = 100):
+      T0 = None, fix_edge = None, atol = 1e-2, miter = 100,
+      substep = 1):
     """
       Solve the thermal problem defined for a single tube
 
@@ -63,9 +64,10 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         fix_edge:   an exact solution to fix edge BCs for testing
         atol        iteration absolute tolerance
         miter       maximum iterations
+        substep     divide user-provided time increments into smaller values
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
-        material, fluid, source, T0, fix_edge, atol, miter).solve()
+        material, fluid, source, T0, fix_edge, atol, miter, substep).solve()
 
     tube.add_results("temperature", temperatures)
 
@@ -75,7 +77,7 @@ class FiniteDifferenceImplicitThermalProblem:
     tube problem
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
-      fix_edge = None, atol = 1e-2, miter= 50):
+      fix_edge = None, atol = 1e-2, miter= 50, substep = 1):
     """
       Parameters:
         tube        Tube object to solve
@@ -88,6 +90,7 @@ class FiniteDifferenceImplicitThermalProblem:
         fix_edge:   an exact solution to fix edge BCs for testing
         atol        absolute tolerance
         miter       maximum iterations
+        substep     divide user provided time increments into smaller steps
     """
     self.tube = tube
     self.material = material
@@ -95,6 +98,8 @@ class FiniteDifferenceImplicitThermalProblem:
 
     self.atol = atol
     self.miter = miter
+
+    self.substep = substep
 
     self.source_term = source
     self.T0 = T0
@@ -173,10 +178,19 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
         dt          current dt
     """
-    if self.requires_iteration:
-      return self._solve_step_iter(T_n, time, dt)
-    else:
-      return self._solve_step_noiter(T_n, time, dt)
+    T = np.copy(T_n)
+    t_n = time - dt
+    dti = dt / self.substep
+
+    for i in range(1, self.substep+1):
+      t = t_n + dti * i
+
+      if self.requires_iteration:
+        T = self._solve_step_iter(T, t, dti)
+      else:
+        T = self._solve_step_noiter(T, t, dti)
+
+    return T
 
   def _solve_step_iter(self, T_n, time, dt):
     """
