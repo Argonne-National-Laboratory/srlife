@@ -222,6 +222,33 @@ class TestThermalBCs(unittest.TestCase):
 
     self.assertTrue(np.allclose(T,Texact, rtol = 1.0e-2))
 
+  def test_substep(self):
+    T0 = lambda x: np.sin(2*np.pi*(x-self.r-self.t)/self.t)
+    
+    T_outer = 250
+
+    Tout = receiver.ConvectiveBC(self.r, self.h, self.nz,
+        self.times, np.ones((self.ntime+1,self.nz))*T_outer)
+    self.tube.set_bc(Tout, "outer")
+
+    Tleft = receiver.FixedTempBC(self.r-self.t, self.h, self.nt, self.nz,
+        self.times, np.zeros(self.ttimes.shape))
+    self.tube.set_bc(Tleft, "inner")
+
+    self.solver.solve(self.tube, self.material, self.fluid,
+        T0 = T0, substep = 10)
+
+    T = self.tube.results['temperature'][-1]
+    
+    ri = self.r - self.t
+
+    C1 = self.hcoef * T_outer / (self.k/self.r + self.hcoef * np.log(self.r) - self.hcoef * np.log(ri))
+    C2 = -C1 * np.log(ri)
+
+    Texact = C1 * np.log(self.rs) + C2
+
+    self.assertTrue(np.allclose(T,Texact, rtol = 1.0e-2))
+
 class TestFunction(unittest.TestCase):
   def setUp(self):
     self.k = 15.0
