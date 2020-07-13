@@ -11,46 +11,46 @@ from thermalsol import ManufacturedSolution
 class TestThermalManufactured(unittest.TestCase):
   def setUp(self):
     self.problems = [
-        ManufacturedSolution(1, 
+        ManufacturedSolution("1D: no spatial", 1, 
           lambda t, r: t, 
           lambda t, k, alpha, r: k/alpha * (r*0.0+1)),
-        ManufacturedSolution(1, 
+        ManufacturedSolution("1D: spatial and time", 1, 
           lambda t, r: np.sin(t)*np.log(r), 
           lambda t, k, alpha, r: k/alpha * np.log(r) * np.cos(t)),
-        ManufacturedSolution(1,
+        ManufacturedSolution("1D: just spatial", 1,
           lambda t, r: np.sin(r),
           lambda t, k, alpha, r: k * np.sin(r) - k/r*np.cos(r)),
-        ManufacturedSolution(2,
+        ManufacturedSolution("2D: just time", 2,
           lambda t, r, th: t,
           lambda t, k, alpha, r, th: k/alpha * (r*0.0+1)),
-        ManufacturedSolution(2,
+        ManufacturedSolution("2D: just r", 2,
           lambda t, r, th: np.sin(r),
           lambda t, k, alpha, r, th: k * np.sin(r) - k/r * np.cos(r)),
-        ManufacturedSolution(2,
+        ManufacturedSolution("2D: just theta", 2,
           lambda t, r, th: np.cos(th),
           lambda t, k, alpha, r, th: k * np.cos(th) / r**2.0),
-        ManufacturedSolution(2,
+        ManufacturedSolution("2D: theta and r", 2,
           lambda t, r, th: np.cos(th) / r,
           lambda t, k, alpha, r, th: -k*np.cos(th) / r**3.0),
-        ManufacturedSolution(2,
+        ManufacturedSolution("2D: all three", 2,
           lambda t, r, th: np.log(r) * np.sin(th) / (t+1),
           lambda t, k, alpha, r, th: k*np.log(r)*np.sin(th)/((t+1)*r**2.0) - k/alpha * np.log(r) * np.sin(th) / (t+1)**2.0),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: just t", 3,
           lambda t, r, th, z: t,
           lambda t, k, alpha, r, th, z: k/alpha * (r*0.0+1)),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: just r", 3,
           lambda t, r, th, z: np.sin(r),
           lambda t, k, alpha, r, th, z: k * np.sin(r) - k/r * np.cos(r)),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: just theta", 3,
           lambda t, r, th, z: np.cos(th),
           lambda t, k, alpha, r, th, z: k * np.cos(th) / r**2.0),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: just z", 3,
           lambda t, r, th, z: np.sin(z),
           lambda t, k, alpha, r, th, z: k * np.sin(z)),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: all spatial", 3,
           lambda t, r, th, z: z**2.0*np.cos(th)/r,
           lambda t, k, alpha, r, th, z: -k*np.cos(th)/r*((z/r)**2.0+2)),
-        ManufacturedSolution(3,
+        ManufacturedSolution("3D: everything", 3,
           lambda t, r, th, z: np.log(r)*np.sin(th)*np.cos(z)/(t+1.0),
           lambda t, k, alpha, r, th, z: k*np.log(r) * np.sin(th) * np.cos(z) / (t+1) * (1.0 + 1/r**2.0 - 1.0/(alpha*(t+1)))),
         ]
@@ -59,12 +59,14 @@ class TestThermalManufactured(unittest.TestCase):
     self.material = materials.ConstantThermalMaterial("Test", 10.0, 5.0)
     self.fluid = materials.ConstantFluidMaterial({"Test": 7.5})
 
-    self.tol = 1e-4
-    self.atol = 1e-1
+    self.tol = 1e-6
+    self.atol = 1e-4
 
   def _check_case(self, case):
     res = case.solve(self.solver, self.material, self.fluid)
-    self.assertTrue(case.assess_comparison(res, self.tol, self.atol))
+    if not case.assess_comparison(res, self.tol, self.atol):
+      print(case.name)
+      self.assertTrue(False)
 
   def test_all_problems(self):
     for i,case in enumerate(self.problems):
@@ -138,7 +140,7 @@ class TestThermalBCs(unittest.TestCase):
         T0 = T0)
 
     # Correct solution: 
-    Tright = -q * (self.r - self.t) / self.k * np.log(self.rs) + q * (
+    Tright = q * (self.r - self.t) / self.k * np.log(self.rs) + -q * (
         self.r - self.t) / self.k * np.log(self.r)
 
     T = self.tube.results['temperature'][-1]

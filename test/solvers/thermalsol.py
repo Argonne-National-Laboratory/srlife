@@ -10,20 +10,22 @@ class ManufacturedSolution:
   """
     A manufactured heat transport solution
   """
-  def __init__(self, dim, solution, source):
+  def __init__(self, name, dim, solution, source):
     """
       Parameters:
+        name:       descriptive name
         dim:        dimension of solution
         solution:   function of t, r, ...
         source      function of t, k, alpha, r, ...
         flux        function of t, k, alpha, r, ... (for BC)
     """
+    self.name = name
     self.dim = dim
     self.soln = solution
     self.source = source
 
   def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
-      ntime = 11, nr = 10, nt = 20, nz = 10, T0 = 0.0):
+      ntime = 11, nr = 3, nt =3, nz = 10, T0 = 0.0):
     """
       Generate the appropriate tube and solve with the provided solver
       
@@ -138,6 +140,7 @@ class ManufacturedSolution:
     """
     rs = np.linspace(r-t, r, nr)
     ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
+    print(ts)
     zs = np.linspace(0, h, nz)
 
     geom = [rs, ts, zs]

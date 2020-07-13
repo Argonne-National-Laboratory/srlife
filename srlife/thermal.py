@@ -6,8 +6,11 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import numpy.linalg as la
+import scipy.linalg as ssla
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
+
+import scipy.optimize as opt
 
 from srlife import receiver
 
@@ -219,7 +222,7 @@ class FiniteDifferenceImplicitThermalProblem:
       R, J = RJ(T)
     else:
       raise Exception("Too many iterations (%i) in Newton loop!" % i)
-    
+
     return T
 
   def _solve_step_noiter(self, T_n, time, dt):
@@ -235,6 +238,8 @@ class FiniteDifferenceImplicitThermalProblem:
     self.setup_step(T_n)
     A = self._get_system(T_n, time, dt)
     b = self._get_rhs(T_n, T_n, time, dt)
+    
+    print(A.todense())
 
     return sla.spsolve(A, b).reshape(self.dim)
 
@@ -309,10 +314,10 @@ class FiniteDifferenceImplicitThermalProblem:
     lower[-1:] = L
 
     # Apply the dt and 1.0+
-    upper[1:] *= dt
-    main[1:-1] *= dt
+    upper[1:] *= -dt
+    main[1:-1] *= -dt
     main[1:-1] += 1
-    lower[:-1] *= dt
+    lower[:-1] *= -dt
     
     # Setup matrix
     A = sp.diags((upper,main,lower), (1,0,-1), shape = (self.ndof, self.ndof)).tocsr()
@@ -335,7 +340,7 @@ class FiniteDifferenceImplicitThermalProblem:
     RHS = np.zeros((self.ndof,))
 
     # Source
-    RHS[1:-1] = -self.source(time)
+    RHS[1:-1] = self.source(time) * dt
 
     # Impose r BCs
     _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
@@ -345,7 +350,6 @@ class FiniteDifferenceImplicitThermalProblem:
     RHS[-1:] = R
 
     b = RHS
-    b[1:-1] *= dt
     b[1:-1] += T_n[1:-1].flatten()
 
     if deriv:
@@ -393,32 +397,32 @@ class FiniteDifferenceImplicitThermalProblem:
     # Radial contribution
     U, D, L = self.radial()
     for i in range(self.nr-2):
-      upper1[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += U[
+      upper1[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] -= U[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += D[
+      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] -= D[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      lower1[1+i*self.nt:1+(i+1)*self.nt-2] += L[
+      lower1[1+i*self.nt:1+(i+1)*self.nt-2] -= L[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
 
     # Circumferential contribution
     U, D, L = self.circumfrential()
     for i in range(self.nr-2):
-      upper2[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += U[
+      upper2[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] -= U[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += D[
+      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] -= D[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      lower2[self.nt+i*self.nt:self.nt+(i+1)*self.nt-2] += L[
+      lower2[self.nt+i*self.nt:self.nt+(i+1)*self.nt-2] -= L[
           i*(self.nt-2):(i+1)*(self.nt-2)] * dt
     
     # Radial left BC
     D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
-    main[:self.nt] = D
-    upper1[:self.nt] = U
+    main[1:self.nt-1] = D
+    upper1[1:self.nt-1] = U
 
     # Radial right BC
     D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
-    main[-self.nt:] = D
-    lower1[-self.nt:] = L
+    main[1-self.nt:-1] = D
+    lower1[1-self.nt:-1] = L
 
     # Theta left BC
     main[::self.nt] = 1.0
@@ -458,7 +462,7 @@ class FiniteDifferenceImplicitThermalProblem:
     Tf = T_n.flatten()
     for i in range(self.nr-2):
       RHS[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += (
-          -R[i*(self.nt-2):(i+1)*(self.nt-2)] * dt + 
+          R[i*(self.nt-2):(i+1)*(self.nt-2)] * dt + 
           Tf[i*(self.nt-2):(i+1)*(self.nt-2)])
 
     # Radial left BC
@@ -536,13 +540,13 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in range(1, self.nr-1):
       for j in range(1, self.nt-1):
         st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] = (1.0 + Dr[k:k+n] + Dc[k:k+n] + Da[k:k+n]) * dt
-        upper1[st:st+n] = Ur[k:k+n] * dt
-        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] = Lr[k:k+n] * dt
-        upper2[st:st+n] = Uc[k:k+n] * dt
-        lower2[st-self.nz:st-self.nz+n] = Lc[k:k+n] * dt
-        upper3[st:st+n] = Ua[k:k+n] * dt
-        lower3[st-1:st-1+n] = La[k:k+n] * dt
+        main[st:st+n] = 1.0 - (Dr[k:k+n] + Dc[k:k+n] + Da[k:k+n]) * dt
+        upper1[st:st+n] = -Ur[k:k+n] * dt
+        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] = -Lr[k:k+n] * dt
+        upper2[st:st+n] = -Uc[k:k+n] * dt
+        lower2[st-self.nz:st-self.nz+n] = -Lc[k:k+n] * dt
+        upper3[st:st+n] = -Ua[k:k+n] * dt
+        lower3[st-1:st-1+n] = -La[k:k+n] * dt
 
         k += n
    
@@ -622,7 +626,7 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in range(1, self.nr-1):
       for j in range(1, self.nt-1):
         st = i*self.nt*self.nz + j*self.nz + 1
-        RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
+        RHS[st:st+n] += (R[k:k+n] * dt + Tf[k:k+n])
         k += n
    
     # BCs apply uniformly
@@ -788,7 +792,7 @@ class FiniteDifferenceImplicitThermalProblem:
     elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
       D = 1.0
       U = -1.0
-      RHS = (self.dr * self.tube.inner_bc.flux(time, self.theta[1], 
+      RHS = -(self.dr * self.tube.inner_bc.flux(time, self.theta[1], 
         self.z[1]) / self.k[1]).flatten()
     # Convection
     elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
@@ -799,7 +803,7 @@ class FiniteDifferenceImplicitThermalProblem:
           ) / self.k[1]).flatten()
     else:
       raise ValueError("Unknown boundary condition!")
-
+    
     return D, U, RHS
 
   def left_radial_derivative(self, Tb, Tb_n, time):
@@ -1000,3 +1004,526 @@ class FiniteDifferenceImplicitThermalProblem:
     geom = [rs, ts, zs]
 
     return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
+
+
+class SlowFiniteDifferenceImplicitThermalSolver(ThermalSolver):
+  """
+    Solves the heat transfer problem using the finite difference method.
+
+    Solver handles the *cylindrical* 1D, 2D, or 3D cases.
+  """
+  def solve(self, tube, material, fluid, source = None, 
+      T0 = None, fix_edge = None, atol = 1e-2, miter = 100,
+      substep = 1):
+    """
+      Solve the thermal problem defined for a single tube
+
+      Parameters:
+        tube        the Tube object defining the geometry, loading,
+                    and analysis abstraction
+        material    the thermal material object describing the material
+                    conductivity and diffusivity
+        fluid       the fluid material object describing the convective
+                    heat transfer coefficient
+
+      Other Parameters:
+        source:     if present, the source term as a function of t and 
+                    then the coordinates
+        T0:         if present override the tube IC with a function of
+                    the coordinates
+        fix_edge:   an exact solution to fix edge BCs for testing
+        atol        iteration absolute tolerance
+        miter       maximum iterations
+        substep     divide user-provided time increments into smaller values
+    """
+    temperatures = SlowFiniteDifferenceImplicitThermalProblem(tube, 
+        material, fluid, source, T0, fix_edge, atol, miter, substep).solve()
+
+    tube.add_results("temperature", temperatures)
+
+class SlowFiniteDifferenceImplicitThermalProblem:
+  """
+    The actual finite difference solver created to solve a single
+    tube problem
+  """
+  def __init__(self, tube, material, fluid, source = None, T0 = None,
+      fix_edge = None, atol = 1e-2, miter= 50, substep = 1):
+    """
+      Parameters:
+        tube        Tube object to solve
+        material    ThermalMaterial object
+        fluid       FluidMaterial object
+
+      Other Parameters:
+        source      source function (t, r, ...)
+        T0          initial condition function
+        fix_edge:   an exact solution to fix edge BCs for testing
+        atol        absolute tolerance
+        miter       maximum iterations
+        substep     divide user provided time increments into smaller steps
+    """
+    self.tube = tube
+    self.material = material
+    self.fluid = fluid
+
+    self.atol = atol
+    self.miter = miter
+
+    self.substep = substep
+
+    self.source_term = source
+    self.T0 = T0
+    self.fix_edge = fix_edge
+
+    self.dr = self.tube.t / (self.tube.nr-1)
+    self.dt = 2.0 * np.pi / (self.tube.nt)
+    self.dz = self.tube.h / (self.tube.nz-1)
+
+    self.dts = np.diff(self.tube.times)
+
+    # Ghost
+    self.dim = (self.tube.nr + 2, self.tube.nt+1, self.tube.nz + 2)
+
+    if self.tube.abstraction == "3D":
+      self.dim = self.dim
+      self.nr, self.nt, self.nz = self.dim
+      self.ndim = 3
+      self.fdim = self.dim
+    elif self.tube.abstraction == "2D":
+      self.dim = self.dim[:2]
+      self.nr, self.nt = self.dim
+      self.nz = 1
+      self.ndim = 2
+      self.fdim = (self.nr, self.nt, 1)
+    elif self.tube.abstraction == "1D":
+      self.dim = self.dim[:1]
+      self.nr, = self.dim
+      self.nt = 1
+      self.nz = 1
+      self.ndim = 1
+      self.fdim = (self.nr, 1, 1)
+    else:
+      raise ValueError("Thermal solver does not know how to handle"
+      " abstraction %s" % self.tube.abstraction)
+
+    # Useful for later
+    self.mesh = self._generate_mesh()
+    self.r = self.mesh[0]
+
+    if self.ndim > 1:
+      self.theta = self.mesh[1]
+    else:
+      self.theta = np.ones(self.r.shape) * self.tube.angle
+
+    if self.ndim > 2:
+      self.z = self.mesh[2]
+    else:
+      self.z = np.ones(self.r.shape) * self.tube.plane
+   
+  def _generate_mesh(self):
+    """
+      Produce the r, theta, z mesh
+    """
+    rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, self.tube.nr + 2)
+    ts = np.linspace(0 , 2.0*np.pi, self.tube.nt+1)
+    zs = np.linspace(0 - self.dz, self.tube.h + self.dz, self.tube.nz + 2)
+
+    geom = [rs, ts, zs]
+
+    return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
+
+  def solve(self):
+    """
+      Actually solve the problem...
+    """
+    # Setup the initial time
+    T = np.zeros((self.tube.ntime,) + self.dim)
+    if self.T0 is not None:
+      T[0] = self.T0(*self.mesh)
+    else:
+      T[0] = self.tube.T0
+    
+    for i,(time,dt) in enumerate(zip(self.tube.times[1:],self.dts)):
+      T[i+1] = self.solve_step(T[i], time, dt)
+    
+    # Don't return ghost values
+    if self.ndim == 3:
+      return T[:,1:-1,:-1,1:-1]
+    elif self.ndim == 2:
+      return T[:,1:-1,:-1]
+    else:
+      return T[:,1:-1]
+
+  def setup_step(self, T):
+    """
+      Setup common reusable arrays
+
+      Parameters:
+        T           temperature of interest
+        time        current time
+        dt          current dt
+    """
+    self.ru = self.r.reshape(self.fdim)
+    self.thetau = self.theta.reshape(self.fdim)
+    self.zu = self.z.reshape(self.fdim)
+
+    self.k = self.material.conductivity(T).reshape(self.fdim)
+    self.a = self.material.diffusivity(T).reshape(self.fdim)
+
+    self.k = np.pad(self.k, ((0,0),(0,1),(0,0)), mode = 'symmetric')
+    self.a = np.pad(self.a, ((0,0),(0,1),(0,0)), mode = 'symmetric')
+
+    self.ndof = T.size    
+    
+  def solve_step(self, T_n, time, dt):
+    self.setup_step(T_n)
+    
+    I = []
+    J = []
+    D = []
+    R = np.zeros((self.ndof))
+
+    self.radial(I,J,D)
+
+    if self.ndim > 1:
+      self.circumfrential(I,J,D)
+    
+    if self.ndim > 2:
+      self.axial(I,J,D)
+
+    self.source(R, time)
+    R *= dt
+    self.prev_temp(R, T_n.reshape(self.fdim))
+
+    A = sp.coo_matrix((np.array(D)*dt, (I,J)), shape = (self.ndof, self.ndof))
+    I,J,D = self.sub_id()
+    ID = sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+    M = (ID-A).tolil()
+    
+    self.ID_BC(M)
+    self.OD_BC(M)
+
+    if self.ndim > 1:
+      self.left_BC(M)
+      self.right_BC(M)
+
+    if self.ndim > 2:
+      self.top_BC(M)
+      self.bot_BC(M)
+      self.top_BC_R(R, T_n, time, T_n)
+      self.bot_BC_R(R, T_n, time, T_n)
+
+    self.zero_dummy(M)
+
+    M = M.tocsr()
+
+    print(M.todense())
+    print(R)
+    
+    """
+    def RJ(T):
+      self.ID_BC_R(R, T.reshape(self.dim), time, T_n)
+      self.OD_BC_R(R, T.reshape(self.dim), time, T_n)
+      print(R)
+
+      return M.dot(T) - R
+    
+    T_np1 = opt.root(RJ, T_n.flatten()).x.reshape(self.dim)
+    """
+
+    self.ID_BC_R(R, T_n, time, T_n)
+    self.OD_BC_R(R, T_n, time, T_n)
+
+    T_np1 = sla.spsolve(M, R).reshape(self.dim)
+
+    return T_np1
+
+  def zero_dummy(self, M):
+    if self.ndim > 1:
+      for i in self.dummy_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.dummy_loop_z():
+            print("DUMMY2", i,j,k)
+            M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+
+  def sub_id(self):
+    I = []
+    J = []
+    D = []
+
+    for i in self.loop_r():
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(1)
+
+    return I,J,D
+
+  def ID_BC_R(self, R, T, time, T_n):
+    i = 0
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+        # Zero flux
+        elif self.tube.inner_bc is None:
+          R[self.dof(i,j,k)] = 0.0
+        # Fixed temperature
+        elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
+          R[self.dof(i,j,k)] = self.tube.inner_bc.temperature(time, self.thetau[1,j,k], self.zu[1,j,k])
+        # Fixed flux
+        elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+          R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
+        # Convection
+        elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+          R[self.dof(i,j,k)] = -self.dr * self.fluid_coefficient(self.material.name, T_n[1,j,k]) * (self.T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+  def OD_BC_R(self, R, T, time, T_n):
+    i = self.nr-1
+    for j in self.loop_t():
+      for k in self.loop_z():
+
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+        # Zero flux
+        elif self.tube.outer_bc is None:
+          R[self.dof(i,j,k)] = 0.0
+        # Fixed temperature
+        elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
+          R[self.dof(i,j,k)] = self.tube.outer_bc.temperature(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k])
+        # Fixed flux
+        elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+          R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
+        # Convection
+        elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (self.T[1,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+  def ID_BC(self, M):
+    i = 0
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+          print("ID", i,j,k)
+        # Zero flux
+        elif self.tube.inner_bc is None:
+          M[self.dof(i,j,k),self.dof(1,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(0,j,k)] = -1.0
+        # Fixed temperature
+        elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
+          M[self.dof(i,j,k),self.dof(1,j,k)] = 1.0
+        # Fixed flux
+        elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+          M[self.dof(i,j,k),self.dof(1,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(0,j,k)] = -1.0
+        # Convection
+        elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+          M[self.dof(i,j,k),self.dof(1,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(0,j,k)] = -1.0
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+  def OD_BC(self, M):
+    i = self.nr-1
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+          print("OD", i,j,k)
+        # Zero flux
+        elif self.tube.outer_bc is None:
+          M[self.dof(i,j,k),self.dof(self.nr-2,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(self.nr-1,j,k)] = -1.0
+        # Fixed temperature
+        elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
+          M[self.dof(i,j,k),self.dof(self.nr-2,j,k)] = 1.0
+        # Fixed flux
+        elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+          M[self.dof(i,j,k),self.dof(self.nr-2,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(self.nr-1,j,k)] = -1.0
+        # Convection
+        elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+          M[self.dof(i,j,k),self.dof(self.nr-2,j,k)] = 1.0
+          M[self.dof(i,j,k),self.dof(self.nr-1,j,k)] = -1.0
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+  def left_BC(self, M):
+    j = 0
+    for i in self.loop_r():
+      for k in self.loop_z():
+        print("PER", i,j,k)
+        M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+        M[self.dof(i,j,k),self.dof(i,self.nt-1,k)] = -1.0
+
+  def right_BC(self, M):
+    """
+      Complete dummy
+    """
+    return
+    j = self.nt - 1
+    for i in self.loop_r():
+      for k in self.loop_z():
+        print("DUMMY", i,j,k)
+        M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+
+  def top_BC(self, M):
+    k = 0
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+        else:
+          M[self.dof(i,j,k),self.dof(i,j,1)] = 1.0
+          M[self.dof(i,j,k),self.dof(i,j,0)] = -1.0
+
+  def bot_BC(self, M):
+    k = self.nz - 1
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+        else:
+          M[self.dof(i,j,k),self.dof(i,j,self.nt-2)] = 1.0
+          M[self.dof(i,j,k),self.dof(i,j,self.nt-1)] = -1.0
+
+  def top_BC_R(self, R, T, time, T_n):
+    k = 0
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+
+  def bot_BC_R(self, R, T, time, T_n):
+    k = self.nz - 1
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+
+  def dof(self, i, j, k):
+    return i * self.nt * self.nz + j * self.nz + k
+
+  def loop_r(self):
+    return range(1,self.nr-1)
+
+  def loop_t(self):
+    if self.ndim > 1:
+      return range(1,self.nt)
+    else:
+      return [0]
+
+  def loop_z(self):
+    if self.ndim > 2:
+      return range(1,self.nz-1)
+    else:
+      return [0]
+
+  def full_loop_r(self):
+    return range(0,self.nr)
+
+  def full_loop_t(self):
+    if self.ndim > 1:
+      return range(0,self.nt)
+    else:
+      return [0]
+
+  def full_loop_z(self):
+    if self.ndim > 2:
+      return range(0,self.nz)
+    else:
+      return [0]
+
+  def dummy_loop_r(self):
+    return [0,self.nr-1]
+
+  def dummy_loop_t(self):
+    return [0]
+
+  def dummy_loop_z(self):
+    if self.ndim > 2:
+      return [0,self.nz-1]
+    else:
+      return [0]
+
+  def radial(self, I, J, D):
+    for i in self.loop_r():
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i-1,j,k))
+          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * (self.ru[i-1,j,k]+self.ru[i,j,k])/2 * (self.a[i-1,j,k]+self.a[i,j,k])/2)
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(-1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * ((self.ru[i-1,j,k]+self.ru[i,j,k])/2 * (self.a[i-1,j,k]+self.a[i,j,k])/2 + (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * (self.a[i+1,j,k] + self.a[i,j,k])/2.0))
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i+1,j,k))
+          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * (self.a[i+1,j,k] + self.a[i,j,k])/2.0)
+
+
+  def circumfrential(self, I, J, D):
+    for i in self.loop_r():
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j-1,k))
+          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * (self.a[i,j,k] + self.a[i,j-1,k])/2)
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(-1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * ((self.a[i,j,k] + self.a[i,j-1,k])/2 + (self.a[i,j+1,k] + self.a[i,j,k])/2))
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j+1,k))
+          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * (self.a[i,j+1,k] + self.a[i,j,k])/2)
+
+  def axial(self, I, J, D):
+    for i in self.loop_r():
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k-1))
+          D.append(1.0/self.dz**2.0 *  (self.a[i,j,k] + self.a[i,j,k-1])/2)
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(-1.0/self.dz**2.0 * ((self.a[i,j,k] + self.a[i,j,k-1])/2 + (self.a[i,j,k+1]+self.a[i,j,k])/2))
+
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k+1))
+          D.append(1.0/self.dz**2.0 * (self.a[i,j,k+1]+self.a[i,j,k])/2)
+
+  def source(self, R, time):
+    if self.source_term:
+      for i in self.loop_r():
+        for j in self.loop_t():
+          for k in self.loop_z():
+            R[self.dof(i,j,k)] += self.a[i,j,k] / self.k[i,j,k] * self.source_term(time, *[self.ru[i,j,k], self.thetau[i,j,k], 
+              self.zu[i,j,k]][:self.ndim])
+
+  def prev_temp(self, R, T_n):
+    for i in self.loop_r():
+      for j in self.loop_t():
+        for k in self.loop_z():
+          R[self.dof(i,j,k)] += T_n[i,j,k]
+
+  def adofs(self, X):
+    """
+      Return a view into the actual non-dummy dofs
+
+      Parameters:
+        X       matrix to reduce
+    """
+    if self.ndim == 3:
+      return X[1:-1,1:-1,1:-1]
+    elif self.ndim == 2:
+      return X[1:-1,1:-1]
+    else:
+      return X[1:-1]
