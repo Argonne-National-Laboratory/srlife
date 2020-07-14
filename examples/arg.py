@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
   #tube.make_1D(h/2,1)
-  tube.make_2D(h/2)
+  #tube.make_2D(h/2)
 
   times = np.linspace(0,tmax, ntime)
 
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
   solver.solve(tube, tmat, fmat, substep = 10)
   
-  print(tube.results['temperature'])
+  print(tube.results['temperature'][:,:,0,0])
 
   #print(tube.results['temperature'][:,0])
   #print(tube.results['temperature'][:,-1])

@@ -239,7 +239,7 @@ class FiniteDifferenceImplicitThermalProblem:
     A = self._get_system(T_n, time, dt)
     b = self._get_rhs(T_n, T_n, time, dt)
     
-    print(A.todense())
+    #print(A.todense())
 
     return sla.spsolve(A, b).reshape(self.dim)
 
@@ -1173,8 +1173,8 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     self.k = np.pad(self.k, ((0,0),(0,1),(0,0)), mode = 'symmetric')
     self.a = np.pad(self.a, ((0,0),(0,1),(0,0)), mode = 'symmetric')
 
-    self.ndof = T.size    
-    
+    self.ndof = T.size
+
   def solve_step(self, T_n, time, dt):
     self.setup_step(T_n)
     
@@ -1205,7 +1205,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
 
     if self.ndim > 1:
       self.left_BC(M)
-      self.right_BC(M)
 
     if self.ndim > 2:
       self.top_BC(M)
@@ -1217,9 +1216,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
 
     M = M.tocsr()
 
-    print(M.todense())
-    print(R)
-    
     """
     def RJ(T):
       self.ID_BC_R(R, T.reshape(self.dim), time, T_n)
@@ -1233,17 +1229,29 @@ class SlowFiniteDifferenceImplicitThermalProblem:
 
     self.ID_BC_R(R, T_n, time, T_n)
     self.OD_BC_R(R, T_n, time, T_n)
-
+    
     T_np1 = sla.spsolve(M, R).reshape(self.dim)
 
     return T_np1
 
   def zero_dummy(self, M):
-    if self.ndim > 1:
+    if self.ndim == 2:
       for i in self.dummy_loop_r():
         for j in self.dummy_loop_t():
           for k in self.dummy_loop_z():
-            print("DUMMY2", i,j,k)
+            M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+    elif self.ndim == 3:
+      for i in self.dummy_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.full_loop_z():
+            M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+      for i in self.full_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.dummy_loop_z():
+            M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
+      for i in self.dummy_loop_r():
+        for j in self.full_loop_t():
+          for k in self.dummy_loop_z():
             M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
 
   def sub_id(self):
@@ -1285,7 +1293,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     i = self.nr-1
     for j in self.loop_t():
       for k in self.loop_z():
-
         if self.fix_edge:
           R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
         # Zero flux
@@ -1309,7 +1316,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
       for k in self.loop_z():
         if self.fix_edge:
           M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
-          print("ID", i,j,k)
         # Zero flux
         elif self.tube.inner_bc is None:
           M[self.dof(i,j,k),self.dof(1,j,k)] = 1.0
@@ -1334,7 +1340,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
       for k in self.loop_z():
         if self.fix_edge:
           M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
-          print("OD", i,j,k)
         # Zero flux
         elif self.tube.outer_bc is None:
           M[self.dof(i,j,k),self.dof(self.nr-2,j,k)] = 1.0
@@ -1357,20 +1362,8 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     j = 0
     for i in self.loop_r():
       for k in self.loop_z():
-        print("PER", i,j,k)
         M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
         M[self.dof(i,j,k),self.dof(i,self.nt-1,k)] = -1.0
-
-  def right_BC(self, M):
-    """
-      Complete dummy
-    """
-    return
-    j = self.nt - 1
-    for i in self.loop_r():
-      for k in self.loop_z():
-        print("DUMMY", i,j,k)
-        M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
 
   def top_BC(self, M):
     k = 0
@@ -1389,8 +1382,8 @@ class SlowFiniteDifferenceImplicitThermalProblem:
         if self.fix_edge:
           M[self.dof(i,j,k),self.dof(i,j,k)] = 1.0
         else:
-          M[self.dof(i,j,k),self.dof(i,j,self.nt-2)] = 1.0
-          M[self.dof(i,j,k),self.dof(i,j,self.nt-1)] = -1.0
+          M[self.dof(i,j,k),self.dof(i,j,self.nz-2)] = 1.0
+          M[self.dof(i,j,k),self.dof(i,j,self.nz-1)] = -1.0
 
   def top_BC_R(self, R, T, time, T_n):
     k = 0
