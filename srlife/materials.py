@@ -337,75 +337,121 @@ class PiecewiseLinearFluidMaterial:
     """
     return self.fns[material][1](T)
 
-def cyclestofail(fname, material, pname, temp, erange):
+class StructuralMaterial:
   """
-    Returns fatigue cycles to failure at a given temperature and strain range
+  Properties for structural material
 
-    Parameters:
-      fname:       name of xml data file for polynomial coefficients of cycle vs strain range equations
-      material:    name of material ("A740H","SS316","A800H","A617", or "A282")
-      pname:       property name ("nominalFatigue")
-      erange:      strain range in mm/mm
-      temp:        temperature in K
+  Supply
+    1) cycles to failure as a function of temperature and strain range
+    2) time to rupture as a function of temperaure and stress
+    3) checks creep-fatigue interaction diagram
   """
-  root , data = load_dict_xml(fname)
-  pdata = data[material][pname]
-  T, a, n, cutoff = [],[],[],[]
 
-  for i in pdata:
+  def __init__(self, data):
+    self.data = data
+
+  def cycles_to_fail(self, pname, temp, erange):
+    """
+        Returns fatigue cycles to failure at a given temperature and strain range
+
+        Parameters:
+          pname:       property name ("nominalFatigue")
+          erange:      strain range in mm/mm
+          temp:        temperature in K
+    """
+    pdata = self.data[pname]
+    T, a, n, cutoff = [],[],[],[]
+
+    for i in pdata:
       T.append(destring_array(pdata[i]["T"]))
       a.append(destring_array(pdata[i]["a"]))
       n.append(destring_array(pdata[i]["n"]))
       cutoff.append(destring_array(pdata[i]["cutoff"]))
 
-  if np.array(a).shape != np.array(n).shape:
-      raise ValueError("The lists of a and n must have equal lengths!")
+      if np.array(a).shape != np.array(n).shape:
+        raise ValueError("\tThe lists of a and n must have equal lengths!")
 
-  inds=np.array(T).argsort(axis=0)
-  T = np.array(T)[inds]
-  a = np.array(a)[inds]
-  n = np.array(n)[inds]
-  cutoff = np.array(cutoff)[inds]
+    inds=np.array(T).argsort(axis=0)
+    T = np.array(T)[inds]
+    a = np.array(a)[inds]
+    n = np.array(n)[inds]
+    cutoff = np.array(cutoff)[inds]
 
-  if temp>max(T):
+    if temp > max(T):
       raise ValueError("\ttemperature is out of range for cycle to failure determination")
-  else:
-      for i in range(np.size(T, axis=0)):
-          if temp<=T[i]:
-              sum = 0
-              if erange<=cutoff[i]:
-                  for (b,m) in zip(a[i][0],n[i][0]):
-                      sum+=b*np.log10(cutoff[i])**m
-              else:
-                  for (b,m) in zip(a[i][0],n[i][0]):
-                      sum+=b*np.log10(erange)**m
-              return 10**sum
 
-def rupturetime(fname, material, pname, temp, stress):
-  """
-    Returns time to rupture at a given temperature and stress
+    for i in range(np.size(T, axis=0)):
+      if temp<=T[i]:
+        polysum = 0.0
+        if erange<=cutoff[i]:
+          erange = cutoff[i][0][0]
+        for (b,m) in zip(a[i][0],n[i][0]):
+          polysum+=b*np.log10(erange)**m
+        break
 
-    Parameters:
-      fname:       name of xml data file for polynomial coefficients of cycle vs strain range equations
-      material:    name of material ("A740H","SS316H","A800H","A617", or "A282")
-      pname:       property name ("averageRupture" or "lowerboundRupture")
-      stress:      stress in MPa
-      temp:        temperature in K
-  """
-  root , data = load_dict_xml(fname)
-  pdata = data[material][pname]
+    return 10**polysum
 
-  a=destring_array(pdata["a"])
-  n=destring_array(pdata["n"])
-  C=destring_array(pdata["C"])
+  def time_to_rupture(self, pname, temp, stress):
+    """
+        Returns time to rupture at a given temperature and stress
 
-  if a.shape != n.shape:
+        Parameters:
+          pname:       property name ("averageRupture" or "lowerboundRupture")
+          stress:      stress in MPa
+          temp:        temperature in K
+      """
+    pdata = self.data[pname]
+
+    a=destring_array(pdata["a"])
+    n=destring_array(pdata["n"])
+    C=destring_array(pdata["C"])
+
+    if a.shape != n.shape:
       raise ValueError("The lists of a and n must have equal lengths!")
 
-  sum = 0
-  for (b,m) in zip(a,n):
-        sum+=b*np.log10(stress)**m
-  return 10**(sum/temp-C)
+    polysum = 0
+    for (b,m) in zip(a,n):
+      polysum+=b*np.log10(stress)**m
+    return 10**(polysum/temp-C)
+
+  def inside_envelope(self, pname, damage_fatigue, damage_creep):
+    """
+        Returns True if the point lies inside the design envelope and False if not
+
+        Parameters:
+          pname:               property name ("cfinteraction")
+          damage_fatigue:      fatigue damage fraction
+          creep_fatigue:       creep damage fraction
+      """
+
+    if damage_fatigue < 0.0 or damage_creep < 0.0:
+      raise ValueError("\tout of range: negative damage fraction")
+
+    pdata = destring_array(self.data[pname])
+
+    x_1 = 0.0
+    y_1 = 1.0
+    x_2 = pdata[0]
+    y_2 = pdata[1]
+    x_3 = 1.0
+    y_3 = 0.0
+
+    if damage_fatigue < x_2:
+      return damage_creep <= ((y_2 - y_1) / (x_2 - x_1) * (damage_fatigue - x_1) + y_1)
+    return damage_creep <= ((y_3 - y_2) / (x_3 - x_2) * (damage_fatigue - x_2) + y_2)
+
+  @classmethod
+  def load(cls, fname, material):
+    """
+      Load a Structural Material object from a file
+
+      Parameters:
+        fname:       file name to load from
+        material:    name of material ("A740H","SS316H","A800H","A617", or "A282")
+    """
+    data = load_dict_xml(fname)[1]
+    data = data[material]
+    return cls(data)
 
 def make_piecewise(x, y):
   """
