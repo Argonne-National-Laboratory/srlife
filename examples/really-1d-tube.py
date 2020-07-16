@@ -11,9 +11,9 @@ if __name__ == "__main__":
   R = 1.0
   t = 0.1
   h = 10.0
-  nr = 3
-  nt = 4
-  nz = 3
+  nr = 10
+  nt = 20
+  nz = 10
   T0 = 50
 
   tmax = 3600.0*8
@@ -21,10 +21,14 @@ if __name__ == "__main__":
   ntime = 10
 
   T0 = 300
+  
+  D = 3
 
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
-  #tube.make_1D(h/2,1)
-  tube.make_2D(h/2)
+  if D == 1:
+    tube.make_1D(h/2,1)
+  elif D == 2:
+    tube.make_2D(h/2)
 
   times = np.linspace(0,tmax, ntime)
 
@@ -43,14 +47,10 @@ if __name__ == "__main__":
 
   inner_convection = receiver.ConvectiveBC(R - t, h, nz, 
       times, ftemps)
-  hflux2 = receiver.HeatFluxBC(R-t, h, nt, nz, times, 
-      np.zeros((ntime,nt,nz)))
-
-  tube.set_bc(hflux2, "inner")
+  tube.set_bc(inner_convection, "inner")
 
   hflux = receiver.HeatFluxBC(R, h, nt, nz, times, 
       np.zeros((ntime,nt,nz)))
-
   tube.set_bc(hflux, "outer")
 
   solver = thermal.FiniteDifferenceImplicitThermalSolver()
@@ -58,7 +58,15 @@ if __name__ == "__main__":
   tmat = materials.ConstantThermalMaterial("dummy", 20.0e-3, 4.8)
   fmat = materials.ConstantFluidMaterial({"dummy": 8.1e-3})
 
-  solver.solve(tube, tmat, fmat, substep = 10)
+  solver.solve(tube, tmat, fmat)
 
-  print(tube.results['temperature'][:,0,0])
-  print(tube.results['temperature'][:,-1,0])
+  for ts in [0,ntime//2,ntime-1]:
+    if D == 1:
+      print(tube.results['temperature'][ts,:])
+    elif D == 2:
+      print(tube.results['temperature'][ts,:,0])
+      print(tube.results['temperature'][ts,:,-1])
+    else:
+      print(tube.results['temperature'][ts,:,0,nz//2])
+      print(tube.results['temperature'][ts,:,-1,nz//2])
+
