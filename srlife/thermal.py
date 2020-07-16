@@ -6,11 +6,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import numpy.linalg as la
-import scipy.linalg as ssla
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
-
-import scipy.optimize as opt
 
 from srlife import receiver
 
@@ -160,7 +157,8 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Produce the r, theta, z mesh
     """
-    rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, self.tube.nr + 2)
+    rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, 
+        self.tube.nr + 2)
     ts = np.linspace(-self.dt , 2.0*np.pi, self.tube.nt+2)
     zs = np.linspace(0 - self.dz, self.tube.h + self.dz, self.tube.nz + 2)
 
@@ -231,7 +229,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     self.ndof = T.size
 
-  def generate_A(self):
+  def _generate_A(self):
     """
       Generate the base differential operator for the current step
     """
@@ -249,7 +247,7 @@ class FiniteDifferenceImplicitThermalProblem:
     
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def generate_id(self):
+  def _generate_id(self):
     """
       Return the non-boundary affecting ID matrix
     """
@@ -266,7 +264,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def generate_source(self, time):
+  def _generate_source(self, time):
     """
       Generate the source part of the RHS
 
@@ -278,12 +276,12 @@ class FiniteDifferenceImplicitThermalProblem:
       for i in self.loop_r():
         for j in self.loop_t():
           for k in self.loop_z():
-            R[self.dof(i,j,k)] += self.a[i,j,k] / self.k[i,j,k] * self.source_term(time, *[self.ru[i,j,k], self.thetau[i,j,k], 
-              self.zu[i,j,k]][:self.ndim])
+            R[self.dof(i,j,k)] += self.a[i,j,k] / self.k[i,j,k] * self.source_term(
+                time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
 
     return R
 
-  def generate_prev_temp(self, T_n):
+  def _generate_prev_temp(self, T_n):
     """
       The RHS vector with the temperature contributions in the correct locations
 
@@ -298,21 +296,21 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return R
 
-  def generate_bc_matrix(self, T_n, time, dt):
+  def _generate_bc_matrix(self, T_n, time, dt):
     """
       Generate the BC matrix terms (fixed)
     """
-    M = self.ID_BC() + self.OD_BC()
+    M = self._ID_BC() + self._OD_BC()
 
     if self.ndim > 1:
-      M += self.left_BC() + self.right_BC()
+      M += self._left_BC() + self._right_BC()
 
     if self.ndim > 2:
-      M += self.top_BC() + self.bot_BC()
+      M += self._top_BC() + self._bot_BC()
 
     return M
 
-  def generate_fixed_bc_RHS(self, T_n, time, dt):
+  def _generate_fixed_bc_RHS(self, T_n, time, dt):
     """
       Generate the constant (i.e. axial) contributions to the RHS
 
@@ -323,10 +321,11 @@ class FiniteDifferenceImplicitThermalProblem:
       dt        time increment
     """
     if self.ndim > 2:
-      return self.top_BC_R(T_n, time, T_n) + self.bot_BC_R(T_n, time, T_n)
+      return self._top_BC_R(T_n, time, T_n) + self._bot_BC_R(T_n, time, T_n)
     else:
       return np.zeros((self.ndof,))
-
+  
+  # pylint: disable=too-many-locals
   def solve_step(self, T_n, time, dt):
     """
       Actually setup and solve for a single load step
@@ -343,26 +342,26 @@ class FiniteDifferenceImplicitThermalProblem:
     T_n = T_n.reshape(self.fdim)
 
     # FD contributions
-    A = self.generate_A()
+    A = self._generate_A()
     # Identity
-    ID = self.generate_id()
+    ID = self._generate_id()
     # Source term
-    S = self.generate_source(time) 
+    S = self._generate_source(time) 
     # Previous temp
-    Tn = self.generate_prev_temp(T_n)
+    Tn = self._generate_prev_temp(T_n)
     
     # System without BCs
     M = (ID-A*dt)
     R = S*dt + Tn
     
     # Matrix and fixed RHS boundary contributions
-    B = self.generate_bc_matrix(T_n, time, dt)
+    B = self._generate_bc_matrix(T_n, time, dt)
     M += B    
-    BRF = self.generate_fixed_bc_RHS(T_n, time, dt)
+    BRF = self._generate_fixed_bc_RHS(T_n, time, dt)
     R += BRF
     
     # Dummy dofs
-    D = self.generate_dummy_dofs()
+    D = self._generate_dummy_dofs()
     M += D
 
     # Covert over our fixed matrix
@@ -372,8 +371,8 @@ class FiniteDifferenceImplicitThermalProblem:
     T = np.copy(T_n)
 
     for i in range(self.miter):
-      Ri = R + self.ID_BC_R(T, time, T_n) + self.OD_BC_R(T, time, T_n)
-      J = self.d_ID_BC_R(T, time, T_n) + self.d_OD_BC_R(T, time, T_n)
+      Ri = R + self._ID_BC_R(T, time, T_n) + self._OD_BC_R(T, time, T_n)
+      J = self._d_ID_BC_R(T, time, T_n) + self._d_OD_BC_R(T, time, T_n)
 
       res = M.dot(T.flatten()) - Ri
       nr = la.norm(res)
@@ -391,8 +390,9 @@ class FiniteDifferenceImplicitThermalProblem:
       raise RuntimeError("Too many iterations in newton solver!")
     
     return T.reshape(self.dim)
-
-  def generate_dummy_dofs(self):
+  
+  # pylint: disable=too-many-branches
+  def _generate_dummy_dofs(self):
     """
       Provide on-diagonal 1.0s for the dummy dofs
     """
@@ -424,7 +424,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((np.ones((len(I),)),(I,J)), shape = (self.ndof, self.ndof))
 
-  def ID_BC_R(self, T, time, T_n):
+  def _ID_BC_R(self, T, time, T_n):
     """
       The inner diameter BC RHS contribution
 
@@ -438,24 +438,29 @@ class FiniteDifferenceImplicitThermalProblem:
     for j in self.loop_t():
       for k in self.loop_z():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], 
+            self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
         # Zero flux
         elif self.tube.inner_bc is None:
           R[self.dof(i,j,k)] = 0.0
         # Fixed temperature
         elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
-          R[self.dof(i,j,k)] = self.tube.inner_bc.temperature(time, self.thetau[1,j,k], self.zu[1,j,k])
+          R[self.dof(i,j,k)] = self.tube.inner_bc.temperature(time, 
+              self.thetau[1,j,k], self.zu[1,j,k])
         # Fixed flux
         elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
-          R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
+          R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, 
+              self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
         # Convection
         elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
+          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name,
+              T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(
+                time, self.zu[1,j,k])) / self.k[1,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R
 
-  def d_ID_BC_R(self, T, time, T_n):
+  def _d_ID_BC_R(self, T, time, T_n):
     """
       Derivative of the inner diameter BC RHS contribution
 
@@ -473,11 +478,12 @@ class FiniteDifferenceImplicitThermalProblem:
         for k in self.loop_z():
           I.append(self.dof(i,j,k))
           J.append(self.dof(1,j,k))
-          D.append(self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) / self.k[1,j,k])
+          D.append(self.dr * self.fluid.coefficient(self.material.name, 
+            T_n[1,j,k]) / self.k[1,j,k])
     
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def OD_BC_R(self, T, time, T_n):
+  def _OD_BC_R(self, T, time, T_n):
     """
       The outer diameter BC RHS contribution
 
@@ -491,24 +497,31 @@ class FiniteDifferenceImplicitThermalProblem:
     for j in self.loop_t():
       for k in self.loop_z():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], 
+            self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
         # Zero flux
         elif self.tube.outer_bc is None:
           R[self.dof(i,j,k)] = 0.0
         # Fixed temperature
         elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
-          R[self.dof(i,j,k)] = self.tube.outer_bc.temperature(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k])
+          R[self.dof(i,j,k)] = self.tube.outer_bc.temperature(time, 
+              self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k])
         # Fixed flux
         elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
-          R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
+          R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, 
+              self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
         # Convection
         elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (T[self.nr-2,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
+          R[self.dof(i,j,k)] = (self.dr *
+              self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * 
+              (T[self.nr-2,j,k] - 
+                self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / 
+              self.k[self.nr-2,j,k])
         else:
           raise ValueError("Unknown boundary condition!")
     return R
 
-  def d_OD_BC_R(self, T, time, T_n):
+  def _d_OD_BC_R(self, T, time, T_n):
     """
       Derivative of the outer diameter BC RHS contribution
 
@@ -526,11 +539,12 @@ class FiniteDifferenceImplicitThermalProblem:
         for k in self.loop_z():
           I.append(self.dof(i,j,k))
           J.append(self.dof(self.nr-2,j,k))
-          D.append(self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) / self.k[self.nr-2,j,k])
+          D.append(self.dr * self.fluid.coefficient(self.material.name, 
+            T_n[self.nr-2,j,k]) / self.k[self.nr-2,j,k])
     
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def ID_BC(self):
+  def _ID_BC(self):
     """
       Inner diameter boundary condition contribution matrix
     """
@@ -578,7 +592,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def OD_BC(self):
+  def _OD_BC(self):
     """
       Outer diameter contribution to the BC matrix
     """
@@ -627,8 +641,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-
-  def left_BC(self):
+  def _left_BC(self):
     """
       Periodic contribution to the BC matrix
     """
@@ -648,7 +661,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def right_BC(self):
+  def _right_BC(self):
     """
       Periodic contribution to the BC matrix
     """
@@ -668,7 +681,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def top_BC(self):
+  def _top_BC(self):
     """
       Axial top contribution to the BC matrix
     """
@@ -692,7 +705,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def bot_BC(self):
+  def _bot_BC(self):
     """
       Axial bottom contribution to the BC matrix
     """
@@ -716,7 +729,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
-  def top_BC_R(self, T, time, T_n):
+  def _top_BC_R(self, T, time, T_n):
     """
       RHS contribution of the top axial BC
 
@@ -730,11 +743,13 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in self.loop_r():
       for j in self.loop_t():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, 
+              *[self.ru[i,j,k], self.thetau[i,j,k], 
+                self.zu[i,j,k]][:self.ndim])
 
     return R
 
-  def bot_BC_R(self, T, time, T_n):
+  def _bot_BC_R(self, T, time, T_n):
     """
       RHS contribution of the bottom axial BC
 
@@ -748,7 +763,9 @@ class FiniteDifferenceImplicitThermalProblem:
     for i in self.loop_r():
       for j in self.loop_t():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, 
+              *[self.ru[i,j,k], self.thetau[i,j,k],
+                self.zu[i,j,k]][:self.ndim])
 
     return R
 
@@ -846,15 +863,23 @@ class FiniteDifferenceImplicitThermalProblem:
         for k in self.loop_z():
           I.append(self.dof(i,j,k))
           J.append(self.dof(i-1,j,k))
-          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * (self.ru[i-1,j,k]+self.ru[i,j,k])/2 * (self.a[i-1,j,k]+self.a[i,j,k])/2)
+          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
+              (self.ru[i-1,j,k]+self.ru[i,j,k])/2 * 
+              (self.a[i-1,j,k]+self.a[i,j,k])/2)
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j,k))
-          D.append(-1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * ((self.ru[i-1,j,k]+self.ru[i,j,k])/2 * (self.a[i-1,j,k]+self.a[i,j,k])/2 + (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * (self.a[i+1,j,k] + self.a[i,j,k])/2.0))
+          D.append(-1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
+              ((self.ru[i-1,j,k]+self.ru[i,j,k])/2 * 
+                (self.a[i-1,j,k] +self.a[i,j,k])/2 + 
+                (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * 
+                (self.a[i+1,j,k] + self.a[i,j,k])/2.0))
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i+1,j,k))
-          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * (self.a[i+1,j,k] + self.a[i,j,k])/2.0)
+          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
+              (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * 
+              (self.a[i+1,j,k] + self.a[i,j,k])/2.0)
 
   def circumfrential(self, I, J, D):
     """
@@ -870,15 +895,19 @@ class FiniteDifferenceImplicitThermalProblem:
         for k in self.loop_z():
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j-1,k))
-          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * (self.a[i,j,k] + self.a[i,j-1,k])/2)
+          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
+              (self.a[i,j,k] + self.a[i,j-1,k])/2)
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j,k))
-          D.append(-1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * ((self.a[i,j,k] + self.a[i,j-1,k])/2 + (self.a[i,j+1,k] + self.a[i,j,k])/2))
+          D.append(-1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
+              ((self.a[i,j,k] + self.a[i,j-1,k])/2 
+                + (self.a[i,j+1,k] + self.a[i,j,k])/2))
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j+1,k))
-          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * (self.a[i,j+1,k] + self.a[i,j,k])/2)
+          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
+              (self.a[i,j+1,k] + self.a[i,j,k])/2)
 
   def axial(self, I, J, D):
     """
@@ -898,7 +927,8 @@ class FiniteDifferenceImplicitThermalProblem:
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j,k))
-          D.append(-1.0/self.dz**2.0 * ((self.a[i,j,k] + self.a[i,j,k-1])/2 + (self.a[i,j,k+1]+self.a[i,j,k])/2))
+          D.append(-1.0/self.dz**2.0 * ((self.a[i,j,k] + 
+            self.a[i,j,k-1])/2 + (self.a[i,j,k+1]+self.a[i,j,k])/2))
 
           I.append(self.dof(i,j,k))
           J.append(self.dof(i,j,k+1))

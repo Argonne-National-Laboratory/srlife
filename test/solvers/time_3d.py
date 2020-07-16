@@ -22,7 +22,7 @@ def run_with(solver, material, fluid):
     plt.show()
 
 if __name__ == "__main__":
-  solver = thermal.SlowFiniteDifferenceImplicitThermalSolver()
+  solver = thermal.FiniteDifferenceImplicitThermalSolver()
   tmat = materials.ConstantThermalMaterial("Test", 10.0, 5.0)
   fmat = materials.ConstantFluidMaterial({"Test": 7.5})
   
