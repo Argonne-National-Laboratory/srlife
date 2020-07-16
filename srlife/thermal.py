@@ -1080,7 +1080,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     self.dts = np.diff(self.tube.times)
 
     # Ghost
-    self.dim = (self.tube.nr + 2, self.tube.nt+1, self.tube.nz + 2)
+    self.dim = (self.tube.nr + 2, self.tube.nt+2, self.tube.nz + 2)
 
     if self.tube.abstraction == "3D":
       self.dim = self.dim
@@ -1123,7 +1123,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
       Produce the r, theta, z mesh
     """
     rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, self.tube.nr + 2)
-    ts = np.linspace(0 , 2.0*np.pi, self.tube.nt+1)
+    ts = np.linspace(-self.dt , 2.0*np.pi, self.tube.nt+2)
     zs = np.linspace(0 - self.dz, self.tube.h + self.dz, self.tube.nz + 2)
 
     geom = [rs, ts, zs]
@@ -1147,9 +1147,9 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     
     # Don't return ghost values
     if self.ndim == 3:
-      return T[:,1:-1,:-1,1:-1]
+      return T[:,1:-1,1:-1,1:-1]
     elif self.ndim == 2:
-      return T[:,1:-1,:-1]
+      return T[:,1:-1,1:-1]
     else:
       return T[:,1:-1]
 
@@ -1248,7 +1248,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     M = self.ID_BC() + self.OD_BC()
 
     if self.ndim > 1:
-      M += self.left_BC()
+      M += self.left_BC() + self.right_BC()
 
     if self.ndim > 2:
       M += self.top_BC() + self.bot_BC()
@@ -1269,20 +1269,6 @@ class SlowFiniteDifferenceImplicitThermalProblem:
       return self.top_BC_R(T_n, time, T_n) + self.bot_BC_R(T_n, time, T_n)
     else:
       return np.zeros((self.ndof,))
-
-  def generate_bc_matrix(self, T_n, time, dt):
-    """
-      Generate the BC matrix terms
-    """
-    B = self.ID_BC() + self.OD_BC()
-
-    if self.ndim > 1:
-      B += self.left_BC()
-
-    if self.ndim > 2:
-      B += self.top_BC() + self.bot_BC()
-
-    return B
 
   def solve_step(self, T_n, time, dt):
     """
@@ -1536,7 +1522,27 @@ class SlowFiniteDifferenceImplicitThermalProblem:
         D.append(1.0)
 
         I.append(self.dof(i,j,k))
-        J.append(self.dof(i,self.nt-1,k))
+        J.append(self.dof(i,self.nt-2,k))
+        D.append(-1.0)
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def right_BC(self):
+    """
+      Periodic contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    j = self.nt-1
+    for i in self.loop_r():
+      for k in self.loop_z():
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,j,k))
+        D.append(1.0)
+
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,1,k))
         D.append(-1.0)
 
     return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
@@ -1647,7 +1653,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
       Loop over non-ghost dofs
     """
     if self.ndim > 1:
-      return range(1,self.nt)
+      return range(1,self.nt-1)
     else:
       return [0]
 
@@ -1694,7 +1700,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     """
       Loop over ghost dofs
     """
-    return [0]
+    return [0,self.nt-1]
 
   def dummy_loop_z(self):
     """
