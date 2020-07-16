@@ -8,7 +8,7 @@ from thermalsol import ManufacturedSolution
 
 import numpy as np
 
-problem = ManufacturedSolution(3,
+problem = ManufacturedSolution("test", 3,
       lambda t, r, th, z: np.log(r)*np.sin(th)*np.cos(z)/(t+1.0),
       lambda t, k, alpha, r, th, z: k*np.log(r) * np.sin(th) * np.cos(z) / (t+1) * (1.0 + 1/r**2.0 - 1.0/(alpha*(t+1))))
 
@@ -22,7 +22,7 @@ def run_with(solver, material, fluid):
     plt.show()
 
 if __name__ == "__main__":
-  solver = thermal.FiniteDifferenceImplicitThermalSolver()
+  solver = thermal.SlowFiniteDifferenceImplicitThermalSolver()
   tmat = materials.ConstantThermalMaterial("Test", 10.0, 5.0)
   fmat = materials.ConstantFluidMaterial({"Test": 7.5})
   

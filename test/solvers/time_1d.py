@@ -8,7 +8,7 @@ from thermalsol import ManufacturedSolution
 
 import numpy as np
 
-problem = ManufacturedSolution(1, lambda t, r: np.sin(r), 
+problem = ManufacturedSolution("test", 1, lambda t, r: np.sin(r), 
     lambda t, k, alpha, r: k * np.sin(r) - k/r*np.cos(r))
 
 def run_with(solver, material, fluid):

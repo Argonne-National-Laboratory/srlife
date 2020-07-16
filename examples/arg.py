@@ -22,9 +22,13 @@ if __name__ == "__main__":
 
   T0 = 300
 
+  D = 3
+
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
-  #tube.make_1D(h/2,1)
-  #tube.make_2D(h/2)
+  if D == 1:
+    tube.make_1D(h/2,1)
+  elif D == 2:
+    tube.make_2D(h/2)
 
   times = np.linspace(0,tmax, ntime)
 
@@ -65,7 +69,11 @@ if __name__ == "__main__":
 
   solver.solve(tube, tmat, fmat, substep = 10)
   
-  print(tube.results['temperature'][:,:,0,0])
+  if D == 3:
+    print(tube.results['temperature'][:,:,0,nz//2])
+    print(tube.results['temperature'][1,1,:,nz//2])
+  elif D == 2:
+    print(tube.results['temperature'][:,:,0])
+  elif D == 1:
+    print(tube.results['temperature'][:,:])
 
-  #print(tube.results['temperature'][:,0])
-  #print(tube.results['temperature'][:,-1])

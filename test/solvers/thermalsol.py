@@ -25,7 +25,7 @@ class ManufacturedSolution:
     self.source = source
 
   def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
-      ntime = 11, nr = 3, nt =3, nz = 10, T0 = 0.0):
+      ntime = 11, nr = 10, nt = 20, nz = 10, T0 = 0.0):
     """
       Generate the appropriate tube and solve with the provided solver
       
@@ -91,6 +91,10 @@ class ManufacturedSolution:
     elif self.dim == 2:
       plot_r = [0,1, soln.nr // 2, -2,-1]
       plot_t = [0,1, soln.nt // 2, -2,-1]
+      import numpy.linalg as la
+      for i in range(T.shape[0]):
+        print(la.norm(T[i,:,:] - soln.results['temperature'][i,:,:]))
+
       for rp in plot_r:
         for tp in plot_t:
           l, = plt.plot(mesh[0][:,rp,tp], soln.results['temperature'][:,rp,tp])
@@ -132,7 +136,7 @@ class ManufacturedSolution:
       Parameters:
         r:           radius
         t:           thickness
-        h           height
+        h            height
         times:       discrete time steps
         nr:          number of radial increments
         nt:          number of circumferential increments
@@ -140,7 +144,6 @@ class ManufacturedSolution:
     """
     rs = np.linspace(r-t, r, nr)
     ts = np.linspace(0, 2*np.pi, nt + 1)[:-1]
-    print(ts)
     zs = np.linspace(0, h, nz)
 
     geom = [rs, ts, zs]
