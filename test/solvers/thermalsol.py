@@ -79,6 +79,12 @@ class ManufacturedSolution:
         soln.nr, soln.nt, soln.nz)
     T = self.soln(*mesh)
     
+    print(self.name)
+    print("Max absolute error: %e" % np.max(np.abs(T - soln.results['temperature'])))
+    keep = np.abs(T) > 0
+    print("Max relative error: %e" % np.max(np.abs(T[keep] - soln.results['temperature'][keep])/np.abs(T[keep])))
+    print("")
+
     plt.figure()
     if self.dim == 1:
       plot = [1, soln.nr // 2, -2]
@@ -91,9 +97,6 @@ class ManufacturedSolution:
     elif self.dim == 2:
       plot_r = [0,1, soln.nr // 2, -2,-1]
       plot_t = [0,1, soln.nt // 2, -2,-1]
-      import numpy.linalg as la
-      for i in range(T.shape[0]):
-        print(la.norm(T[i,:,:] - soln.results['temperature'][i,:,:]))
 
       for rp in plot_r:
         for tp in plot_t:

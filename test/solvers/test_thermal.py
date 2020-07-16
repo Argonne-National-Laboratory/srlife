@@ -59,8 +59,8 @@ class TestThermalManufactured(unittest.TestCase):
     self.material = materials.ConstantThermalMaterial("Test", 10.0, 5.0)
     self.fluid = materials.ConstantFluidMaterial({"Test": 7.5})
 
-    self.tol = 1e-6
-    self.atol = 1e-4
+    self.tol = 1e-2
+    self.atol = 1e-3
 
   def _check_case(self, case):
     res = case.solve(self.solver, self.material, self.fluid)
@@ -127,7 +127,7 @@ class TestThermalBCs(unittest.TestCase):
   def test_neumann_left(self):
     T0 = lambda x: np.sin(2*np.pi*(x-self.r-self.t)/self.t)
     q = 10.0
-    
+
     Tleft = receiver.HeatFluxBC(self.r-self.t, self.h, self.nt, self.nz,
         self.times, np.ones(self.ttimes.shape)*q)
     self.tube.set_bc(Tleft, "inner")
@@ -140,7 +140,7 @@ class TestThermalBCs(unittest.TestCase):
         T0 = T0)
 
     # Correct solution: 
-    Tright = q * (self.r - self.t) / self.k * np.log(self.rs) + -q * (
+    Tright = -q * (self.r - self.t) / self.k * np.log(self.rs) + q * (
         self.r - self.t) / self.k * np.log(self.r)
 
     T = self.tube.results['temperature'][-1]

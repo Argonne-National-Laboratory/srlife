@@ -39,7 +39,7 @@ class ThermalSolver(ABC):
     """
     return
 
-class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
+class OldFiniteDifferenceImplicitThermalSolver(ThermalSolver):
   """
     Solves the heat transfer problem using the finite difference method.
 
@@ -69,12 +69,12 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         miter       maximum iterations
         substep     divide user-provided time increments into smaller values
     """
-    temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
+    temperatures = OldFiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, atol, miter, substep).solve()
 
     tube.add_results("temperature", temperatures)
 
-class FiniteDifferenceImplicitThermalProblem:
+class OldFiniteDifferenceImplicitThermalProblem:
   """
     The actual finite difference solver created to solve a single
     tube problem
@@ -1004,7 +1004,7 @@ class FiniteDifferenceImplicitThermalProblem:
     return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
 
 
-class SlowFiniteDifferenceImplicitThermalSolver(ThermalSolver):
+class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
   """
     Solves the heat transfer problem using the finite difference method.
 
@@ -1034,12 +1034,12 @@ class SlowFiniteDifferenceImplicitThermalSolver(ThermalSolver):
         miter       maximum iterations
         substep     divide user-provided time increments into smaller values
     """
-    temperatures = SlowFiniteDifferenceImplicitThermalProblem(tube, 
+    temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, atol, miter, substep).solve()
 
     tube.add_results("temperature", temperatures)
 
-class SlowFiniteDifferenceImplicitThermalProblem:
+class FiniteDifferenceImplicitThermalProblem:
   """
     The actual finite difference solver created to solve a single
     tube problem
@@ -1282,6 +1282,9 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     # Generic setup
     self.setup_step(T_n)
 
+    # Add dimensions, if necessary
+    T_n = T_n.reshape(self.fdim)
+
     # FD contributions
     A = self.generate_A()
     # Identity
@@ -1289,7 +1292,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
     # Source term
     S = self.generate_source(time) 
     # Previous temp
-    Tn = self.generate_prev_temp(T_n.reshape(self.fdim))
+    Tn = self.generate_prev_temp(T_n)
     
     # System without BCs
     M = (ID-A*dt)
@@ -1373,7 +1376,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
           R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
         # Convection
         elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = -self.dr * self.fluid_coefficient(self.material.name, T_n[1,j,k]) * (self.T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
+          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R
@@ -1404,7 +1407,7 @@ class SlowFiniteDifferenceImplicitThermalProblem:
           R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
         # Convection
         elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (self.T[1,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
+          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (T[1,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R

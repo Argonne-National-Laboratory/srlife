@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
   tube.set_bc(hflux, "outer")
 
-  solver = thermal.SlowFiniteDifferenceImplicitThermalSolver()
+  solver = thermal.FiniteDifferenceImplicitThermalSolver()
 
   tmat = materials.ConstantThermalMaterial("dummy", 20.0e-3, 4.8)
   fmat = materials.ConstantFluidMaterial({"dummy": 8.1e-3})
@@ -71,7 +71,6 @@ if __name__ == "__main__":
   
   if D == 3:
     print(tube.results['temperature'][:,:,0,nz//2])
-    print(tube.results['temperature'][1,1,:,nz//2])
   elif D == 2:
     print(tube.results['temperature'][:,:,0])
   elif D == 1:
