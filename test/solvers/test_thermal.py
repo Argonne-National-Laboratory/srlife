@@ -194,7 +194,7 @@ class TestThermalBCs(unittest.TestCase):
     C2 = -C1 * np.log(self.r)
 
     Texact = C1 * np.log(self.rs) + C2
-    
+   
     self.assertTrue(np.allclose(T,Texact, rtol = 1.0e-2))
 
   def test_convection_right(self):

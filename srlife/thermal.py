@@ -1143,7 +1143,7 @@ class FiniteDifferenceImplicitThermalProblem:
     
     # Iterate through steps
     for i,(time,dt) in enumerate(zip(self.tube.times[1:],self.dts)):
-      T[i+1] = self.solve_step(T[i], time, dt)
+      T[i+1] = self.solve_step_substep(T[i], time, dt)
     
     # Don't return ghost values
     if self.ndim == 3:
@@ -1152,6 +1152,25 @@ class FiniteDifferenceImplicitThermalProblem:
       return T[:,1:-1,1:-1]
     else:
       return T[:,1:-1]
+
+  def solve_step_substep(self, T_n, time, dt):
+    """
+      Do substepping, if requested by the user
+
+      Parameters:
+        T_n         previous full step temperature
+        time        target time
+        dt          target dt
+    """
+    T = np.copy(T_n)
+    t_n = time - dt
+    dti = dt / self.substep
+
+    for i in range(1, self.substep + 1):
+      t = t_n + dti * i
+      T = self.solve_step(T, t, dti)
+
+    return T
 
   def setup_step(self, T):
     """
@@ -1312,11 +1331,22 @@ class FiniteDifferenceImplicitThermalProblem:
     M = M.tocsr()
     
     # This would be the iteration step
-    Ri = R + self.ID_BC_R(T_n, time, T_n) + self.OD_BC_R(T_n, time, T_n)
-    
-    T_np1 = sla.spsolve(M, Ri).reshape(self.dim)
+    T = np.copy(T_n)
 
-    return T_np1
+    for i in range(self.miter):
+      Ri = R + self.ID_BC_R(T, time, T_n) + self.OD_BC_R(T, time, T_n)
+      J = self.d_ID_BC_R(T, time, T_n) + self.d_OD_BC_R(T, time, T_n)
+
+      res = M.dot(T.flatten()) - Ri
+
+      if la.norm(res) < self.atol:
+        break
+
+      T -= sla.spsolve(M - J, res).reshape(self.fdim)
+    else:
+      raise RuntimeError("Too many iterations in newton solver!")
+    
+    return T.reshape(self.dim)
 
   def generate_dummy_dofs(self):
     """
@@ -1376,10 +1406,32 @@ class FiniteDifferenceImplicitThermalProblem:
           R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
         # Convection
         elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
+          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(time, self.zu[1,j,k])) / self.k[1,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R
+
+  def d_ID_BC_R(self, T, time, T_n):
+    """
+      Derivative of the inner diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    I = []
+    J = []
+    D = []
+    if isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      i = 0
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(1,j,k))
+          D.append(self.dr * self.fluid.coefficient(self.material.name, T_n[1,j,k]) / self.k[1,j,k])
+    
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
   def OD_BC_R(self, T, time, T_n):
     """
@@ -1407,10 +1459,32 @@ class FiniteDifferenceImplicitThermalProblem:
           R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
         # Convection
         elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
-          R[self.dof(i,j,k)] = -self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (T[1,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
+          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * (T[self.nr-2,j,k] - self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / self.k[self.nr-2,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R
+
+  def d_OD_BC_R(self, T, time, T_n):
+    """
+      Derivative of the outer diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    I = []
+    J = []
+    D = []
+    if isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+      i = self.nr-1
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(self.dr * self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) / self.k[self.nr-2,j,k])
+    
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
 
   def ID_BC(self):
     """
