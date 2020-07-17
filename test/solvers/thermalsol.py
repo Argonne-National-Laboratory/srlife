@@ -25,7 +25,7 @@ class ManufacturedSolution:
     self.source = source
 
   def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
-      ntime = 11, nr = 10, nt = 20, nz = 10, T0 = 0.0):
+      ntime = 11, nr = 11, nt = 20, nz = 10, T0 = 0.0):
     """
       Generate the appropriate tube and solve with the provided solver
       

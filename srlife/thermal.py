@@ -141,15 +141,15 @@ class FiniteDifferenceImplicitThermalProblem:
 
     # Useful for later
     self.mesh = self._generate_mesh()
-    self.r = self.mesh[0]
+    self.r = self.mesh[0].reshape(self.fdim)
 
     if self.ndim > 1:
-      self.theta = self.mesh[1]
+      self.theta = self.mesh[1].reshape(self.fdim)
     else:
       self.theta = np.ones(self.r.shape) * self.tube.angle
 
     if self.ndim > 2:
-      self.z = self.mesh[2]
+      self.z = self.mesh[2].reshape(self.fdim)
     else:
       self.z = np.ones(self.r.shape) * self.tube.plane
    
@@ -217,15 +217,14 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
         dt          current dt
     """
-    self.ru = self.r.reshape(self.fdim)
-    self.thetau = self.theta.reshape(self.fdim)
-    self.zu = self.z.reshape(self.fdim)
-
     self.k = self.material.conductivity(T).reshape(self.fdim)
     self.a = self.material.diffusivity(T).reshape(self.fdim)
 
-    self.k = np.pad(self.k, ((0,0),(0,1),(0,0)), mode = 'symmetric')
-    self.a = np.pad(self.a, ((0,0),(0,1),(0,0)), mode = 'symmetric')
+    # Useful matrix that gives you the actual dofs
+    self.act = np.pad(np.ones(tuple(d-2 for d in self.dim)), [(1,1)] * self.ndim, 
+        constant_values = [(0,0)] * self.ndim)
+
+    self.act = self.act.reshape(self.fdim)
 
     self.ndof = T.size
 
@@ -233,36 +232,22 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Generate the base differential operator for the current step
     """
-    I = []
-    J = []
-    D = []
-
-    self.radial(I,J,D)
+    A = self.radial()
 
     if self.ndim > 1:
-      self.circumfrential(I,J,D)
+      A += self.circumfrential()
     
     if self.ndim > 2:
-      self.axial(I,J,D)
+      A += self.axial()
     
-    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+    return A
 
   def _generate_id(self):
     """
       Return the non-boundary affecting ID matrix
     """
-    I = []
-    J = []
-    D = []
-
-    for i in self.loop_r():
-      for j in self.loop_t():
-        for k in self.loop_z():
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k))
-          D.append(1)
-
-    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+    return sp.diags([self.act.flatten()], offsets = (0,),
+        shape = (self.ndof, self.ndof), format = 'coo')
 
   def _generate_source(self, time):
     """
@@ -271,15 +256,11 @@ class FiniteDifferenceImplicitThermalProblem:
       Parameters:
         time        current time
     """
-    R = np.zeros((self.ndof,))
     if self.source_term:
-      for i in self.loop_r():
-        for j in self.loop_t():
-          for k in self.loop_z():
-            R[self.dof(i,j,k)] += self.a[i,j,k] / self.k[i,j,k] * self.source_term(
-                time, *[self.ru[i,j,k], self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
-
-    return R
+      return (self.act * self.a / self.k * 
+          self.source_term(time,*[self.r, self.theta, self.z][:self.ndim])).flatten()
+    else:
+      return np.zeros((self.ndof,))
 
   def _generate_prev_temp(self, T_n):
     """
@@ -288,13 +269,7 @@ class FiniteDifferenceImplicitThermalProblem:
       Parmaeters:
         T_n         previous temperatures
     """
-    R = np.zeros((self.ndof,))
-    for i in self.loop_r():
-      for j in self.loop_t():
-        for k in self.loop_z():
-          R[self.dof(i,j,k)] += T_n[i,j,k]
-
-    return R
+    return (T_n * self.act).flatten()
 
   def _generate_bc_matrix(self, T_n, time, dt):
     """
@@ -438,24 +413,24 @@ class FiniteDifferenceImplicitThermalProblem:
     for j in self.loop_t():
       for k in self.loop_z():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], 
-            self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.r[i,j,k], 
+            self.theta[i,j,k], self.z[i,j,k]][:self.ndim])
         # Zero flux
         elif self.tube.inner_bc is None:
           R[self.dof(i,j,k)] = 0.0
         # Fixed temperature
         elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
           R[self.dof(i,j,k)] = self.tube.inner_bc.temperature(time, 
-              self.thetau[1,j,k], self.zu[1,j,k])
+              self.theta[1,j,k], self.z[1,j,k])
         # Fixed flux
         elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
           R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, 
-              self.thetau[1,j,k], self.zu[1,j,k]) / self.k[1,j,k]
+              self.theta[1,j,k], self.z[1,j,k]) / self.k[1,j,k]
         # Convection
         elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
           R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name,
               T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(
-                time, self.zu[1,j,k])) / self.k[1,j,k]
+                time, self.z[1,j,k])) / self.k[1,j,k]
         else:
           raise ValueError("Unknown boundary condition!")
     return R
@@ -497,25 +472,25 @@ class FiniteDifferenceImplicitThermalProblem:
     for j in self.loop_t():
       for k in self.loop_z():
         if self.fix_edge:
-          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.ru[i,j,k], 
-            self.thetau[i,j,k], self.zu[i,j,k]][:self.ndim])
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.r[i,j,k], 
+            self.theta[i,j,k], self.z[i,j,k]][:self.ndim])
         # Zero flux
         elif self.tube.outer_bc is None:
           R[self.dof(i,j,k)] = 0.0
         # Fixed temperature
         elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
           R[self.dof(i,j,k)] = self.tube.outer_bc.temperature(time, 
-              self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k])
+              self.theta[self.nr-2,j,k], self.z[self.nr-2,j,k])
         # Fixed flux
         elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
           R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, 
-              self.thetau[self.nr-2,j,k], self.zu[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
+              self.theta[self.nr-2,j,k], self.z[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
         # Convection
         elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
           R[self.dof(i,j,k)] = (self.dr *
               self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * 
               (T[self.nr-2,j,k] - 
-                self.tube.outer_bc.fluid_temperature(time, self.zu[self.nr-2,j,k])) / 
+                self.tube.outer_bc.fluid_temperature(time, self.z[self.nr-2,j,k])) / 
               self.k[self.nr-2,j,k])
         else:
           raise ValueError("Unknown boundary condition!")
@@ -744,8 +719,8 @@ class FiniteDifferenceImplicitThermalProblem:
       for j in self.loop_t():
         if self.fix_edge:
           R[self.dof(i,j,k)] = self.fix_edge(time, 
-              *[self.ru[i,j,k], self.thetau[i,j,k], 
-                self.zu[i,j,k]][:self.ndim])
+              *[self.r[i,j,k], self.theta[i,j,k], 
+                self.z[i,j,k]][:self.ndim])
 
     return R
 
@@ -764,8 +739,8 @@ class FiniteDifferenceImplicitThermalProblem:
       for j in self.loop_t():
         if self.fix_edge:
           R[self.dof(i,j,k)] = self.fix_edge(time, 
-              *[self.ru[i,j,k], self.thetau[i,j,k],
-                self.zu[i,j,k]][:self.ndim])
+              *[self.r[i,j,k], self.theta[i,j,k],
+                self.z[i,j,k]][:self.ndim])
 
     return R
 
@@ -849,87 +824,45 @@ class FiniteDifferenceImplicitThermalProblem:
     else:
       return [0]
 
-  def radial(self, I, J, D):
+  def radial(self):
     """
-      Insert the radial FD contribution into a coo matrix
-
-      Parameters:
-        I       i indices
-        J       j indices
-        D       data
+      Insert the radial FD contribution into a sparse matrix
     """
-    for i in self.loop_r():
-      for j in self.loop_t():
-        for k in self.loop_z():
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i-1,j,k))
-          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
-              (self.ru[i-1,j,k]+self.ru[i,j,k])/2 * 
-              (self.a[i-1,j,k]+self.a[i,j,k])/2)
+    rh = (self.r[:-1] + self.r[1:]) / 2.0
+    ah = (self.a[:-1] + self.a[1:]) / 2.0
+    rhah = np.pad(rh * ah, ((1,1),(0,0),(0,0)), mode = 'edge')
+   
+    D1 = (self.act * rhah[:-1] / (self.r * self.dr**2.0)).flatten()[self.nt*self.nz:]
+    D2 = -(self.act * (rhah[:-1] + rhah[1:]) / (self.r * self.dr**2.0)).flatten()
+    D3 = (self.act * rhah[1:] / (self.r * self.dr**2.0)).flatten()[:-self.nt*self.nz]
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k))
-          D.append(-1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
-              ((self.ru[i-1,j,k]+self.ru[i,j,k])/2 * 
-                (self.a[i-1,j,k] +self.a[i,j,k])/2 + 
-                (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * 
-                (self.a[i+1,j,k] + self.a[i,j,k])/2.0))
+    return sp.diags((D1,D2,D3), offsets = (-self.nt*self.nz,0,self.nt*self.nz), 
+        shape = (self.ndof, self.ndof), format = 'coo')
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i+1,j,k))
-          D.append(1.0 / self.ru[i,j,k] * 1.0/self.dr**2.0 * 
-              (self.ru[i+1,j,k] + self.ru[i,j,k])/2.0 * 
-              (self.a[i+1,j,k] + self.a[i,j,k])/2.0)
-
-  def circumfrential(self, I, J, D):
+  def circumfrential(self):
     """
       Insert the circumferential FD contribution into a coo matrix
-
-      Parameters:
-        I       i indices
-        J       j indices
-        D       data
     """
-    for i in self.loop_r():
-      for j in self.loop_t():
-        for k in self.loop_z():
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j-1,k))
-          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
-              (self.a[i,j,k] + self.a[i,j-1,k])/2)
+    ah = np.pad((self.a[:,:-1] + self.a[:,1:]) / 2.0,
+        ((0,0),(1,1),(0,0)), mode = 'edge')
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k))
-          D.append(-1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
-              ((self.a[i,j,k] + self.a[i,j-1,k])/2 
-                + (self.a[i,j+1,k] + self.a[i,j,k])/2))
+    D1 = (self.act * ah[:,:-1] / (self.r**2.0 * self.dt**2.0)).flatten()[self.nz:]
+    D2 = -(self.act * (ah[:,:-1] + ah[:,1:]) / (self.r**2.0 * self.dt**2.0)).flatten()
+    D3 = (self.act * ah[:,1:] / (self.r**2.0 * self.dt**2.0)).flatten()[:-self.nz]
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j+1,k))
-          D.append(1.0 / self.ru[i,j,k]**2.0 * 1.0/self.dt**2.0 * 
-              (self.a[i,j+1,k] + self.a[i,j,k])/2)
+    return sp.diags((D1,D2,D3), offsets = (-self.nz, 0, self.nz),
+        shape = (self.ndof, self.ndof), format = 'coo')
 
-  def axial(self, I, J, D):
+  def axial(self):
     """
       Insert the axial FD contribution into a coo matrix
-
-      Parameters:
-        I       i indices
-        J       j indices
-        D       data
     """
-    for i in self.loop_r():
-      for j in self.loop_t():
-        for k in self.loop_z():
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k-1))
-          D.append(1.0/self.dz**2.0 *  (self.a[i,j,k] + self.a[i,j,k-1])/2)
+    ah = np.pad((self.a[:,:,:-1] + self.a[:,:,1:]) / 2.0, 
+        ((0,0),(0,0),(1,1)), mode = 'edge')
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k))
-          D.append(-1.0/self.dz**2.0 * ((self.a[i,j,k] + 
-            self.a[i,j,k-1])/2 + (self.a[i,j,k+1]+self.a[i,j,k])/2))
+    D1 = (self.act * ah[:,:,:-1] / self.dz**2.0).flatten()[1:]
+    D2 = (-self.act * (ah[:,:,:-1] + ah[:,:,1:]) / self.dz**2.0).flatten()
+    D3 = (self.act * ah[:,:,1:] / self.dz**2.0).flatten()[:-1]
 
-          I.append(self.dof(i,j,k))
-          J.append(self.dof(i,j,k+1))
-          D.append(1.0/self.dz**2.0 * (self.a[i,j,k+1]+self.a[i,j,k])/2)
+    return sp.diags([D1,D2,D3], offsets = (-1,0,1),
+        shape = (self.ndof, self.ndof), format = 'coo')
