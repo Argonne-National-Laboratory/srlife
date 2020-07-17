@@ -8,7 +8,7 @@ from thermalsol import ManufacturedSolution
 
 import numpy as np
 
-problem = ManufacturedSolution(2,
+problem = ManufacturedSolution("test", 2,
       lambda t, r, th: np.log(r) * np.sin(th) / (t+1),
       lambda t, k, alpha, r, th: k*np.log(r)*np.sin(th)/((t+1)*r**2.0) - k/alpha * np.log(r) * np.sin(th) / (t+1)**2.0)
 

@@ -43,8 +43,8 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def solve(self, tube, material, fluid, source = None, 
-      T0 = None, fix_edge = None, atol = 1e-2, miter = 100,
-      substep = 1):
+      T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
+      miter = 100, substep = 1):
     """
       Solve the thermal problem defined for a single tube
 
@@ -62,12 +62,13 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         T0:         if present override the tube IC with a function of
                     the coordinates
         fix_edge:   an exact solution to fix edge BCs for testing
+        rtol        iteration relative tolerance
         atol        iteration absolute tolerance
         miter       maximum iterations
         substep     divide user-provided time increments into smaller values
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
-        material, fluid, source, T0, fix_edge, atol, miter, substep).solve()
+        material, fluid, source, T0, fix_edge, rtol, atol, miter, substep).solve()
 
     tube.add_results("temperature", temperatures)
 
@@ -77,7 +78,7 @@ class FiniteDifferenceImplicitThermalProblem:
     tube problem
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
-      fix_edge = None, atol = 1e-2, miter= 50, substep = 1):
+      fix_edge = None, rtol = 1.0e-6, atol = 1e-8, miter= 50, substep = 1):
     """
       Parameters:
         tube        Tube object to solve
@@ -88,6 +89,7 @@ class FiniteDifferenceImplicitThermalProblem:
         source      source function (t, r, ...)
         T0          initial condition function
         fix_edge:   an exact solution to fix edge BCs for testing
+        rtol        relative tolerance
         atol        absolute tolerance
         miter       maximum iterations
         substep     divide user provided time increments into smaller steps
@@ -95,7 +97,8 @@ class FiniteDifferenceImplicitThermalProblem:
     self.tube = tube
     self.material = material
     self.fluid = fluid
-
+    
+    self.rtol = rtol
     self.atol = atol
     self.miter = miter
 
@@ -111,42 +114,58 @@ class FiniteDifferenceImplicitThermalProblem:
 
     self.dts = np.diff(self.tube.times)
 
-    self.requires_iteration = (isinstance(self.tube.inner_bc, receiver.ConvectiveBC) or
-        isinstance(self.tube.outer_bc, receiver.ConvectiveBC))
-  
     # Ghost
-    self.dim = (self.tube.nr + 2, self.tube.nt + 2, self.tube.nz + 2)
+    self.dim = (self.tube.nr + 2, self.tube.nt+2, self.tube.nz + 2)
 
     if self.tube.abstraction == "3D":
       self.dim = self.dim
       self.nr, self.nt, self.nz = self.dim
       self.ndim = 3
+      self.fdim = self.dim
     elif self.tube.abstraction == "2D":
       self.dim = self.dim[:2]
       self.nr, self.nt = self.dim
+      self.nz = 1
       self.ndim = 2
+      self.fdim = (self.nr, self.nt, 1)
     elif self.tube.abstraction == "1D":
       self.dim = self.dim[:1]
       self.nr, = self.dim
+      self.nt = 1
+      self.nz = 1
       self.ndim = 1
+      self.fdim = (self.nr, 1, 1)
     else:
       raise ValueError("Thermal solver does not know how to handle"
       " abstraction %s" % self.tube.abstraction)
 
     # Useful for later
     self.mesh = self._generate_mesh()
-    self.r = self.mesh[0]
+    self.r = self.mesh[0].reshape(self.fdim)
 
     if self.ndim > 1:
-      self.theta = self.mesh[1]
+      self.theta = self.mesh[1].reshape(self.fdim)
     else:
       self.theta = np.ones(self.r.shape) * self.tube.angle
 
     if self.ndim > 2:
-      self.z = self.mesh[2]
+      self.z = self.mesh[2].reshape(self.fdim)
     else:
       self.z = np.ones(self.r.shape) * self.tube.plane
-    
+   
+  def _generate_mesh(self):
+    """
+      Produce the r, theta, z mesh
+    """
+    rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, 
+        self.tube.nr + 2)
+    ts = np.linspace(-self.dt , 2.0*np.pi, self.tube.nt+2)
+    zs = np.linspace(0 - self.dz, self.tube.h + self.dz, self.tube.nz + 2)
+
+    geom = [rs, ts, zs]
+
+    return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
+
   def solve(self):
     """
       Actually solve the problem...
@@ -158,8 +177,9 @@ class FiniteDifferenceImplicitThermalProblem:
     else:
       T[0] = self.tube.T0
     
+    # Iterate through steps
     for i,(time,dt) in enumerate(zip(self.tube.times[1:],self.dts)):
-      T[i+1] = self.solve_step(T[i], time, dt)
+      T[i+1] = self.solve_step_substep(T[i], time, dt)
     
     # Don't return ghost values
     if self.ndim == 3:
@@ -169,512 +189,24 @@ class FiniteDifferenceImplicitThermalProblem:
     else:
       return T[:,1:-1]
 
-  def solve_step(self, T_n, time, dt):
+  def solve_step_substep(self, T_n, time, dt):
     """
-      Solve a single step
+      Do substepping, if requested by the user
 
       Parameters:
-        T_n         previous temperatures
-        time        current time
-        dt          current dt
+        T_n         previous full step temperature
+        time        target time
+        dt          target dt
     """
     T = np.copy(T_n)
     t_n = time - dt
     dti = dt / self.substep
 
-    for i in range(1, self.substep+1):
+    for i in range(1, self.substep + 1):
       t = t_n + dti * i
-
-      if self.requires_iteration:
-        T = self._solve_step_iter(T, t, dti)
-      else:
-        T = self._solve_step_noiter(T, t, dti)
+      T = self.solve_step(T, t, dti)
 
     return T
-
-  def _solve_step_iter(self, T_n, time, dt):
-    """
-      Solve a single step when iteration is required
-
-      Parameters:
-        T_n         previous temperatures
-        time        current time
-        dt          current dt
-    """
-    # Store reusable stuff
-    self.setup_step(T_n)
-    A = self._get_system(T_n, time, dt)
-
-    def RJ(T):
-      b, J = self._get_rhs(T, T_n, time, dt, deriv = True)
-      return A.dot(T.flatten()) - b, A - J
-    
-    # Newton's method
-    T = np.copy(T_n)    
-    R, J = RJ(T)
-    for i in range(self.miter):
-      if la.norm(R) < self.atol:
-        break
-      T -= sla.spsolve(J, R).reshape(self.dim)
-      R, J = RJ(T)
-    else:
-      raise Exception("Too many iterations (%i) in Newton loop!" % i)
-    
-    return T
-
-  def _solve_step_noiter(self, T_n, time, dt):
-    """
-      Solve a single step when no iteration is required
-
-      Parameters:
-        T_n         previous temperatures
-        time        current time
-        dt          current dt
-    """
-    # Store reusable stuff
-    self.setup_step(T_n)
-    A = self._get_system(T_n, time, dt)
-    b = self._get_rhs(T_n, T_n, time, dt)
-
-    return sla.spsolve(A, b).reshape(self.dim)
-
-  def _get_system(self, T_n, time, dt):
-    """
-      Helper method to get the linear system of equations
-
-      Parameters:
-        T_n     previous temperature
-        time    current time
-        dts     current dt
-    """
-    if self.ndim == 1:
-      return self.form_1D_system(T_n, time, dt)
-    elif self.ndim == 2:
-      return self.form_2D_system(T_n, time, dt)
-    elif self.ndim == 3:
-      return self.form_3D_system(T_n, time, dt)
-    else:
-      raise ValueError("Unknown dimension %i!" % self.ndim)
-
-  def _get_rhs(self, T, T_n, time, dt, deriv = False):
-    """
-      Helper method to get the RHS part of the system of equations
-
-      Parameters:
-        T       current temperature
-        T_n     previous temperature
-        time    current time
-        dts     current dt
-
-      Additional Parameters:
-        deriv   also return the derivative of the RHS
-    """
-    if self.ndim == 1:
-      return self.form_1D_RHS(T, T_n, time, dt, deriv = deriv)
-    elif self.ndim == 2:
-      return self.form_2D_RHS(T, T_n, time, dt, deriv = deriv)
-    elif self.ndim == 3:
-      return self.form_3D_RHS(T, T_n, time, dt, deriv = deriv)
-    else:
-      raise ValueError("Unknown dimension %i!" % self.ndim)
-
-  def form_1D_system(self, T_n, time, dt):
-    """
-      Form the 1D system of equations to solve for the updated temperatures
-
-      Parameters:
-        T_n:        previous temperature
-        time:       current time
-        dt:         current increment
-    """
-    # Matrix entries
-    main = np.zeros((self.ndof,))
-    upper = np.zeros((self.ndof-1,))
-    lower = np.zeros((self.ndof-1,))
-    
-    # Form matrix and source
-    # Radial contribution
-    U, D, L = self.radial()
-    upper[1:] = U
-    main[1:-1] = D
-    lower[:-1] = L
-
-    # Impose r BCs
-    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
-    main[:1] = D
-    upper[:1] = U
-
-    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
-    main[-1:] = D
-    lower[-1:] = L
-
-    # Apply the dt and 1.0+
-    upper[1:] *= dt
-    main[1:-1] *= dt
-    main[1:-1] += 1
-    lower[:-1] *= dt
-    
-    # Setup matrix
-    A = sp.diags((upper,main,lower), (1,0,-1), shape = (self.ndof, self.ndof)).tocsr()
-
-    return A
-
-  def form_1D_RHS(self, T, T_n, time, dt, deriv = False):
-    """
-      Form the 1D RHS and, if requested, the derivative of the RHS
-
-      Parameters:
-        T       temperature
-        T_n     previous temperature
-        time    current time
-        dt      current increment
-
-      Optional parameters:
-        deriv   also form the derivative of the RHS vector
-    """
-    RHS = np.zeros((self.ndof,))
-
-    # Source
-    RHS[1:-1] = -self.source(time)
-
-    # Impose r BCs
-    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
-    RHS[:1] = R
-
-    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
-    RHS[-1:] = R
-
-    b = RHS
-    b[1:-1] *= dt
-    b[1:-1] += T_n[1:-1].flatten()
-
-    if deriv:
-      upper = np.zeros((self.ndof-1,))
-      lower = np.zeros((self.ndof-1,))
-      
-      L = self.left_radial_derivative(T[1], T_n[1], time)
-      R = self.right_radial_derivative(T[-2], T_n[-2], time)
-
-      upper[:1] = L
-      lower[-1:] = R
-
-      return b, sp.diags((upper,lower),(1,-1), shape = (self.ndof, self.ndof)).tocsr()
-
-    return b
-
-  # pylint: disable=too-many-locals
-  def form_2D_system(self, T_n, time, dt):
-    """
-      Form the 2D implicit system of equations
-
-      Parameters:
-        T_n:        previous temperature
-        time:       current time
-        dt:         time increment
-      
-      Returns:
-        A matrix and b vector
-    """
-    # Matrix entries
-    main = np.zeros((self.ndof,))
-    u1 = self.nt
-    upper1 = np.zeros((self.ndof - u1,))
-    l1 = -self.nt
-    lower1 = np.zeros((self.ndof + l1,))
-    u2 = 1
-    upper2 = np.zeros((self.ndof - u2,))
-    l2 = -1
-    lower2 = np.zeros((self.ndof + l2,))
-    u3 = self.nt - 2
-    upper3 = np.zeros((self.ndof - u3,))
-    l3 = -(self.nt-2)
-    lower3 = np.zeros((self.ndof + l3,))
-
-    # Radial contribution
-    U, D, L = self.radial()
-    for i in range(self.nr-2):
-      upper1[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += U[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += D[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      lower1[1+i*self.nt:1+(i+1)*self.nt-2] += L[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-
-    # Circumferential contribution
-    U, D, L = self.circumfrential()
-    for i in range(self.nr-2):
-      upper2[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += U[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += D[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-      lower2[self.nt+i*self.nt:self.nt+(i+1)*self.nt-2] += L[
-          i*(self.nt-2):(i+1)*(self.nt-2)] * dt
-    
-    # Radial left BC
-    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
-    main[:self.nt] = D
-    upper1[:self.nt] = U
-
-    # Radial right BC
-    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
-    main[-self.nt:] = D
-    lower1[-self.nt:] = L
-
-    # Theta left BC
-    main[::self.nt] = 1.0
-    upper3[::self.nt] = -1.0
-
-    # Theta right BC
-    main[self.nt-1::self.nt] = 1.0
-    lower3[1::self.nt] = -1.0
-
-    # Add 1 to the diagonal
-    for i in range(self.nr-2):
-      main[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += 1.0
-
-    # Setup matrix and RHS
-    A = sp.diags((upper1,upper2,upper3,main,lower1,lower2,lower3), 
-        (u1,u2,u3,0,l1,l2,l3), shape = (self.ndof, self.ndof)).tocsr()
-
-    return A
- 
-  def form_2D_RHS(self, T, T_n, time, dt, deriv = False):
-    """
-      Form the 1D RHS
-
-      Parameters:
-        T       temperature
-        T_n     previous temperature
-        time    current time
-        dt      current increment
-
-      Additional parameters:
-        deriv   also form the derivative of the RHS
-    """
-    RHS = np.zeros((self.ndof,))
-
-    # Source and T_n contribution
-    R = self.source(time)
-    Tf = T_n.flatten()
-    for i in range(self.nr-2):
-      RHS[1+self.nt+i*self.nt:1+self.nt+(i+1)*self.nt-2] += (
-          -R[i*(self.nt-2):(i+1)*(self.nt-2)] * dt + 
-          Tf[i*(self.nt-2):(i+1)*(self.nt-2)])
-
-    # Radial left BC
-    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
-    RHS[:self.nt] = R
-
-    # Radial right BC
-    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
-    RHS[-self.nt:] = R
-
-    # Theta left BC
-    RHS[::self.nt] = 0
-
-    # Theta right BC
-    RHS[self.nt-1::self.nt] = 0
-
-    if deriv:
-      u1 = self.nt
-      upper1 = np.zeros((self.ndof - u1,))
-      l1 = -self.nt
-      lower1 = np.zeros((self.ndof + l1,))
-      
-      L = self.left_radial_derivative(T[1], T_n[1], time)
-      R = self.right_radial_derivative(T[-2], T_n[-2], time)
-
-      upper1[:self.nt] = L
-      lower1[-self.nt:] = R
-
-      return RHS, sp.diags((upper1,lower1),(u1,l1), shape = (self.ndof, self.ndof)).tocsr()
-
-    return RHS
-
-  # pylint: disable=too-many-statements
-  def form_3D_system(self, T_n, time, dt):
-    """
-      Form the 3D implicit system of equations
-
-      Parameters:
-        T_n:        previous temperature
-        time:       current time
-        dt:         time increment
-      
-      Returns:
-        A matrix and b vector
-    """
-    # Matrix entries
-    main = np.zeros((self.ndof,))
-    u1 = self.nt * self.nz
-    upper1 = np.zeros((self.ndof - u1,))
-    l1 = -self.nt * self.nz
-    lower1 = np.zeros((self.ndof + l1,))
-    u2 = self.nz
-    upper2 = np.zeros((self.ndof - u2,))
-    l2 = -self.nz
-    lower2 = np.zeros((self.ndof + l2,))
-    u3 = 1
-    upper3 = np.zeros((self.ndof - u3,))
-    l3 = -1
-    lower3 = np.zeros((self.ndof + l3,))
-    u4 = self.nz * (self.nt - 2)
-    upper4 = np.zeros((self.ndof - u4,))
-    l4 = -self.nz * (self.nt - 2)
-    lower4 = np.zeros((self.ndof + l4,))
-
-    # Useful: number of entries to insert at a time
-    n = self.nz - 2
-
-    # Radial, axial, and circumferential contributions
-    Ur, Dr, Lr = self.radial()
-    Uc, Dc, Lc = self.circumfrential()
-    Ua, Da, La = self.axial()
-
-    # Stick into diagonals
-    k = 0
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        main[st:st+n] = (1.0 + Dr[k:k+n] + Dc[k:k+n] + Da[k:k+n]) * dt
-        upper1[st:st+n] = Ur[k:k+n] * dt
-        lower1[st-self.nt*self.nz:st-self.nt*self.nz+n] = Lr[k:k+n] * dt
-        upper2[st:st+n] = Uc[k:k+n] * dt
-        lower2[st-self.nz:st-self.nz+n] = Lc[k:k+n] * dt
-        upper3[st:st+n] = Ua[k:k+n] * dt
-        lower3[st-1:st-1+n] = La[k:k+n] * dt
-
-        k += n
-   
-    # BCs apply uniformly
-    n = self.nz
-
-    # Radial left BC
-    D, U, _ = self.impose_left_radial_bc(T_n[1], T_n[1], time)
-    main[:self.nt*self.nz] = D
-    upper1[:self.nt*self.nz] = U
-
-    # Radial right BC
-    D, L, _ = self.impose_right_radial_bc(T_n[-2], T_n[-2], time)
-    main[-self.nt*self.nz:] = D
-    lower1[-self.nt*self.nz:] = L
-
-    # Theta left BC
-    k = 0
-    for i in range(0,self.nr):
-      st = i * self.nt * self.nz + 1
-      main[st:st+n] = 1.0
-      st = i *self.nt * self.nz
-      upper4[st:st+n] = -1.0
-      k += n
-
-    # Theta right BC
-    k = 0
-    for i in range(0,self.nr):
-      st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
-      main[st:st+n] = 1.0
-      st = i * self.nt * self.nz + self.nz
-      lower4[st:st+n] = -1.0
-      k += n
-
-    # Axial left BC
-    D, U, _ = self.impose_left_axial_bc(time)
-    main[::self.nz] = D
-    upper3[::self.nz] = U
-
-    # Axial right BC
-    D, L, _ = self.impose_right_axial_bc(time)
-    main[self.nz-1::self.nz] = D
-    lower3[self.nz-2::self.nz] = L
-
-    # Setup matrix and RHS
-    A = sp.diags((upper1,upper2,upper3,upper4,main,lower1,lower2,lower3,lower4),
-        (u1,u2,u3,u4,0,l1,l2,l3,l4), 
-        shape = (self.ndof, self.ndof)).tocsr()
-    
-    return A
-
-  def form_3D_RHS(self, T, T_n, time, dt, deriv = False):
-    """
-      Form the 3D RHS
-
-      Parameters:
-        T       temperature
-        T_n     previous temperature
-        time    current time
-        dt      current increment
-
-      Additional parameters:
-        deriv   also form the derivative of the RHS
-    """
-    # Matrix entries
-    RHS = np.zeros((self.ndof,))
-
-    # Useful: number of entries to insert at a time
-    n = self.nz - 2
-
-    # Source and T_n contributions
-    R = self.source(time)
-    Tf = T_n.flatten()
-    
-    # Stick into diagonals
-    k = 0
-    for i in range(1, self.nr-1):
-      for j in range(1, self.nt-1):
-        st = i*self.nt*self.nz + j*self.nz + 1
-        RHS[st:st+n] += (-R[k:k+n] * dt + Tf[k:k+n])
-        k += n
-   
-    # BCs apply uniformly
-    n = self.nz
-
-    # Radial left BC
-    _, _, R = self.impose_left_radial_bc(T[1], T_n[1], time)
-    RHS[:self.nt*self.nz] = R
-
-    # Radial right BC
-    _, _, R = self.impose_right_radial_bc(T[-2], T_n[-2], time)
-    RHS[-self.nt*self.nz:] = R
-
-    # Theta left BC
-    k = 0
-    for i in range(0,self.nr):
-      st = i * self.nt * self.nz + 1
-      RHS[st:st+n] = 0
-      st = i *self.nt * self.nz
-      k += n
-
-    # Theta right BC
-    k = 0
-    for i in range(0,self.nr):
-      st = i*self.nt*self.nz + (self.nt-1)*self.nz + 1 
-      RHS[st:st+n] = 0
-      st = i * self.nt * self.nz + self.nz
-      k += n
-
-    # Axial left BC
-    _, _, R = self.impose_left_axial_bc(time)
-    RHS[::self.nz] = R
-
-    # Axial right BC
-    _, _, R = self.impose_right_axial_bc(time)
-    RHS[self.nz-1::self.nz] = R
-
-    if deriv:
-      u1 = self.nt * self.nz
-      upper1 = np.zeros((self.ndof - u1,))
-      l1 = -self.nt * self.nz
-      lower1 = np.zeros((self.ndof + l1,))
-      
-      L = self.left_radial_derivative(T[1], T_n[1], time)
-      R = self.right_radial_derivative(T[-2], T_n[-2], time)
-
-      upper1[:self.nt*self.nz] = L
-      lower1[-self.nt*self.nz:] = R
-
-      return RHS, sp.diags((upper1,lower1),(u1,l1), shape = (self.ndof, self.ndof)).tocsr()
-
-    return RHS
 
   def setup_step(self, T):
     """
@@ -685,318 +217,652 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
         dt          current dt
     """
-    self.k = self.material.conductivity(T)
-    self.a = self.material.diffusivity(T)
-    
-    ae = np.pad(self.a, self._pad_values(0), mode = 'edge')
-    self.a_r = 0.5*(ae[1:] + ae[:-1])
-    re = np.pad(self.r, self._pad_values(0), mode = 'edge')
-    self.r_r = 0.5*(re[1:] + re[:-1])
+    self.k = self.material.conductivity(T).reshape(self.fdim)
+    self.a = self.material.diffusivity(T).reshape(self.fdim)
+
+    # Useful matrix that gives you the actual dofs
+    self.act = np.pad(np.ones(tuple(d-2 for d in self.dim)), [(1,1)] * self.ndim, 
+        constant_values = [(0,0)] * self.ndim)
+
+    self.act = self.act.reshape(self.fdim)
 
     self.ndof = T.size
 
+  def _generate_A(self):
+    """
+      Generate the base differential operator for the current step
+    """
+    A = self.radial()
+
     if self.ndim > 1:
-      ae = np.pad(self.a, self._pad_values(1), mode = 'edge')
-      self.a_t = 0.5*(ae[:,1:] + ae[:,:-1])
-      re = np.pad(self.r, self._pad_values(1), mode = 'edge')
-      self.r_t = 0.5*(re[:,1:] + re[:,:-1])
+      A += self.circumfrential()
+    
+    if self.ndim > 2:
+      A += self.axial()
+    
+    return A
+
+  def _generate_id(self):
+    """
+      Return the non-boundary affecting ID matrix
+    """
+    return sp.diags([self.act.flatten()], offsets = (0,),
+        shape = (self.ndof, self.ndof), format = 'coo')
+
+  def _generate_source(self, time):
+    """
+      Generate the source part of the RHS
+
+      Parameters:
+        time        current time
+    """
+    if self.source_term:
+      return (self.act * self.a / self.k * 
+          self.source_term(time,*[self.r, self.theta, self.z][:self.ndim])).flatten()
+    else:
+      return np.zeros((self.ndof,))
+
+  def _generate_prev_temp(self, T_n):
+    """
+      The RHS vector with the temperature contributions in the correct locations
+
+      Parmaeters:
+        T_n         previous temperatures
+    """
+    return (T_n * self.act).flatten()
+
+  def _generate_bc_matrix(self, T_n, time, dt):
+    """
+      Generate the BC matrix terms (fixed)
+    """
+    M = self._ID_BC() + self._OD_BC()
+
+    if self.ndim > 1:
+      M += self._left_BC() + self._right_BC()
 
     if self.ndim > 2:
-      ae = np.pad(self.a, self._pad_values(2), mode = 'edge')
-      self.a_z = 0.5*(ae[:,:,1:] + ae[:,:,:-1])
-      re = np.pad(self.r, self._pad_values(2), mode = 'edge')
-      self.r_z = 0.5*(re[:,:,1:] + re[:,:,:-1])
+      M += self._top_BC() + self._bot_BC()
 
-  def _pad_values(self, axis):
+    return M
+
+  def _generate_fixed_bc_RHS(self, T_n, time, dt):
     """
-      Pad with zeros along a given axis
+      Generate the constant (i.e. axial) contributions to the RHS
 
       Parameters:
-        axis:       which axis!
-    """
-    res = []
-    for i in range(self.ndim):
-      if i == axis:
-        res.append((1,1))
-      else:
-        res.append((0,0))
 
-    return tuple(res)
-
-  def adofs(self, X):
+      T_n       previous temperature
+      time      current time
+      dt        time increment
     """
-      Return a view into the actual non-dummy dofs
-
-      Parameters:
-        X       matrix to reduce
-    """
-    if self.ndim == 3:
-      return X[1:-1,1:-1,1:-1]
-    elif self.ndim == 2:
-      return X[1:-1,1:-1]
+    if self.ndim > 2:
+      return self._top_BC_R(T_n, time, T_n) + self._bot_BC_R(T_n, time, T_n)
     else:
-      return X[1:-1]
+      return np.zeros((self.ndof,))
+  
+  # pylint: disable=too-many-locals
+  def solve_step(self, T_n, time, dt):
+    """
+      Actually setup and solve for a single load step
+
+      Parameters:
+        T_n         previous temperatures
+        time        current time
+        dt          time increment
+    """
+    # Generic setup
+    self.setup_step(T_n)
+
+    # Add dimensions, if necessary
+    T_n = T_n.reshape(self.fdim)
+
+    # FD contributions
+    A = self._generate_A()
+    # Identity
+    ID = self._generate_id()
+    # Source term
+    S = self._generate_source(time) 
+    # Previous temp
+    Tn = self._generate_prev_temp(T_n)
+    
+    # System without BCs
+    M = (ID-A*dt)
+    R = S*dt + Tn
+    
+    # Matrix and fixed RHS boundary contributions
+    B = self._generate_bc_matrix(T_n, time, dt)
+    M += B    
+    BRF = self._generate_fixed_bc_RHS(T_n, time, dt)
+    R += BRF
+    
+    # Dummy dofs
+    D = self._generate_dummy_dofs()
+    M += D
+
+    # Covert over our fixed matrix
+    M = M.tocsr()
+    
+    # This would be the iteration step
+    T = np.copy(T_n)
+
+    for i in range(self.miter):
+      Ri = R + self._ID_BC_R(T, time, T_n) + self._OD_BC_R(T, time, T_n)
+      J = self._d_ID_BC_R(T, time, T_n) + self._d_OD_BC_R(T, time, T_n)
+
+      res = M.dot(T.flatten()) - Ri
+      nr = la.norm(res)
+
+      if i == 0:
+        nr0 = nr
+
+      #print(i,nr,nr/nr0)
+
+      if (nr < self.atol or nr/nr0 < self.rtol) and i > 0:
+        break
+
+      T -= sla.spsolve(M - J, res).reshape(self.fdim)
+    else:
+      raise RuntimeError("Too many iterations in newton solver!")
+    
+    return T.reshape(self.dim)
+  
+  # pylint: disable=too-many-branches
+  def _generate_dummy_dofs(self):
+    """
+      Provide on-diagonal 1.0s for the dummy dofs
+    """
+    I = []
+    J = []
+
+    if self.ndim == 2:
+      for i in self.dummy_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.dummy_loop_z():
+            I.append(self.dof(i,j,k))
+            J.append(self.dof(i,j,k))
+    elif self.ndim == 3:
+      for i in self.dummy_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.full_loop_z():
+            I.append(self.dof(i,j,k))
+            J.append(self.dof(i,j,k))
+      for i in self.full_loop_r():
+        for j in self.dummy_loop_t():
+          for k in self.dummy_loop_z():
+            I.append(self.dof(i,j,k))
+            J.append(self.dof(i,j,k))
+      for i in self.dummy_loop_r():
+        for j in self.full_loop_t():
+          for k in self.dummy_loop_z():
+            I.append(self.dof(i,j,k))
+            J.append(self.dof(i,j,k))
+
+    return sp.coo_matrix((np.ones((len(I),)),(I,J)), shape = (self.ndof, self.ndof))
+
+  def _ID_BC_R(self, T, time, T_n):
+    """
+      The inner diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    R = np.zeros((self.ndof,))
+    i = 0
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.r[i,j,k], 
+            self.theta[i,j,k], self.z[i,j,k]][:self.ndim])
+        # Zero flux
+        elif self.tube.inner_bc is None:
+          R[self.dof(i,j,k)] = 0.0
+        # Fixed temperature
+        elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
+          R[self.dof(i,j,k)] = self.tube.inner_bc.temperature(time, 
+              self.theta[1,j,k], self.z[1,j,k])
+        # Fixed flux
+        elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+          R[self.dof(i,j,k)] = -self.dr * self.tube.inner_bc.flux(time, 
+              self.theta[1,j,k], self.z[1,j,k]) / self.k[1,j,k]
+        # Convection
+        elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+          R[self.dof(i,j,k)] = self.dr * self.fluid.coefficient(self.material.name,
+              T_n[1,j,k]) * (T[1,j,k] - self.tube.inner_bc.fluid_temperature(
+                time, self.z[1,j,k])) / self.k[1,j,k]
+        else:
+          raise ValueError("Unknown boundary condition!")
+    return R
+
+  def _d_ID_BC_R(self, T, time, T_n):
+    """
+      Derivative of the inner diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    I = []
+    J = []
+    D = []
+    if isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+      i = 0
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(1,j,k))
+          D.append(self.dr * self.fluid.coefficient(self.material.name, 
+            T_n[1,j,k]) / self.k[1,j,k])
+    
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _OD_BC_R(self, T, time, T_n):
+    """
+      The outer diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    R = np.zeros((self.ndof,))
+    i = self.nr-1
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, *[self.r[i,j,k], 
+            self.theta[i,j,k], self.z[i,j,k]][:self.ndim])
+        # Zero flux
+        elif self.tube.outer_bc is None:
+          R[self.dof(i,j,k)] = 0.0
+        # Fixed temperature
+        elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
+          R[self.dof(i,j,k)] = self.tube.outer_bc.temperature(time, 
+              self.theta[self.nr-2,j,k], self.z[self.nr-2,j,k])
+        # Fixed flux
+        elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+          R[self.dof(i,j,k)] = -self.dr * self.tube.outer_bc.flux(time, 
+              self.theta[self.nr-2,j,k], self.z[self.nr-2,j,k]) / self.k[self.nr-2,j,k]
+        # Convection
+        elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+          R[self.dof(i,j,k)] = (self.dr *
+              self.fluid.coefficient(self.material.name, T_n[self.nr-2,j,k]) * 
+              (T[self.nr-2,j,k] - 
+                self.tube.outer_bc.fluid_temperature(time, self.z[self.nr-2,j,k])) / 
+              self.k[self.nr-2,j,k])
+        else:
+          raise ValueError("Unknown boundary condition!")
+    return R
+
+  def _d_OD_BC_R(self, T, time, T_n):
+    """
+      Derivative of the outer diameter BC RHS contribution
+
+      Parameters:
+        T       current temperatures
+        time    current time
+        T_n     previous temperatures
+    """
+    I = []
+    J = []
+    D = []
+    if isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+      i = self.nr-1
+      for j in self.loop_t():
+        for k in self.loop_z():
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(self.dr * self.fluid.coefficient(self.material.name, 
+            T_n[self.nr-2,j,k]) / self.k[self.nr-2,j,k])
+    
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _ID_BC(self):
+    """
+      Inner diameter boundary condition contribution matrix
+    """
+    I = []
+    J = []
+    D = []
+    i = 0
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(i,j,k))
+          D.append(1.0)
+        # Zero flux
+        elif self.tube.inner_bc is None:
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(1,j,k))
+          D.append(1.0)
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(0,j,k))
+          D.append(-1.0)
+        # Fixed temperature
+        elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(1,j,k))
+          D.append(1.0)
+        # Fixed flux
+        elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(1,j,k))
+          D.append(1.0)
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(0,j,k))
+          D.append(-1.0)
+        # Convection
+        elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(1,j,k))
+          D.append(1.0)
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(0,j,k))
+          D.append(-1.0)
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _OD_BC(self):
+    """
+      Outer diameter contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    i = self.nr-1
+    for j in self.loop_t():
+      for k in self.loop_z():
+        if self.fix_edge:
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(i,j,k))
+          D.append(1.0)
+        # Zero flux
+        elif self.tube.outer_bc is None:
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(1.0)
+          
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(self.nr-1,j,k))
+          D.append(-1.0)
+        # Fixed temperature
+        elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(1.0)
+        # Fixed flux
+        elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(1.0)
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(self.nr-1,j,k))
+          D.append(-1.0)
+        # Convection
+        elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+          I.append(self.dof(i,j,k)) 
+          J.append(self.dof(self.nr-2,j,k))
+          D.append(1.0)
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(self.nr-1,j,k))
+          D.append(-1.0)
+        else:
+          raise ValueError("Unknown boundary condition!")
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _left_BC(self):
+    """
+      Periodic contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    j = 0
+    for i in self.loop_r():
+      for k in self.loop_z():
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,j,k))
+        D.append(1.0)
+
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,self.nt-2,k))
+        D.append(-1.0)
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _right_BC(self):
+    """
+      Periodic contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    j = self.nt-1
+    for i in self.loop_r():
+      for k in self.loop_z():
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,j,k))
+        D.append(1.0)
+
+        I.append(self.dof(i,j,k))
+        J.append(self.dof(i,1,k))
+        D.append(-1.0)
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _top_BC(self):
+    """
+      Axial top contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    k = 0
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(1.0)
+        else:
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,1))
+          D.append(1.0)
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,0))
+          D.append(-1.0)
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _bot_BC(self):
+    """
+      Axial bottom contribution to the BC matrix
+    """
+    I = []
+    J = []
+    D = []
+    k = self.nz - 1
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,k))
+          D.append(1.0)
+        else:
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,self.nz-2))
+          D.append(1.0)
+          I.append(self.dof(i,j,k))
+          J.append(self.dof(i,j,self.nz-1))
+          D.append(-1.0)
+
+    return sp.coo_matrix((D,(I,J)), shape = (self.ndof, self.ndof))
+
+  def _top_BC_R(self, T, time, T_n):
+    """
+      RHS contribution of the top axial BC
+
+      Parameters:
+        T           current temperatures
+        time        current time
+        T_n         previous temperatures
+    """
+    R = np.zeros((self.ndof,))
+    k = 0
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, 
+              *[self.r[i,j,k], self.theta[i,j,k], 
+                self.z[i,j,k]][:self.ndim])
+
+    return R
+
+  def _bot_BC_R(self, T, time, T_n):
+    """
+      RHS contribution of the bottom axial BC
+
+      Parameters:
+        T           current temperatures
+        time        current time
+        T_n         previous temperatures
+    """
+    R = np.zeros((self.ndof,))
+    k = self.nz - 1
+    for i in self.loop_r():
+      for j in self.loop_t():
+        if self.fix_edge:
+          R[self.dof(i,j,k)] = self.fix_edge(time, 
+              *[self.r[i,j,k], self.theta[i,j,k],
+                self.z[i,j,k]][:self.ndim])
+
+    return R
+
+  def dof(self, i, j, k):
+    """
+      Return the DOF corresponding to the given grid position
+
+      Parameters:
+        i       r index
+        j       theta index
+        k       z index
+    """
+    return i * self.nt * self.nz + j * self.nz + k
+
+  def loop_r(self):
+    """
+      Loop over non-ghost dofs
+    """
+    return range(1,self.nr-1)
+
+  def loop_t(self):
+    """
+      Loop over non-ghost dofs
+    """
+    if self.ndim > 1:
+      return range(1,self.nt-1)
+    else:
+      return [0]
+
+  def loop_z(self):
+    """
+      Loop over non-ghost dofs
+    """
+    if self.ndim > 2:
+      return range(1,self.nz-1)
+    else:
+      return [0]
+
+  def full_loop_r(self):
+    """
+      Loop over all dofs
+    """
+    return range(0,self.nr)
+
+  def full_loop_t(self):
+    """
+      Loop over all dofs
+    """
+    if self.ndim > 1:
+      return range(0,self.nt)
+    else:
+      return [0]
+
+  def full_loop_z(self):
+    """
+      Loop over all dofs
+    """
+    if self.ndim > 2:
+      return range(0,self.nz)
+    else:
+      return [0]
+
+  def dummy_loop_r(self):
+    """
+      Loop over ghost dofs
+    """
+    return [0,self.nr-1]
+
+  def dummy_loop_t(self):
+    """
+      Loop over ghost dofs
+    """
+    return [0,self.nt-1]
+
+  def dummy_loop_z(self):
+    """
+      Loop over ghost dofs
+    """
+    if self.ndim > 2:
+      return [0,self.nz-1]
+    else:
+      return [0]
 
   def radial(self):
     """
-      The tridiagonal radial contributions to the problem
-
-      Parameters:
-        T:      full temperature field at which we want to calculate coefficients
-        time:   current time
-
-      Returns:
-        upper, diagonal, and lower matrix entries
+      Insert the radial FD contribution into a sparse matrix
     """
-    p1 = self.r_r[1:] * self.a_r[1:]
-    p2 = self.r_r[:-1] * self.a_r[:-1]
+    rh = (self.r[:-1] + self.r[1:]) / 2.0
+    ah = (self.a[:-1] + self.a[1:]) / 2.0
+    rhah = np.pad(rh * ah, ((1,1),(0,0),(0,0)), mode = 'edge')
+   
+    D1 = (self.act * rhah[:-1] / (self.r * self.dr**2.0)).flatten()[self.nt*self.nz:]
+    D2 = -(self.act * (rhah[:-1] + rhah[1:]) / (self.r * self.dr**2.0)).flatten()
+    D3 = (self.act * rhah[1:] / (self.r * self.dr**2.0)).flatten()[:-self.nt*self.nz]
 
-    U = self.adofs((1.0 / self.r * 1.0 / self.dr**2.0 * p1)).flatten()
-    D = self.adofs((-1.0 / self.r * 1.0 / self.dr**2.0 * (p1 + p2))).flatten()
-    L = self.adofs((1.0 / self.r * 1.0 / self.dr**2.0 * p2)).flatten()
-
-    return U,D,L
-
-  def impose_left_radial_bc(self, Tb, Tb_n, time):
-    """
-      Impose the radial BC on the left side of the domain
-
-      Parameters:
-        Tb:     temperatures on actual boundary
-        Tb_n:   previous temperatures on the boundary
-        time:   time
-
-      Returns:
-        Upper, diagonal, and RHS entries
-    """
-    # For testing we can impose a fixed solution on the edges
-    if self.fix_edge:
-      D = 1.0
-      U = 0.0
-      RHS = self.fix_edge(time, *self._edge_mesh(0)).flatten()
-    # Zero flux
-    elif self.tube.inner_bc is None:
-      D = -1.0
-      U = 1.0
-      RHS = 0.0
-    # Fixed temperature
-    elif isinstance(self.tube.inner_bc, receiver.FixedTempBC):
-      D = 0.0
-      U = 1.0
-      RHS = self.tube.inner_bc.temperature(time, self.theta[0], self.z[0]).flatten()
-    # Fixed flux
-    elif isinstance(self.tube.inner_bc, receiver.HeatFluxBC):
-      D = 1.0
-      U = -1.0
-      RHS = (self.dr * self.tube.inner_bc.flux(time, self.theta[1], 
-        self.z[1]) / self.k[1]).flatten()
-    # Convection
-    elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
-      D = 1.0
-      U = -1.0
-      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
-        )*(Tb - self.tube.inner_bc.fluid_temperature(time, self.z[1])
-          ) / self.k[1]).flatten()
-    else:
-      raise ValueError("Unknown boundary condition!")
-
-    return D, U, RHS
-
-  def left_radial_derivative(self, Tb, Tb_n, time):
-    """
-      The Jacobian contribution of the left radial derivative
-
-      Parameters:
-        Tb:     temperatures on the boundary
-        Tb_n:   previous temperature on the boundary
-        time:   time
-    """
-    if isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
-      return -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
-        ) / self.k[1]).flatten()
-    else:
-      return np.zeros(Tb.shape).flatten() 
-
-  def impose_right_radial_bc(self, Tb, Tb_n, time):
-    """
-      Impose the radial BC on the right side of the domain
-
-      Parameters:
-        Tb:     temperatures on actual boundary
-        Tb_n:   previous temperature on the boundary
-        time:   time
-
-      Returns:
-        diagonal, lower, and RHS entries
-    """
-    if self.fix_edge:
-      D = 1.0
-      L = 0.0
-      RHS = self.fix_edge(time, *self._edge_mesh(-1)).flatten()
-    # Zero flux
-    elif self.tube.outer_bc is None:
-      D = -1.0
-      L = 1.0
-      RHS = 0.0
-    # Fixed temperature
-    elif isinstance(self.tube.outer_bc, receiver.FixedTempBC):
-      D = 0.0
-      L = 1.0
-      RHS = self.tube.outer_bc.temperature(time, self.theta[-2], self.z[-2]).flatten()
-    # Fixed flux
-    elif isinstance(self.tube.outer_bc, receiver.HeatFluxBC):
-      D = 1.0
-      L = -1.0
-      RHS = (self.dr * self.tube.outer_bc.flux(time, self.theta[-2], 
-        self.z[-2]) / self.k[-2]).flatten()
-    # Convection
-    elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
-      D = 1.0
-      L = -1.0
-      RHS = -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
-        )*(Tb - self.tube.outer_bc.fluid_temperature(time, self.z[-2])
-          ) / self.k[-2]).flatten()
-    else:
-      raise ValueError("Unknown boundary condition!")
-
-    return D, L, RHS
-
-  def right_radial_derivative(self, Tb, Tb_n, time):
-    """
-      The diagonal Jacobian contribution of the right radial derivative
-
-      Parameters:
-        Tb:     temperatures on the boundary
-        Tb_n:   previous temperatures on the boundary
-        time:   time
-    """
-    if isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
-      return -self.dr * (self.fluid.coefficient(self.material.name, Tb_n
-        ) / self.k[-2]).flatten()
-    else:
-      return np.zeros(Tb.shape).flatten() 
-
-  def _edge_mesh(self, ind):
-    """
-      Return the edge r mesh, just for evaluating BCs for testing
-    """
-    return tuple(self.mesh[i][ind] for i in range(self.ndim))
+    return sp.diags((D1,D2,D3), offsets = (-self.nt*self.nz,0,self.nt*self.nz), 
+        shape = (self.ndof, self.ndof), format = 'coo')
 
   def circumfrential(self):
     """
-      The tridiagonal theta contributions to the problem
-
-      Parameters:
-        T:      full temperature field at which we want to calculate coefficients
-        time:   current time
-
-      Returns:
-        upper, diagonal, and lower entries
+      Insert the circumferential FD contribution into a coo matrix
     """
-    p1 = self.a_t[:,1:]
-    p2 = self.a_t[:,:-1]
+    ah = np.pad((self.a[:,:-1] + self.a[:,1:]) / 2.0,
+        ((0,0),(1,1),(0,0)), mode = 'edge')
 
-    U = self.adofs(1.0 / self.r**2.0 * 1.0 / self.dt**2.0 * p1).flatten()
-    D = self.adofs(-1.0 / self.r**2.0 * 1.0 / self.dt**2.0 * (p1 + p2)).flatten()
-    L = self.adofs(1.0 / self.r**2.0 * 1.0 / self.dt**2.0 * p2).flatten()
+    D1 = (self.act * ah[:,:-1] / (self.r**2.0 * self.dt**2.0)).flatten()[self.nz:]
+    D2 = -(self.act * (ah[:,:-1] + ah[:,1:]) / (self.r**2.0 * self.dt**2.0)).flatten()
+    D3 = (self.act * ah[:,1:] / (self.r**2.0 * self.dt**2.0)).flatten()[:-self.nz]
 
-    return U, D, L
+    return sp.diags((D1,D2,D3), offsets = (-self.nz, 0, self.nz),
+        shape = (self.ndof, self.ndof), format = 'coo')
 
   def axial(self):
     """
-      The tridiagonal z contributions to the problem
-
-      Parameters:
-        T:      full temperature field at which we want to calculate coefficients
-        time:   current time
-
-      Returns:
-        upper, diagonal, and lower entries
+      Insert the axial FD contribution into a coo matrix
     """
-    p1 = self.a_z[:,:,1:]
-    p2 = self.a_z[:,:,:-1]
+    ah = np.pad((self.a[:,:,:-1] + self.a[:,:,1:]) / 2.0, 
+        ((0,0),(0,0),(1,1)), mode = 'edge')
 
-    U = self.adofs(1.0 / self.dz**2.0 * p1).flatten()
-    D = self.adofs(-1.0 / self.dz**2.0 * (p1 + p2)).flatten()
-    L = self.adofs(1.0 / self.dz**2.0 * p2).flatten()
+    D1 = (self.act * ah[:,:,:-1] / self.dz**2.0).flatten()[1:]
+    D2 = (-self.act * (ah[:,:,:-1] + ah[:,:,1:]) / self.dz**2.0).flatten()
+    D3 = (self.act * ah[:,:,1:] / self.dz**2.0).flatten()[:-1]
 
-    return U, D, L
-
-  def _edge_axial_mesh(self, ind):
-    """
-      Return the edge z mesh, just for evaluating BCs for testing
-    """
-    return tuple(self.mesh[i][:,:,ind] for i in range(self.ndim))
-
-  def impose_left_axial_bc(self, time):
-    """
-      Impose the radial BC on the left side of the domain
-
-      Parameters:
-        time:   time
-
-      Returns:
-        Upper, diagonal, and RHS entries
-    """
-    # For testing we can impose a fixed solution on the edges
-    if self.fix_edge:
-      D = 1.0
-      U = 0.0
-      RHS = self.fix_edge(time, *self._edge_axial_mesh(0)).flatten()
-    # Zero flux
-    else:
-      D = -1.0
-      U = 1.0
-      RHS = 0.0
-
-    return D, U, RHS
-
-  def impose_right_axial_bc(self, time):
-    """
-      Impose the radial BC on the right side of the domain
-
-      Parameters:
-        time:   time
-
-      Returns:
-        diagonal, lower, and RHS entries
-    """
-    if self.fix_edge:
-      D = 1.0
-      L = 0.0
-      RHS = self.fix_edge(time, *self._edge_axial_mesh(-1)).flatten()
-    # Zero flux
-    else:
-      D = -1.0
-      L = 1.0
-      RHS = 0.0
-
-    return D, L, RHS
-
-  def source(self, time):
-    """
-      RHS source term
-
-      Parameters:
-        time:   current time
-        R:      RHS to add to
-
-      Returns:
-        source contribution
-    """
-    if self.source_term:
-      return self.adofs(self.a / self.k * self.source_term(time, *self.mesh)).flatten()
-    else:
-      return self.adofs(np.zeros(self.a.shape)).flatten()
-
-  def _generate_mesh(self):
-    """
-      Produce the r, theta, z mesh
-    """
-    rs = np.linspace(self.tube.r - self.tube.t - self.dr, self.tube.r + self.dr, self.tube.nr + 2)
-    ts = np.linspace(0 - self.dt, 2.0*np.pi, self.tube.nt + 2)
-    zs = np.linspace(0 - self.dz, self.tube.h + self.dz, self.tube.nz + 2)
-
-    geom = [rs, ts, zs]
-
-    return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
+    return sp.diags([D1,D2,D3], offsets = (-1,0,1),
+        shape = (self.ndof, self.ndof), format = 'coo')

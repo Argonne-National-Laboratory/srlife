@@ -10,20 +10,22 @@ class ManufacturedSolution:
   """
     A manufactured heat transport solution
   """
-  def __init__(self, dim, solution, source):
+  def __init__(self, name, dim, solution, source):
     """
       Parameters:
+        name:       descriptive name
         dim:        dimension of solution
         solution:   function of t, r, ...
         source      function of t, k, alpha, r, ...
         flux        function of t, k, alpha, r, ... (for BC)
     """
+    self.name = name
     self.dim = dim
     self.soln = solution
     self.source = source
 
   def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
-      ntime = 11, nr = 10, nt = 20, nz = 10, T0 = 0.0):
+      ntime = 11, nr = 11, nt = 20, nz = 10, T0 = 0.0):
     """
       Generate the appropriate tube and solve with the provided solver
       
@@ -77,6 +79,12 @@ class ManufacturedSolution:
         soln.nr, soln.nt, soln.nz)
     T = self.soln(*mesh)
     
+    print(self.name)
+    print("Max absolute error: %e" % np.max(np.abs(T - soln.results['temperature'])))
+    keep = np.abs(T) > 0
+    print("Max relative error: %e" % np.max(np.abs(T[keep] - soln.results['temperature'][keep])/np.abs(T[keep])))
+    print("")
+
     plt.figure()
     if self.dim == 1:
       plot = [1, soln.nr // 2, -2]
@@ -89,6 +97,7 @@ class ManufacturedSolution:
     elif self.dim == 2:
       plot_r = [0,1, soln.nr // 2, -2,-1]
       plot_t = [0,1, soln.nt // 2, -2,-1]
+
       for rp in plot_r:
         for tp in plot_t:
           l, = plt.plot(mesh[0][:,rp,tp], soln.results['temperature'][:,rp,tp])
@@ -130,7 +139,7 @@ class ManufacturedSolution:
       Parameters:
         r:           radius
         t:           thickness
-        h           height
+        h            height
         times:       discrete time steps
         nr:          number of radial increments
         nt:          number of circumferential increments
