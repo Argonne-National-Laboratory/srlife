@@ -6,6 +6,8 @@ import numpy as np
 import scipy.interpolate as inter
 import h5py
 
+from srlife import writers
+
 class Receiver:
   """
     Basic definition of the tubular receiver geometry.
@@ -39,6 +41,17 @@ class Receiver:
     self.multiplier = multiplier
     self.panels = {}
     self.stiffness = panel_stiffness
+
+  def write_vtk(self, basename):
+    """
+      Write out the receiver as individual panels with names
+      basename_panelname
+
+      Parameters:
+        basename        base file name
+    """
+    for n, panel in self.panels.items():
+      panel.write_vtk(basename + "_" + n)
 
   def close(self, other):
     """
@@ -144,6 +157,17 @@ class Panel:
     """
     self.tubes = {}
     self.stiffness = stiffness
+
+  def write_vtk(self, basename):
+    """
+      Write out the panels as individual tubes with names
+      basename_tubename
+
+      Parameters:
+        basename        base file name
+    """
+    for n, tube in self.tubes.items():
+      tube.write_vtk(basename + "_" + n)
 
   def close(self, other):
     """
@@ -290,6 +314,61 @@ class Tube:
     self.inner_bc = None
 
     self.T0 = T0
+
+  @property
+  def ndim(self):
+    """
+      Number of problem dimensions
+    """
+    if self.abstraction == "3D":
+      return 3
+    elif self.abstraction == "2D":
+      return 2
+    elif self.abstraction == "1D":
+      return 1
+    else:
+      raise ValueError("Tube abstraction unknown!") 
+
+  @property
+  def dim(self):
+    """
+      Actual problem dimensions
+    """
+    if self.abstraction == "3D":
+      return (self.nr, self.nt, self.nz)
+    elif self.abstraction == "2D":
+      return (self.nr, self.nt, 1)
+    elif self.abstraction == "1D":
+      return (self.nr, 1, 1)
+    else:
+      raise ValueError("Tube abstraction unknown!")
+
+  @property
+  def mesh(self):
+    """
+      Calculate the problem mesh (should only be needed for I/O)
+    """
+    r = np.linspace(self.r-self.t, self.r, self.nr)
+    if self.ndim > 1:
+      t = np.linspace(0, 2*np.pi, self.nt+1)[:self.nt]
+    else:
+      t = [self.angle]
+    if self.ndim > 2:
+      z = np.linspace(0, self.h, self.nz)
+    else:
+      z = [self.plane]
+
+    return np.meshgrid(*[r,t,z], indexing = 'ij')
+
+  def write_vtk(self, fname):
+    """
+      Write to a VTK file
+
+      Parameters:
+        fname       base filename
+    """
+    writer = writers.VTKWriter(self, fname)
+    writer.write()
 
   def make_2D(self, height):
     """
