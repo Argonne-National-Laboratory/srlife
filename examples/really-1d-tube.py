@@ -16,7 +16,7 @@ if __name__ == "__main__":
   nz = 10
   T0 = 50
 
-  tmax = 3600.0*8
+  tmax = 8.0 * 3600.0
 
   ntime = 10
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
   tube.set_bc(inner_convection, "inner")
 
   hflux = receiver.HeatFluxBC(R, h, nt, nz, times, 
-      np.zeros((ntime,nt,nz)))
+      np.zeros((ntime,nt,nz))+2.0)
   tube.set_bc(hflux, "outer")
 
   solver = thermal.FiniteDifferenceImplicitThermalSolver()
@@ -59,6 +59,8 @@ if __name__ == "__main__":
   fmat = materials.ConstantFluidMaterial({"dummy": 8.1e-3})
 
   solver.solve(tube, tmat, fmat)
+
+  tube.write_vtk("test")
 
   for ts in [0,ntime//2,ntime-1]:
     if D == 1:
