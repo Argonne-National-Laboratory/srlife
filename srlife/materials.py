@@ -1,6 +1,6 @@
 """
   This module contains material models containing thermal, fluid, and
-  material properties.  These models can be stored to and recalled from 
+  material properties.  These models can be stored to and recalled from
   XML files for archiving.
 """
 
@@ -13,7 +13,7 @@ import scipy.interpolate as inter
 class ThermalMaterial:
   """
     Material thermal properties.
-    
+
     This object needs to provide:
       1) material name
       2) the conductivity, as a function of temperature and its derivative
@@ -51,12 +51,12 @@ class PiecewiseLinearThermalMaterial(ThermalMaterial):
     if len(temps) != len(cond) or len(temps) != len(diff):
       raise ValueError("The lists of temperatures, conductivity,"
           "and diffusivity values must have equal lengths!")
-    
+
     self.name = name
     self.temps = np.array(temps)
     self.cond = np.array(cond)
     self.diff = np.array(diff)
-    
+
     self.fcond, self.dfcond = make_piecewise(self.temps, self.cond)
     self.fdiff, self.dfdiff = make_piecewise(self.temps, self.diff)
 
@@ -115,7 +115,7 @@ class PiecewiseLinearThermalMaterial(ThermalMaterial):
       Parameters:
         values  dictionary values
     """
-    return cls(values["name"], destring_array(values["temps"]), destring_array(values["cond"]), 
+    return cls(values["name"], destring_array(values["temps"]), destring_array(values["cond"]),
         destring_array(values["diff"]))
 
 class ConstantThermalMaterial(ThermalMaterial):
@@ -176,7 +176,7 @@ class ConstantThermalMaterial(ThermalMaterial):
       Parameters:
         fname       filename
     """
-    dictrep = {"name": self.name, "k": str(self.cond), 
+    dictrep = {"name": self.name, "k": str(self.cond),
         "alpha": str(self.diff)}
     save_dict_xml(dictrep, fname, "PiecewiseConstantThermalMaterial")
 
@@ -238,7 +238,7 @@ class ConstantFluidMaterial:
       Parameters:
         fname       file name to save to
     """
-    dictrep = {k: str(v) for k, v in self.data.items()} 
+    dictrep = {k: str(v) for k, v in self.data.items()}
     save_dict_xml(dictrep, fname, "ConstantFluidMaterial")
 
   @classmethod
@@ -259,10 +259,10 @@ class ConstantFluidMaterial:
       Parameters:
         material:       material name
         T:              temperatures
-        
+
     """
     return T*0.0 + self.data[material]
-  
+
   # pylint: disable=unused-argument
   def dcoefficient(self, material, T):
     """
@@ -300,7 +300,7 @@ class PiecewiseLinearFluidMaterial:
         fname       file name to save to
     """
     dictrep = {k: {'temp': string_array(T),
-      'values': string_array(v)} for k, (T, v) in self.data.items()} 
+      'values': string_array(v)} for k, (T, v) in self.data.items()}
     save_dict_xml(dictrep, fname, "PiecewiseLinearFluidMaterial")
 
   @classmethod
@@ -322,7 +322,7 @@ class PiecewiseLinearFluidMaterial:
       Parameters:
         material:       material name
         T:              temperatures
-        
+
     """
     return self.fns[material][0](T)
 
@@ -336,6 +336,122 @@ class PiecewiseLinearFluidMaterial:
         T:              temperatures
     """
     return self.fns[material][1](T)
+
+class StructuralMaterial:
+  """
+  Properties for structural material
+
+  Supply
+    1) cycles to failure as a function of temperature and strain range
+    2) time to rupture as a function of temperaure and stress
+    3) checks creep-fatigue interaction diagram
+  """
+
+  def __init__(self, data):
+    self.data = data
+
+  def cycles_to_fail(self, pname, temp, erange):
+    """
+        Returns fatigue cycles to failure at a given temperature and strain range
+
+        Parameters:
+          pname:       property name ("nominalFatigue")
+          erange:      strain range in mm/mm
+          temp:        temperature in K
+    """
+    pdata = self.data[pname]
+    T, a, n, cutoff = [],[],[],[]
+
+    for i in pdata:
+      T.append(destring_array(pdata[i]["T"]))
+      a.append(destring_array(pdata[i]["a"]))
+      n.append(destring_array(pdata[i]["n"]))
+      cutoff.append(destring_array(pdata[i]["cutoff"]))
+
+      if np.array(a).shape != np.array(n).shape:
+        raise ValueError("\tThe lists of a and n must have equal lengths!")
+
+    inds=np.array(T).argsort(axis=0)
+    T = np.array(T)[inds]
+    a = np.array(a)[inds]
+    n = np.array(n)[inds]
+    cutoff = np.array(cutoff)[inds]
+
+    if temp > max(T):
+      raise ValueError("\ttemperature is out of range for cycle to failure determination")
+
+    for i in range(np.size(T, axis=0)):
+      if temp<=T[i]:
+        polysum = 0.0
+        if erange<=cutoff[i]:
+          erange = cutoff[i][0][0]
+        for (b,m) in zip(a[i][0],n[i][0]):
+          polysum+=b*np.log10(erange)**m
+        break
+
+    return 10**polysum
+
+  def time_to_rupture(self, pname, temp, stress):
+    """
+        Returns time to rupture at a given temperature and stress
+
+        Parameters:
+          pname:       property name ("averageRupture" or "lowerboundRupture")
+          stress:      stress in MPa
+          temp:        temperature in K
+      """
+    pdata = self.data[pname]
+
+    a=destring_array(pdata["a"])
+    n=destring_array(pdata["n"])
+    C=destring_array(pdata["C"])
+
+    if a.shape != n.shape:
+      raise ValueError("The lists of a and n must have equal lengths!")
+
+    polysum = 0
+    for (b,m) in zip(a,n):
+      polysum+=b*np.log10(stress)**m
+    return 10**(polysum/temp-C)
+
+  def inside_envelope(self, pname, damage_fatigue, damage_creep):
+    """
+        Returns True if the point lies inside the design envelope and False if not
+
+        Parameters:
+          pname:               property name ("cfinteraction")
+          damage_fatigue:      fatigue damage fraction
+          creep_fatigue:       creep damage fraction
+      """
+
+    if damage_fatigue < 0.0 or damage_creep < 0.0:
+      raise ValueError("\tout of range: negative damage fraction")
+
+    pdata = destring_array(self.data[pname])
+
+    x_1 = 0.0
+    y_1 = 1.0
+    x_2 = pdata[0]
+    y_2 = pdata[1]
+    x_3 = 1.0
+    y_3 = 0.0
+
+    if damage_fatigue < x_2:
+      return damage_creep <= ((y_2 - y_1) / (x_2 - x_1) * (damage_fatigue - x_1) + y_1)
+    return damage_creep <= ((y_3 - y_2) / (x_3 - x_2) * (damage_fatigue - x_2) + y_2)
+
+  @classmethod
+  def load(cls, fname, material):
+    """
+      Load a Structural Material object from a file
+
+      Parameters:
+        fname:       file name to load from
+        material:    name of material ("A740H","SS316H","A800H","A617", or "A282")
+    """
+    data = load_dict_xml(fname)[1]
+    data = data[material]
+    return cls(data)
 
 def make_piecewise(x, y):
   """

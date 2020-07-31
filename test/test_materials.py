@@ -9,12 +9,12 @@ from helpers import differentiate
 
 class TestLoadStore(unittest.TestCase):
   def setUp(self):
-    self.example = {"one": {"two" : {"three": "data", "four": "yaydata"}, 
+    self.example = {"one": {"two" : {"three": "data", "four": "yaydata"},
       "five": "moredata"}, "six": "evenmore"}
 
   def test_recover(self):
     tf = tempfile.mktemp()
-    
+
     materials.save_dict_xml(self.example, tf)
     rn, comp = materials.load_dict_xml(tf)
 
@@ -37,21 +37,21 @@ class TestPiecewiseLinearThermalMaterial(CommonThermalMaterial, unittest.TestCas
     self.cond = np.array([25.0,50.0,10.0,30.0])
     self.diff = np.array([100.0,20.0,50.0,60.0])
 
-    self.obj = materials.PiecewiseLinearThermalMaterial(self.name, 
+    self.obj = materials.PiecewiseLinearThermalMaterial(self.name,
         self.T, self.cond, self.diff)
 
   def test_interpolate(self):
     T = 125.0
-    self.assertTrue(np.isclose(inter.interp1d(self.T, self.cond)(T), 
+    self.assertTrue(np.isclose(inter.interp1d(self.T, self.cond)(T),
       self.obj.conductivity(T)))
-    self.assertTrue(np.isclose(inter.interp1d(self.T, self.diff)(T), 
+    self.assertTrue(np.isclose(inter.interp1d(self.T, self.diff)(T),
       self.obj.diffusivity(T)))
 
   def test_store_receover(self):
     tf = tempfile.mktemp()
 
     self.obj.save(tf)
-    
+
     rep = materials.ThermalMaterial.load(tf)
 
     self.assertEqual(rep.name, self.obj.name)
@@ -80,7 +80,7 @@ class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
     self.obj.save(tfile)
 
     comp = materials.FluidMaterial.load(tfile)
-    
+
     for k, (T, vals) in self.obj.data.items():
       self.assertTrue(k in comp.data)
       self.assertTrue(np.allclose(T, comp.data[k][0]))
@@ -93,3 +93,71 @@ class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
     v1 = inter.interp1d(self.data[mat][0], self.data[mat][1])(T)
 
     self.assertAlmostEqual(v1, self.obj.coefficient(mat, T))
+
+class TestStructuralMaterial(unittest.TestCase):
+    def setUp(self):
+        self.mat="Computonium"
+        self.T = 850.15
+        self.stress=100
+        self.erange=5e-3
+        self.true_inside_envelope=np.array([0.533, 0.2])
+        self.false_inside_envelope=np.array([0.1, 0.77])
+        self.error_inside_envelope=np.array([-0.01, 0.01])
+        self.fatigue_pname="nFatigue"
+        self.rupture_pname="avgRupture"
+        self.cfinteraction_pname="cfinteraction"
+        self.data={"Computonium": {"nFatigue": {"curve1": {"T": "950","a": "-9.2e-01 -3.8e+00 -8.4e+00 -4.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        "curve2": {"T": "800", "a": "-19.2e-01 -3.8e+00 -18.4e+00 -14.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        "curve3": {"T": "500", "a": "-0.2e-01 -0.8e+00 -0.4e+00 -0.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"}},
+        "avgRupture": {"C": "17.16","a": "-1475.23 7289.41 -16642.64 35684.60", "n": "3 2 1 0"},
+        "lbRupture": {"C": "10.0","a": "-1000.0 7000.0 -10000.0 30000.0", "n": "3 2 1 0"},
+        "cfinteraction":"0.3 0.3"},
+        "Computonium2": {"nFatigue": {"curve1": {"T": "100","a": "-1e-01 -1e+00 -1e+00 -1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        "curve2": {"T": "200", "a": "-10e-01 -3.0e+00 -1.0e+00 -1e+00", "n": "3 2 1 0", "cutoff": "1e-3"},
+        "curve3": {"T": "500", "a": "-1e-01 -1e+00 -1e+00 -1e+00", "n": "3 2 1 0", "cutoff": "10e-3"}},
+        "avgRupture": {"C": "1","a": "-10 100 -100 10", "n": "3 2 1 0"},
+        "lbRupture": {"C": "10.0","a": "-1000.0 7000.0 -10000.0 30000.0", "n": "3 2 1 0"},
+        "cfinteraction":"0.1 0.1"}}
+
+        self.fname = tempfile.mktemp()
+        materials.save_dict_xml(self.data, self.fname)
+        self.structmat = materials.StructuralMaterial.load(self.fname,self.mat)
+
+    def test_cycles_to_fail(self):
+        fcycles = self.structmat.cycles_to_fail(self.fatigue_pname,self.T,self.erange)
+
+        a=np.array([-9.2e-01, -3.8e+00, -8.4e+00, -4.1e+00])
+        n=np.array([3,2,1,0])
+        cutoff=1.5e-3
+        sum = 0
+        if self.erange<=cutoff:
+            for (b,m) in zip(a,n):
+                sum+=b*np.log10(cutoff)**m
+        else:
+            for (b,m) in zip(a,n):
+                sum+=b*np.log10(self.erange)**m
+        return 10**sum
+
+        self.assertTrue(np.isclose(sum, fcycles))
+
+    def test_rupturetime(self):
+        rtime=self.structmat.time_to_rupture(self.rupture_pname, self.T, self.stress)
+
+        C=17.16
+        a=np.array([-1475.23, 7289.41, -16642.64, 35684.60])
+        n=np.array([3,2,1,0])
+        sum = 0
+        for (b,m) in zip(a,n):
+              sum+=b*np.log10(self.stress)**m
+        sum=10**(sum/self.T-C)
+
+        self.assertTrue(np.isclose(sum, rtime))
+
+    def test_inside_envelope(self):
+      """
+        Test interaction_fatigue and interaction_creep
+      """
+      self.assertTrue(self.structmat.inside_envelope(self.cfinteraction_pname,self.true_inside_envelope[0],self.true_inside_envelope[1]))
+      self.assertFalse(self.structmat.inside_envelope(self.cfinteraction_pname,self.false_inside_envelope[0],self.false_inside_envelope[1]))
+      with self.assertRaises(ValueError):
+          self.structmat.inside_envelope(self.cfinteraction_pname,self.error_inside_envelope[0],self.error_inside_envelope[1])
