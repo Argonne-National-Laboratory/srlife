@@ -457,7 +457,7 @@ class Tube:
       Parameters:
         times:      time values
     """
-    for name,res in self.results.items():
+    for _,res in self.results.items():
       if res.shape[0] != len(times):
         raise ValueError("Cannot change times to provided values, will be"
             " incompatible with existing results")
