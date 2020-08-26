@@ -5,3 +5,6 @@ vtk
 nose
 matplotlib
 pylint
+neml
+scikit-fem
+meshio
