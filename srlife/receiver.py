@@ -312,6 +312,7 @@ class Tube:
 
     self.outer_bc = None
     self.inner_bc = None
+    self.pressure_bc = None
 
     self.T0 = T0
 
@@ -433,6 +434,11 @@ class Tube:
         return False
       base = (base and self.inner_bc.close(other.inner_bc))
 
+    if self.pressure_bc:
+      if not other.pressure_bc:
+        return False
+      base = (base and self.pressure_bc.close(other.pressure_bc))
+
     base = (base and self.abstraction == other.abstraction)
     if self.abstraction == "2D" or self.abstraction == "1D":
       base = (base and np.isclose(self.plane, other.plane))
@@ -514,6 +520,15 @@ class Tube:
     else:
       raise ValueError("Wall location must be either inner or outer")
 
+  def set_pressure_bc(self, bc):
+    """
+      Set the pressure boundary condition
+
+      Parameters:
+        bc:     boundary condition object
+    """
+    self.pressure_bc = bc
+
   def save(self, fobj):
     """
       Save to an HDF5 file
@@ -549,6 +564,10 @@ class Tube:
       grp = fobj.create_group("inner_bc")
       self.inner_bc.save(grp)
 
+    if self.pressure_bc:
+      grp = fobj.create_group("pressure_bc")
+      self.pressure_bc.save(grp)
+
     fobj.attrs["T0"] = self.T0
 
   @classmethod
@@ -579,6 +598,9 @@ class Tube:
 
     if "inner_bc" in fobj:
       res.set_bc(ThermalBC.load(fobj["inner_bc"]), "inner")
+
+    if "pressure_bc" in fobj:
+      res.set_pressure_bc(PressureBC.load(fobj["pressure_bc"]))
 
     return res
 
@@ -613,6 +635,67 @@ def _make_ifn(base):
       return _vector_interpolate(base, ndata)
 
   return ifn
+
+class PressureBC:
+  """
+    Simple class to store tube pressure, assumed to be constant
+    in space and just vary with time.
+  """
+  def __init__(self, times, data):
+    """
+      Parameters:
+        times       times throughout load cycle
+        data        pressure values
+    """
+    self.times = times
+    if self.times.shape != data.shape:
+      raise ValueError("Times and data should have the same shape!")
+    self.data = data
+
+    self.ifn = inter.interp1d(self.times, self.data)
+
+  @classmethod
+  def load(cls, fobj):
+    """
+      Load from an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    return cls(np.copy(fobj["times"]), np.copy(fobj["data"]))
+
+  def save(self, fobj):
+    """
+      Save to an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    fobj.create_dataset("times", data = self.times)
+    fobj.create_dataset("data", data = self.data)
+
+  @property
+  def ntime(self):
+    """
+      Number of time steps
+    """
+    return len(self.times)
+
+  def pressure(self, t):
+    """
+      Return the pressure as a function of time
+    """
+    return self.ifn(t)
+
+  def close(self, other):
+    """
+      Test method for comparing BCs
+
+      Parameters:
+        other       other object
+    """
+    return (np.allclose(self.times, other.times)
+        and np.allclose(self.data, other.data))
 
 class ThermalBC:
   """
