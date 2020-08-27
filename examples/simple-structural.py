@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
   T0 = 300
   
-  D = 3
+  D = 1
 
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
   if D == 1:

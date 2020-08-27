@@ -191,6 +191,35 @@ class PythonTubeSolver(TubeSolver):
     """
     state_np1 = state_n.copy()
 
+    t_np1 = tube.times[i]
+    t_n = tube.times[i-1]
+
+    if 'temperature' in tube.results:
+      state_np1.temperature = self._res2quad(state_np1,
+          self._tube2fea(tube, tube.results['temperature'][i]))
+      state_n.temperature = self._res2quad(state_n,
+          self._tube2fea(tube, tube.results['temperature'][i-1]))
+    else:
+      state_np1.temperature = np.zeros(state_np1.temperature.shape)
+      state_n.temperature = np.zeros(state_n.temperature.shape)
+
+    if tube.pressure_bc:
+      p_np1 = tube.pressure_bc.pressure(t_np1)
+      p_n = tube.pressure_bc.pressure(t_n)
+    else:
+      p_np1 = 0.0
+      p_n = 0.0
+
+    if tube.ndim == 1:
+      solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, strain)
+    elif tube.ndim == 2:
+      solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, strain)
+    elif tube.ndim == 3:
+      solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, 
+          strain * tube.h)
+    else:
+      raise ValueError("Unknown dimension %i" % tube.ndim)
+
     return state_np1
 
   def init_state(self, tube, mat):
@@ -284,6 +313,7 @@ class PythonTubeSolver(TubeSolver):
       self.thermal_strain = np.zeros((self.basis.nelems,self.nqi,6))
       self.history = np.repeat(self.material.init_store()[:,np.newaxis], self.nq,
           axis = 1).reshape(self.basis.nelems, self.nqi, self.material.nstore)
+      self.temperature = np.zeros((self.basis.nelems,self.nqi))
 
     def copy(self):
       """
@@ -298,6 +328,7 @@ class PythonTubeSolver(TubeSolver):
       new.mechanical_strain = np.zeros(new.mechanical_strain.shape)
       new.thermal_strain = np.zeros(new.thermal_strain.shape)
       new.history = np.zeros(new.history.shape)
+      new.temperature = np.zeros(new.temperature.shape)
       return new
     
     @property
@@ -307,3 +338,48 @@ class PythonTubeSolver(TubeSolver):
     @property
     def nq(self):
       return self.nqi * self.basis.mesh.nelements
+
+def solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+  """
+    Solve an increment using the python 1d solver
+
+    Parameters:
+      state_n       previous state
+      t_n           previous time
+      p_n           previous pressure
+      state_np1     next state
+      t_np1         next time
+      p_np1         next pressure
+      ez_np1        next axial strain
+  """
+  pass
+
+def solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+  """
+    Solve an increment using the python 2d solver
+
+    Parameters:
+      state_n       previous state
+      t_n           previous time
+      p_n           previous pressure
+      state_np1     next state
+      t_np1         next time
+      p_np1         next pressure
+      ez_np1        next axial strain
+  """
+  pass
+
+def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+  """
+    Solve an increment using the python 3d solver
+
+    Parameters:
+      state_n       previous state
+      t_n           previous time
+      p_n           previous pressure
+      state_np1     next state
+      t_np1         next time
+      p_np1         next pressure
+      dz_np1        next axial displacement
+  """
+  pass
