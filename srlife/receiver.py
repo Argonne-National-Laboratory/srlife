@@ -328,7 +328,7 @@ class Tube:
     elif self.abstraction == "1D":
       return 1
     else:
-      raise ValueError("Tube abstraction unknown!") 
+      raise ValueError("Tube abstraction unknown!")
 
   @property
   def dim(self):

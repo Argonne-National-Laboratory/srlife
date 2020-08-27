@@ -4,6 +4,7 @@ import sys
 sys.path.append('..')
 
 from srlife import receiver, thermal, materials, structural
+from neml import parse, models
 
 import numpy as np
 
@@ -22,7 +23,7 @@ if __name__ == "__main__":
 
   T0 = 300
   
-  D = 1
+  D = 3
 
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
   if D == 1:
@@ -34,8 +35,8 @@ if __name__ == "__main__":
 
   tube.set_times(times)
 
-  Tf_0 = 300
-  Tf_m = 600
+  Tf_0 = 300 + 273.15
+  Tf_m = 600 + 273.15
 
   def fluid_T(t):
     if t < tmax / 2.0:
@@ -62,4 +63,17 @@ if __name__ == "__main__":
   fmat = materials.ConstantFluidMaterial({"dummy": 8.1e-3})
 
   solver.solve(tube, tmat, fmat)
+  
+  ssolver = structural.PythonTubeSolver()
 
+  smat = parse.parse_xml("A740H_structural.xml", "elastic_model")
+
+  structural.setup_tube_structural_solve(tube)
+  state_n = ssolver.init_state(tube, smat)
+
+  for i in range(1,len(tube.times)):
+    state_np1 = ssolver.solve(tube, i, state_n, 0)
+    ssolver.dump_state(tube, i, state_np1)
+    state_n = state_np1
+
+  tube.write_vtk("structural")

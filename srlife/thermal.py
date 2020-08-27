@@ -355,8 +355,6 @@ class FiniteDifferenceImplicitThermalProblem:
       if i == 0:
         nr0 = nr
 
-      #print(i,nr,nr/nr0)
-
       if (nr < self.atol or nr/nr0 < self.rtol) and i > 0:
         break
 
