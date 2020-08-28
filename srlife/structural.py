@@ -3,13 +3,17 @@
   structural problem.
 """
 
+from srlife.helpers import sym, usym, ms2ts
+
 from abc import ABC, abstractmethod
 from skfem import *
 from skfem import mesh, element, mapping
 from skfem.helpers import dot as skdot
+from skfem import helpers, utils
 
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
+import numpy.linalg as la
 
 import copy
 
@@ -21,15 +25,15 @@ class TubeSolver(ABC):
       1) A state object containing whatever the solver needs to execute the solve
          These objects must contain a method for dumping the required results fields into
          a Tube object
-      2) A input net axial strain (bottom assumed fixed)
+      2) A input top displacement
 
     It must return:
       1) A copied and updated state
       2) The force on the top face
-      3) The derivative of the force with respect to the net strain
+      3) The derivative of the force with respect to the displacement
   """
   @abstractmethod
-  def solve(self, tube, i, state_n, strain):
+  def solve(self, tube, i, state_n, dtop):
     """
       Solve the structural tube problem for a single time step
 
@@ -37,7 +41,7 @@ class TubeSolver(ABC):
         tube:       tube object with all bcs
         i:          time index to reference in tube results
         state:      state object
-        strain:     top strain
+        dtop:       top displacement
     """
     pass
 
@@ -162,11 +166,16 @@ def setup_tube_structural_solve(tube):
     for suffix in suffixes:
       tube.add_results(field+suffix, np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
 
+  suffixes = ["_x", "_y", "_z"]
+  for i in range(tube.ndim):
+    tube.add_results("disp"+suffixes[i], np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
+
 class PythonTubeSolver(TubeSolver):
   """
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
-  def __init__(self, rtol = 1.0e-6, atol = 1.0e-8, qorder = 1):
+  def __init__(self, rtol = 1.0e-6, atol = 1.0e-8, qorder = 1,
+      dof_tol = 1.0e-6, miter = 10, verbose = False):
     """
       Setup the solver with common parameters
 
@@ -174,12 +183,17 @@ class PythonTubeSolver(TubeSolver):
         rtol        relative tolerance for NR iterations
         atol        absolute tolerance for NR iterations
         qorder      quadrature order
+        dof_tol     geometric tolerance on finding boundary
+                    degrees of freedom
+        miter       maximum newton-raphson iterations
+        verbose     verbose solve
     """
-    self.rtol = rtol
-    self.atol = atol
     self.qorder = qorder
+    self.solver_options = {'rtol': rtol, 'atol': atol,
+        'dof_tol': dof_tol, 'miter': miter, 'verbose': verbose}
 
-  def solve(self, tube, i, state_n, strain):
+
+  def solve(self, tube, i, state_n, dtop):
     """
       Solve the structural tube problem for a single time step
 
@@ -187,7 +201,7 @@ class PythonTubeSolver(TubeSolver):
         tube:       tube object with all bcs
         i:          time index to reference in tube results
         state:      state object
-        strain:     top strain
+        dtop:       top disoplacement
     """
     state_np1 = state_n.copy()
 
@@ -211,12 +225,14 @@ class PythonTubeSolver(TubeSolver):
       p_n = 0.0
 
     if tube.ndim == 1:
-      solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, strain)
+      solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
+          self.solver_options)
     elif tube.ndim == 2:
-      solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, strain)
+      solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
+          self.solver_options)
     elif tube.ndim == 3:
       solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, 
-          strain * tube.h)
+          dtop, self.solver_options)
     else:
       raise ValueError("Unknown dimension %i" % tube.ndim)
 
@@ -242,13 +258,21 @@ class PythonTubeSolver(TubeSolver):
         i:          which time step this is
         state:      state object
     """
+    # Displacement
+    suffixes = ["_x", "_y", "_z"]
+    for k in range(state.ndim):
+      tube.results["disp"+suffixes[k]][i] = self._fea2tube(tube,state.displacements[k::state.ndim])
+    
+    # The tensor fields
     order = ['_xx', '_yy', '_zz', '_yz', '_xz', '_xy']
+    inds = [(0,0),(1,1),(2,2),(1,2),(0,2),(0,1)]
     fields = ['stress', 'strain', 'mechanical_strain', 'thermal_strain']
     data = [state.stress, state.strain, state.mechanical_strain, 
         state.thermal_strain]
-    for k,(d,f,o) in enumerate(zip(data,fields,order)):
-      tube.results[f+o][i] = self._fea2tube(tube, self._quad2res(state, 
-        d[:,:,k]))
+    for f,d in zip(fields, data):
+      for ind,o in zip(inds,order):
+        tube.results[f+o][i] = self._fea2tube(tube, self._quad2res(state, 
+          d[ind]))
 
   def _tube2fea(self, tube, f):
     """
@@ -268,10 +292,9 @@ class PythonTubeSolver(TubeSolver):
 
       This does Laplacian smoothing
     """
-    mass = BilinearForm(lambda u,v,w: u*v)
-    force = LinearForm(lambda v,w: skdot(w['values'],v))
-    Md = asm(mass, state.sbasis)
-    fd = asm(force, state.sbasis, values = f)
+    Md = asm(BilinearForm(lambda u,v,w: v*u), state.sbasis)
+    fd = asm(LinearForm(lambda v,w: v*w['values']),
+      state.sbasis, values = f)
 
     return spla.spsolve(Md,fd)
 
@@ -291,29 +314,85 @@ class PythonTubeSolver(TubeSolver):
       """
       self.material = mat
       self.mesh = mesh_tube(tube)
+      self.qorder = qorder
+      self.ndim = tube.ndim
 
-      betype = (element.ElementLineP1(), element.ElementQuad1(), 
-          element.ElementHex1())[tube.ndim-1]
-      if tube.ndim == 1:
-        self.basis = InteriorBasis(mesh = self.mesh, 
-            elem = betype, intorder = qorder)
-        self.sbasis = self.basis
-      else:
-        mapping = MappingIsoparametric(self.mesh, betype)      
-        etype = element.ElementVectorH1(betype)
-        self.basis = InteriorBasis(mesh = self.mesh, elem = etype, 
-            mapping = mapping, intorder = qorder)
-        self.sbasis = InteriorBasis(mesh = self.mesh,
-            elem = betype, intorder = qorder)
+      self.ri = tube.r - tube.t
+      self.ro = tube.r
+      self.h = tube.h
+
+      # Define the pressure boundary
+      self.define_boundary(tube)
       
+      # Base element type
+      self.betype = (element.ElementLineP1(), element.ElementQuad1(), 
+          element.ElementHex1())[tube.ndim-1]
+
+      # Define the scalar basis for interpolation
+      self.define_scalar_basis()
+
+      # Define the interior basis for momentum balance
+      self.define_interior_basis()
+
+      # Define the side basis for pressure
+      self.define_exterior_basis()
+    
       # Now that is out of the way, setup the actual required storage
-      self.stress = np.zeros((self.basis.nelems,self.nqi,6))
-      self.strain = np.zeros((self.basis.nelems,self.nqi,6))
-      self.mechanical_strain = np.zeros((self.basis.nelems,self.nqi,6))
-      self.thermal_strain = np.zeros((self.basis.nelems,self.nqi,6))
+      self.stress = np.zeros((3,3,self.basis.nelems,self.nqi))
+      self.strain = np.zeros((3,3,self.basis.nelems,self.nqi))
+      self.mechanical_strain = np.zeros((3,3,self.basis.nelems,self.nqi))
+      self.thermal_strain = np.zeros((3,3,self.basis.nelems,self.nqi))
       self.history = np.repeat(self.material.init_store()[:,np.newaxis], self.nq,
-          axis = 1).reshape(self.basis.nelems, self.nqi, self.material.nstore)
+          axis = 1).reshape(self.material.nstore,self.basis.nelems, self.nqi)
+      self.tangent = np.zeros((3,3,3,3,self.basis.nelems,self.nqi))
       self.temperature = np.zeros((self.basis.nelems,self.nqi))
+      self.displacements = self.basis.zeros()
+      self.time = 0.0
+
+    def define_boundary(self, tube, tol = 0.5):
+      """
+        Define the pressure boundary
+
+        Parameters:
+          tube      tube object for geometry
+
+        Additional parameters:
+          tol       thickness tolerance for finding faces
+      """
+      atol = tol * tube.t
+      if self.ndim == 1:
+        self.mesh.define_boundary("pressure", 
+            lambda x: np.logical_and(x > tube.r - tube.t - atol, 
+              x < tube.r - tube.t + atol))
+      else:
+        self.mesh.define_boundary("pressure",
+            lambda x: np.logical_and(
+              np.sqrt(x[0]**2.0+x[1]**2.0) > tube.r - tube.t - atol,
+              np.sqrt(x[0]**2.0+x[1]**2.0) < tube.r - tube.t + atol))
+
+    def define_scalar_basis(self):
+      """
+        Define the scalar basis for mapping around result fields
+      """
+      self.sbasis = InteriorBasis(mesh = self.mesh,
+          elem = self.betype, intorder = self.qorder)
+
+    def define_interior_basis(self):
+      """
+        Define the interior basis for the balance equation
+      """
+      etype = element.ElementVectorH1(self.betype)
+      self.basis = InteriorBasis(mesh = self.mesh, elem = etype, 
+          intorder = self.qorder)
+
+    def define_exterior_basis(self):
+      """
+        Define the sideset basis for applying pressure
+      """
+      etype = element.ElementVectorH1(self.betype)
+      self.pbasis = FacetBasis(mesh = self.mesh, elem = etype, 
+          intorder = self.qorder,
+          facets = self.mesh.boundaries['pressure'])
 
     def copy(self):
       """
@@ -328,7 +407,9 @@ class PythonTubeSolver(TubeSolver):
       new.mechanical_strain = np.zeros(new.mechanical_strain.shape)
       new.thermal_strain = np.zeros(new.thermal_strain.shape)
       new.history = np.zeros(new.history.shape)
+      new.tangent = np.zeros(new.tangent.shape)
       new.temperature = np.zeros(new.temperature.shape)
+      new.displacements = np.zeros(new.displacements.shape)
       return new
     
     @property
@@ -339,47 +420,322 @@ class PythonTubeSolver(TubeSolver):
     def nq(self):
       return self.nqi * self.basis.mesh.nelements
 
-def solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+def solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
+    solver_options):
   """
     Solve an increment using the python 1d solver
 
     Parameters:
-      state_n       previous state
-      t_n           previous time
-      p_n           previous pressure
-      state_np1     next state
-      t_np1         next time
-      p_np1         next pressure
-      ez_np1        next axial strain
+      state_n           previous state
+      t_n               previous time
+      p_n               previous pressure
+      state_np1         next state
+      t_np1             next time
+      p_np1             next pressure
+      top_np1           next axial displacement
+      solver_options    various solver options
   """
-  pass
+  solver = PythonSolver(state_n, state_np1, solver_options,
+      set_strain = top_np1 / state_np1.h)
 
-def solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+  solver.solve(t_n, t_np1, p_np1)
+
+def solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
+    solver_options):
   """
     Solve an increment using the python 2d solver
 
     Parameters:
-      state_n       previous state
-      t_n           previous time
-      p_n           previous pressure
-      state_np1     next state
-      t_np1         next time
-      p_np1         next pressure
-      ez_np1        next axial strain
+      state_n           previous state
+      t_n               previous time
+      p_n               previous pressure
+      state_np1         next state
+      t_np1             next time
+      p_np1             next pressure
+      top_np1           next axial displacement
+      solver_options    various solver options
   """
-  pass
+  solver = PythonSolver(state_n, state_np1, solver_options,
+      set_strain = top_np1 / state_np1.h)
+  
+  solver.solve(t_n, t_np1, p_np1)
 
-def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, ez_np1):
+def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
+    solver_options):
   """
     Solve an increment using the python 3d solver
 
     Parameters:
-      state_n       previous state
-      t_n           previous time
-      p_n           previous pressure
-      state_np1     next state
-      t_np1         next time
-      p_np1         next pressure
-      dz_np1        next axial displacement
+      state_n           previous state
+      t_n               previous time
+      p_n               previous pressure
+      state_np1         next state
+      t_np1             next time
+      p_np1             next pressure
+      top_np1           next axial displacement
+      solver_options    various solver options
   """
-  pass
+  solver = PythonSolver(state_n, state_np1, solver_options)
+  
+  # Fix the bottom face
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      x[2] < solver_options['dof_tol'])
+  dofs = state_np1.basis.nodal_dofs[2,node].flatten()
+  solver.add_dirichlet_bc(dofs, 0.0)
+
+  # Fix the top face
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      x[2] > state_np1.h - solver_options['dof_tol'])
+  dofs = state_np1.basis.nodal_dofs[2,node].flatten()
+  solver.add_dirichlet_bc(dofs, top_np1)
+  
+  """
+  # Fix 3 o'clock in x and y
+  node = state_np1.mesh.nodes_satisfying(lambda x: 
+      np.logical_and(np.logical_and(
+        x[0] > state_np1.ro - solver_options['dof_tol'],
+        np.logical_and(x[1] < solver_options['dof_tol'], 
+          x[1] > -solver_options['dof_tol'])), x[2] < solver_options['dof_tol']))
+  if len(node) != 1:
+    raise RuntimeError("Unexpectedly generated more than 1 node for fixed BC!")
+  dofs = state_np1.basis.nodal_dofs[:2,node].flatten()
+  solver.add_dirichlet_bc(dofs, 0)
+
+  # Fix 12 o'clock in x
+  node = state_np1.mesh.nodes_satisfying(lambda x: 
+      np.logical_and(np.logical_and(
+        x[1] > state_np1.ro - solver_options['dof_tol'],
+        np.logical_and(x[0] < solver_options['dof_tol'], 
+          x[0] > -solver_options['dof_tol'])), x[2] < solver_options['dof_tol']))
+  if len(node) != 1:
+    raise RuntimeError("Unexpectedly generated more than 1 node for fixed BC!")
+  dofs = state_np1.basis.nodal_dofs[:1,node].flatten()
+  solver.add_dirichlet_bc(dofs, 0)
+  """
+
+  solver.solve(t_n, t_np1, p_np1)
+
+class PythonSolver:
+  """
+    Actually manages the solve with scikit-fem
+  """
+  def __init__(self, state_n, state_np1, solver_options,
+      set_strain = None):
+    """
+      Setup solver
+
+      Parameters:
+        state_n         previous state
+        state_np1       current state
+        solver_options  various 'how to solve' parameters
+
+      Additional parameters:
+        set_strain      set the zz strain to this value, if given
+    """
+    self.state_n = state_n
+    self.state_np1 = state_np1
+    self.options = solver_options
+    self.set_strain = None
+
+    self.ebcs = []
+
+    self.edofs = []
+    self.evalues = []
+
+    # Initialize the guess
+    self.setup_guess()
+
+    # The operators!
+    self.internal = LinearForm(lambda v, w: 
+        helpers.ddot(helpers.sym_grad(v),w['stress']))
+    self.external = LinearForm(lambda v, w: 
+        -helpers.dot(w['pressure']*w.n,v))
+    self.jac = BilinearForm(lambda u,v,w:
+        helpers.ddot(helpers.sym_grad(v),
+          helpers.ddot(w['C'],helpers.sym_grad(u))))
+
+  @property
+  def ndim(self):
+    return self.state_np1.ndim
+
+  def setup_guess(self):
+    """
+      Estimate the displacements
+    """
+    self.state_np1.displacements = self.state_n.displacements
+
+  def solve(self, t_n, t_np1, p):
+    """
+      Do the actual solve using Newton-Raphson iteration
+
+      Parameters:
+        t_n     previous time
+        t_np1   next time
+        p       pressure
+    """
+    # Setup the time step
+    self.state_n.time = t_n
+    self.state_np1.time = t_np1
+
+    # Assemble the dirichlet BCs into big vectors
+    self.assemble_dirichlet()
+    
+    # Do the initial stress update
+    self.update_state()
+
+    # Calculate the initial residual and jacobian
+    R = self.residual(p)
+    nR0 = la.norm(R[self.kdofs])
+
+    # Printing, if you want
+    if self.options['verbose']:
+      print("Iter\tnR\t\tnR/nR0")
+      print("%i\t%3.2e" % (0, nR0))
+
+    # Newton-Raphson iteration
+    for i in range(self.options['miter']):
+      # Get the actual sparse jacobian
+      J = self.jacobian()
+      # Update the displacements
+      self.state_np1.displacements -= self.linear_solve(J,R)
+      # Recalculate the state
+      self.update_state()
+      # Calculate the residual
+      R = self.residual(p)
+      # Do the convergence check and print update
+      nR = la.norm(R[self.kdofs])
+      if self.options['verbose']:
+        print("%i\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0))
+      if nR < self.options['atol'] or nR / nR0 < self.options['rtol']:
+        if self.options['verbose']:
+          print("")
+        break
+    else:
+      raise RuntimeError("Nonlinear iteration did not converge!")
+
+  def linear_solve(self, J, R):
+    """
+      Do the linear solve for a particular jacobian and residual
+
+      Parameters:
+        J       Jacobian sparse matrix
+        R       residual vector
+    """
+    return utils.solve(*utils.condense(J, R, D = self.edofs),
+        solver = utils.solver_direct_scipy())
+  
+  def residual(self, p):
+    """
+      Actually assemble the residual
+
+      Parameters:
+        p       Pressure, for the BC
+    """
+    F_int = asm(self.internal, self.state_np1.basis,
+        stress = self.state_np1.stress[:self.ndim,:self.ndim])
+    F_ext = asm(self.external, self.state_np1.pbasis, pressure = p)
+
+    return F_int - F_ext
+
+  def jacobian(self):
+    """
+      Actually assemble the jacobian
+    """
+    return asm(self.jac, self.state_np1.basis,
+        C = self.state_np1.tangent[:self.ndim,:self.ndim,
+          :self.ndim,:self.ndim])
+
+  def add_dirichlet_bc(self, dofs, value):
+    """
+      Add a dirichlet BC
+
+      Parameters:
+        dofs        plain dof list
+        value       value to set
+    """
+    self.ebcs.append((dofs,value))
+
+  def assemble_dirichlet(self):
+    """
+      Assemble the dirichlet BCs into big vectors
+    """
+    self.edofs = []
+    self.evalues = []
+
+    for d, v in self.ebcs:
+      self.edofs.extend(list(d))
+      self.evalues.extend([v] * len(d))
+    
+    self.edofs = np.array(self.edofs, dtype = int)
+    self.evalues = np.array(self.evalues)
+
+    inds = np.argsort(self.edofs)
+    self.edofs = self.edofs[inds]
+    self.evalues = self.evalues[inds]
+    self.kdofs = self.state_np1.basis.complement_dofs(self.edofs)
+
+  def update_state(self):
+    """
+      Make the state consistent with the new displacements
+    """
+    # Enforce the Dirichlet BCs in the vector
+    self.state_np1.displacements[self.edofs] = self.evalues
+    
+    # Calculate total strain
+    self.calculate_strain()
+
+    # Calculate thermal strain and mechanical strain
+    self.calculate_mechanical_strain()
+
+    # Calculate stress and tangent
+    self.calculate_stress_update()
+
+  def calculate_strain(self):
+    """
+      Calculate the strain based on the current displacements
+    """
+    self.state_np1.strain[:self.ndim,:self.ndim] = helpers.sym_grad(
+        self.state_np1.basis.interpolate(self.state_np1.displacements))
+    if self.set_strain:
+      self.state_np1.strain[2,2] = self.set_strain
+
+  def calculate_mechanical_strain(self):
+    """
+      Calculate the thermal strain increment and update mechanical strain
+    """
+    # Grab CTE values from NEML
+    cte_old = np.zeros(self.state_n.temperature.shape)
+    cte_new = np.zeros(self.state_np1.temperature.shape)
+    for ind in np.ndindex(self.state_np1.temperature.shape):
+      cte_old[ind] = self.state_n.material.alpha(
+          self.state_n.temperature[ind])
+      cte_new[ind] = self.state_np1.material.alpha(
+          self.state_np1.temperature[ind])
+
+    # Thermal strain = thermal_strain_old + alpha * Tdot
+    self.state_np1.thermal_strain = self.state_n.thermal_strain + np.eye(
+        3)[:,:,np.newaxis,np.newaxis] * (
+        (cte_new+cte_old)/2.0*(self.state_np1.temperature - 
+      self.state_n.temperature))
+
+    # Mechanical strain = total - thermal
+    self.state_np1.mechanical_strain = self.state_np1.strain - self.state_np1.thermal_strain
+
+  def calculate_stress_update(self):
+    """
+      The expensive function: update the stress and tangent
+    """
+    for e in range(self.state_np1.basis.nelems):
+      for q in range(self.state_np1.nqi):
+        s, h, A, _, _ = self.state_np1.material.update_sd(
+            sym(self.state_np1.mechanical_strain[:,:,e,q]),
+            sym(self.state_n.mechanical_strain[:,:,e,q]),
+            self.state_np1.temperature[e,q],
+            self.state_n.temperature[e,q],
+            self.state_np1.time, self.state_n.time,
+            sym(self.state_n.stress[:,:,e,q]), 
+            self.state_n.history[:,e,q], 0, 0)
+        
+        self.state_np1.stress[:,:,e,q] = usym(s)
+        self.state_np1.history[:,e,q] = h
+        self.state_np1.tangent[:,:,:,:,e,q] = ms2ts(A)

@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
   T0 = 300
   
-  D = 1
+  D = 3
 
   tube = receiver.Tube(R, t, h, nr, nt, nz, T0 = T0)
   if D == 1:
@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
   solver.solve(tube, tmat, fmat)
   
-  ssolver = structural.PythonTubeSolver()
+  ssolver = structural.PythonTubeSolver(verbose = True)
 
   smat = parse.parse_xml("A740H_structural.xml", "elastic_model")
 
