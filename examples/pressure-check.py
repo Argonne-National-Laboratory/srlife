@@ -42,7 +42,7 @@ if __name__ == "__main__":
   state_n = ssolver.init_state(tube, smat)
 
   for i in range(1,len(tube.times)):
-    state_np1 = ssolver.solve(tube, i, state_n, 0.1)
+    state_np1 = ssolver.solve(tube, i, state_n, 0.0)
     ssolver.dump_state(tube, i, state_np1)
     state_n = state_np1
 

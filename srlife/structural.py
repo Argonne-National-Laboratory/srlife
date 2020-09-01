@@ -489,30 +489,6 @@ def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
   dofs = state_np1.basis.nodal_dofs[2,node].flatten()
   solver.add_dirichlet_bc(dofs, top_np1)
   
-  """
-  # Fix 3 o'clock in x and y
-  node = state_np1.mesh.nodes_satisfying(lambda x: 
-      np.logical_and(np.logical_and(
-        x[0] > state_np1.ro - solver_options['dof_tol'],
-        np.logical_and(x[1] < solver_options['dof_tol'], 
-          x[1] > -solver_options['dof_tol'])), x[2] < solver_options['dof_tol']))
-  if len(node) != 1:
-    raise RuntimeError("Unexpectedly generated more than 1 node for fixed BC!")
-  dofs = state_np1.basis.nodal_dofs[:2,node].flatten()
-  solver.add_dirichlet_bc(dofs, 0)
-
-  # Fix 12 o'clock in x
-  node = state_np1.mesh.nodes_satisfying(lambda x: 
-      np.logical_and(np.logical_and(
-        x[1] > state_np1.ro - solver_options['dof_tol'],
-        np.logical_and(x[0] < solver_options['dof_tol'], 
-          x[0] > -solver_options['dof_tol'])), x[2] < solver_options['dof_tol']))
-  if len(node) != 1:
-    raise RuntimeError("Unexpectedly generated more than 1 node for fixed BC!")
-  dofs = state_np1.basis.nodal_dofs[:1,node].flatten()
-  solver.add_dirichlet_bc(dofs, 0)
-  """
-
   solver.solve(t_n, t_np1, p_np1)
 
 class PythonSolver:
@@ -546,13 +522,24 @@ class PythonSolver:
     self.setup_guess()
 
     # The operators!
-    self.internal = LinearForm(lambda v, w: 
-        helpers.ddot(helpers.sym_grad(v),w['stress']))
+    if self.ndim == 1:
+      # 1D axisymmetric is different than 2D/3D cartesian
+      self.internal = LinearForm(lambda v, w: 
+          v[1][0][0] * w['radial'] + v[0][0] * w['radial'] / w.x[0] - v[0][0] * w['hoop'] / w.x[0])
+      self.jac = BilinearForm(lambda u, v, w:
+        v[1][0][0] * w['Crr'] * u[1][0][0] + v[1][0][0] * w['Crt'] * u[0][0] / w.x[0]
+        + v[0][0] * (w['Crr'] * u[1][0][0] + w['Crt'] * u[0][0] / w.x[0]) / w.x[0]
+        - v[0][0] * (w['Ctr'] * u[1][0][0] + w['Ctt'] * u[0][0] / w.x[0]) / w.x[0])
+    else:
+      self.internal = LinearForm(lambda v, w: 
+          helpers.ddot(helpers.sym_grad(v),w['stress']))
+      self.jac = BilinearForm(lambda u,v,w:
+          helpers.ddot(helpers.sym_grad(v),
+            helpers.ddot(w['C'],helpers.sym_grad(u))))
+
+    # But this works out to be the same
     self.external = LinearForm(lambda v, w: 
         -helpers.dot(w['pressure']*w.n,v))
-    self.jac = BilinearForm(lambda u,v,w:
-        helpers.ddot(helpers.sym_grad(v),
-          helpers.ddot(w['C'],helpers.sym_grad(u))))
 
   @property
   def ndim(self):
@@ -576,7 +563,7 @@ class PythonSolver:
     # Setup the time step
     self.state_n.time = t_n
     self.state_np1.time = t_np1
-
+   
     # Assemble the dirichlet BCs into big vectors
     self.assemble_dirichlet()
     
@@ -631,8 +618,13 @@ class PythonSolver:
       Parameters:
         p       Pressure, for the BC
     """
-    F_int = asm(self.internal, self.state_np1.basis,
-        stress = self.state_np1.stress[:self.ndim,:self.ndim])
+    if self.ndim == 1:
+      F_int = asm(self.internal, self.state_np1.basis,
+          radial = self.state_np1.stress[0,0],
+          hoop = self.state_np1.stress[1,1])
+    else:
+      F_int = asm(self.internal, self.state_np1.basis,
+          stress = self.state_np1.stress[:self.ndim,:self.ndim])
     F_ext = asm(self.external, self.state_np1.pbasis, pressure = p)
 
     return F_int - F_ext
@@ -641,9 +633,16 @@ class PythonSolver:
     """
       Actually assemble the jacobian
     """
-    return asm(self.jac, self.state_np1.basis,
-        C = self.state_np1.tangent[:self.ndim,:self.ndim,
-          :self.ndim,:self.ndim])
+    if self.ndim == 1:
+      return asm(self.jac, self.state_np1.basis,
+          Crr = self.state_np1.tangent[0,0,0,0],
+          Crt = self.state_np1.tangent[0,0,1,1],
+          Ctt = self.state_np1.tangent[1,1,1,1],
+          Ctr = self.state_np1.tangent[1,1,0,0])
+    else:
+      return asm(self.jac, self.state_np1.basis,
+          C = self.state_np1.tangent[:self.ndim,:self.ndim,
+            :self.ndim,:self.ndim])
 
   def add_dirichlet_bc(self, dofs, value):
     """
@@ -694,8 +693,13 @@ class PythonSolver:
     """
       Calculate the strain based on the current displacements
     """
-    self.state_np1.strain[:self.ndim,:self.ndim] = helpers.sym_grad(
-        self.state_np1.basis.interpolate(self.state_np1.displacements))
+    U = self.state_np1.basis.interpolate(self.state_np1.displacements)
+
+    self.state_np1.strain[:self.ndim,:self.ndim] = helpers.sym_grad(U)
+    if self.ndim == 1:
+      # Cast needed b/c they don't have a divide operator!
+      self.state_np1.strain[1,1] = np.array(U
+          ) / np.array(self.state_np1.basis.interpolate(self.state_np1.mesh.p.flatten()))
     if self.set_strain:
       self.state_np1.strain[2,2] = self.set_strain
 
