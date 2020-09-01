@@ -511,7 +511,7 @@ class PythonSolver:
     self.state_n = state_n
     self.state_np1 = state_np1
     self.options = solver_options
-    self.set_strain = None
+    self.set_strain = set_strain
 
     self.ebcs = []
 
@@ -525,21 +525,19 @@ class PythonSolver:
     if self.ndim == 1:
       # 1D axisymmetric is different than 2D/3D cartesian
       self.internal = LinearForm(lambda v, w: 
-          v[1][0][0] * w['radial'] + v[0][0] * w['radial'] / w.x[0] - v[0][0] * w['hoop'] / w.x[0])
+          v[1][0][0] * w['radial'] - v[0][0] * w['radial'] / w.x[0] + v[0][0] * w['hoop'] / w.x[0])
       self.jac = BilinearForm(lambda u, v, w:
         v[1][0][0] * w['Crr'] * u[1][0][0] + v[1][0][0] * w['Crt'] * u[0][0] / w.x[0]
-        + v[0][0] * (w['Crr'] * u[1][0][0] + w['Crt'] * u[0][0] / w.x[0]) / w.x[0]
-        - v[0][0] * (w['Ctr'] * u[1][0][0] + w['Ctt'] * u[0][0] / w.x[0]) / w.x[0])
+        - v[0][0] * (w['Crr'] * u[1][0][0] + w['Crt'] * u[0][0] / w.x[0]) / w.x[0]
+        + v[0][0] * (w['Ctr'] * u[1][0][0] + w['Ctt'] * u[0][0] / w.x[0]) / w.x[0])
     else:
       self.internal = LinearForm(lambda v, w: 
           helpers.ddot(helpers.sym_grad(v),w['stress']))
       self.jac = BilinearForm(lambda u,v,w:
           helpers.ddot(helpers.sym_grad(v),
             helpers.ddot(w['C'],helpers.sym_grad(u))))
-
-    # But this works out to be the same
     self.external = LinearForm(lambda v, w: 
-        -helpers.dot(w['pressure']*w.n,v))
+        helpers.dot((-1.0)*w['pressure']*w.n,v))
 
   @property
   def ndim(self):
@@ -700,7 +698,8 @@ class PythonSolver:
       # Cast needed b/c they don't have a divide operator!
       self.state_np1.strain[1,1] = np.array(U
           ) / np.array(self.state_np1.basis.interpolate(self.state_np1.mesh.p.flatten()))
-    if self.set_strain:
+
+    if self.set_strain is not None:
       self.state_np1.strain[2,2] = self.set_strain
 
   def calculate_mechanical_strain(self):
