@@ -309,6 +309,7 @@ class Tube:
 
     self.times = []
     self.results = {}
+    self.quadrature_results = {}
 
     self.outer_bc = None
     self.inner_bc = None
@@ -480,6 +481,18 @@ class Tube:
     self._check_rdim(data)
     self.results[name] = data
 
+  def add_quadrature_results(self, name, data):
+    """
+      Add a result at the quadrature points
+
+      Parameters:
+        name:       parameter set name
+        data:       actual results data
+    """
+    if data.shape[0] != self.ntime:
+      raise ValueError("Quadrature data must have time axis first!")
+    self.quadrature_results[name] = data
+
   def _check_rdim(self, data):
     """
       Make sure the results array aligns with the correct dimension for the
@@ -556,6 +569,10 @@ class Tube:
     for name, result in self.results.items():
       grp.create_dataset(name, data = result)
 
+    grp = fobj.create_group("quadrature_results")
+    for name, result in self.quadrature_results.items():
+      grp.create_dataset(name, data = result)
+
     if self.outer_bc:
       grp = fobj.create_group("outer_bc")
       self.outer_bc.save(grp)
@@ -592,6 +609,10 @@ class Tube:
     grp = fobj["results"]
     for name in grp:
       res.add_results(name, np.copy(grp[name]))
+
+    grp = fobj["quadrature_results"]
+    for name in grp:
+      res.add_quadrature_results(name, np.copy(grp[name]))
 
     if "outer_bc" in fobj:
       res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")

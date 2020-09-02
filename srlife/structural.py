@@ -46,6 +46,16 @@ class TubeSolver(ABC):
     pass
 
   @abstractmethod
+  def setup_tube(self, tube):
+    """
+      Setup all the quadrature results fields in the tube
+
+      Parameters:
+        tube:       tube object
+    """
+    pass
+
+  @abstractmethod
   def init_state(self, tube, mat):
     """
       Initialize the solver state
@@ -149,27 +159,6 @@ def mesh3D(tube):
 
   return mesh.MeshHex(coords, conn)
 
-def setup_tube_structural_solve(tube):
-  """
-    Setup a tube for the structural solve by initializing all
-    the output fields with zeros
-
-    Parameters:
-      tube      tube object
-  """
-  nt = tube.ntime
-  
-  suffixes = ['_xx', '_yy', '_zz', '_yz', '_xz', '_xy']
-  fields = ['stress', 'strain', 'mechanical_strain', 'thermal_strain']
-
-  for field in fields:
-    for suffix in suffixes:
-      tube.add_results(field+suffix, np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
-
-  suffixes = ["_x", "_y", "_z"]
-  for i in range(tube.ndim):
-    tube.add_results("disp"+suffixes[i], np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
-
 class PythonTubeSolver(TubeSolver):
   """
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
@@ -192,6 +181,38 @@ class PythonTubeSolver(TubeSolver):
     self.solver_options = {'rtol': rtol, 'atol': atol,
         'dof_tol': dof_tol, 'miter': miter, 'verbose': verbose}
 
+  def setup_tube(self, tube):
+    """
+      Add all the quadrature result fields we will need
+
+      Parameters:
+        tube        tube object
+    """
+    nt = tube.ntime
+    
+    suffixes = ['_xx', '_yy', '_zz', '_yz', '_xz', '_xy']
+    fields = ['stress', 'strain', 'mechanical_strain', 'thermal_strain']
+
+    for field in fields:
+      for suffix in suffixes:
+        tube.add_quadrature_results(field+suffix, np.zeros((tube.ntime,) + self.qshape(tube)))
+
+    tube.add_quadrature_results("temperature", np.zeros((tube.ntime,) + self.qshape(tube)))
+
+    suffixes = ["_x", "_y", "_z"]
+    for i in range(tube.ndim):
+      tube.add_results("disp"+suffixes[i], np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
+
+  def qshape(self, tube):
+    """
+      Number of elements x number of quadrature points
+    """
+    if tube.dim[2] == 1:
+      nz = 1
+    else:
+      nz = tube.dim[2] - 1
+    nelem = (tube.dim[0] - 1) * (tube.dim[1]) * nz
+    return (nelem, (self.qorder+1)**tube.ndim)
 
   def solve(self, tube, i, state_n, dtop):
     """
@@ -253,7 +274,7 @@ class PythonTubeSolver(TubeSolver):
       Update the required results fields in a tube object with the
       current state
 
-      Parameters:
+        Parameters:
         tube:       tube to update
         i:          which time step this is
         state:      state object
@@ -271,8 +292,15 @@ class PythonTubeSolver(TubeSolver):
         state.thermal_strain]
     for f,d in zip(fields, data):
       for ind,o in zip(inds,order):
-        tube.results[f+o][i] = self._fea2tube(tube, self._quad2res(state, 
-          d[ind]))
+        tube.quadrature_results[f+o][i] = self._fea2tube_element(tube, d[ind])
+
+    tube.quadrature_results["temperature"][i] = self._fea2tube_element(tube, state.temperature)
+
+  def _fea2tube_element(self, tube, f):
+    """
+      Rearrange the elements (first index) of the field to match the vtk convention
+    """
+    return f
 
   def _tube2fea(self, tube, f):
     """
@@ -402,14 +430,14 @@ class PythonTubeSolver(TubeSolver):
         Hard copy the results
       """
       new = copy.copy(self)
-      new.stress = np.zeros(new.stress.shape)
-      new.strain = np.zeros(new.strain.shape)
-      new.mechanical_strain = np.zeros(new.mechanical_strain.shape)
-      new.thermal_strain = np.zeros(new.thermal_strain.shape)
-      new.history = np.zeros(new.history.shape)
-      new.tangent = np.zeros(new.tangent.shape)
-      new.temperature = np.zeros(new.temperature.shape)
-      new.displacements = np.zeros(new.displacements.shape)
+      new.stress = np.copy(self.stress)
+      new.strain = np.copy(self.strain)
+      new.mechanical_strain = np.copy(self.mechanical_strain)
+      new.thermal_strain = np.copy(self.thermal_strain)
+      new.history = np.copy(self.history)
+      new.tangent = np.copy(self.tangent)
+      new.temperature = np.copy(self.temperature)
+      new.displacements = np.copy(self.displacements)
       return new
     
     @property
@@ -457,7 +485,29 @@ def solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
   """
   solver = PythonSolver(state_n, state_np1, solver_options,
       set_strain = top_np1 / state_np1.h)
-  
+ 
+  # Fix the xy line
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      np.logical_and(
+        np.logical_and(x[0] < state_np1.ro + solver_options['dof_tol'],
+          x[0] > state_np1.ro - solver_options['dof_tol']),
+        np.logical_and(x[1] < solver_options['dof_tol'],
+          x[1] > -solver_options['dof_tol'])))
+  dofs_x = state_np1.basis.nodal_dofs[0,node].flatten()
+  solver.add_dirichlet_bc(dofs_x, 0.0)
+  dofs_y = state_np1.basis.nodal_dofs[1,node].flatten()
+  solver.add_dirichlet_bc(dofs_y, 0.0)
+
+  # Fix the y line
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      np.logical_and(
+        np.logical_and(-x[0] < state_np1.ro + solver_options['dof_tol'],
+          -x[0] > state_np1.ro - solver_options['dof_tol']),
+        np.logical_and(x[1] < solver_options['dof_tol'],
+          x[1] > -solver_options['dof_tol'])))
+  dofs_y = state_np1.basis.nodal_dofs[1,node].flatten()
+  solver.add_dirichlet_bc(dofs_y, 0.0)
+
   solver.solve(t_n, t_np1, p_np1)
 
 def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
@@ -477,6 +527,30 @@ def solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
   """
   solver = PythonSolver(state_n, state_np1, solver_options)
   
+  # Fix the xy line
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      np.logical_and(np.logical_and(
+        np.logical_and(x[0] < state_np1.ro + solver_options['dof_tol'],
+          x[0] > state_np1.ro - solver_options['dof_tol']),
+        np.logical_and(x[1] < solver_options['dof_tol'],
+          x[1] > -solver_options['dof_tol'])),
+        x[2] < solver_options['dof_tol']))
+  dofs_x = state_np1.basis.nodal_dofs[0,node].flatten()
+  solver.add_dirichlet_bc(dofs_x, 0.0)
+  dofs_y = state_np1.basis.nodal_dofs[1,node].flatten()
+  solver.add_dirichlet_bc(dofs_y, 0.0)
+
+  # Fix the y line
+  node = state_np1.mesh.nodes_satisfying(lambda x:
+      np.logical_and(np.logical_and(
+        np.logical_and(-x[0] < state_np1.ro + solver_options['dof_tol'],
+          -x[0] > state_np1.ro - solver_options['dof_tol']),
+        np.logical_and(x[1] < solver_options['dof_tol'],
+          x[1] > -solver_options['dof_tol'])),
+        x[2] < solver_options['dof_tol']))
+  dofs_y = state_np1.basis.nodal_dofs[1,node].flatten()
+  solver.add_dirichlet_bc(dofs_y, 0.0)
+
   # Fix the bottom face
   node = state_np1.mesh.nodes_satisfying(lambda x:
       x[2] < solver_options['dof_tol'])
@@ -576,6 +650,11 @@ class PythonSolver:
     if self.options['verbose']:
       print("Iter\tnR\t\tnR/nR0")
       print("%i\t%3.2e" % (0, nR0))
+    
+    # Can skip iteration if the atol is met
+    if nR0 < self.options['atol']:
+      print("")
+      return
 
     # Newton-Raphson iteration
     for i in range(self.options['miter']):
@@ -742,3 +821,4 @@ class PythonSolver:
         self.state_np1.stress[:,:,e,q] = usym(s)
         self.state_np1.history[:,e,q] = h
         self.state_np1.tangent[:,:,:,:,e,q] = ms2ts(A)
+    
