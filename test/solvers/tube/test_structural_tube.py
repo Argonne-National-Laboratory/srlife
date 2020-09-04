@@ -1,5 +1,7 @@
 import unittest
 
+import os.path
+
 # Shut up matplotlib
 import logging
 mpl_logger = logging.getLogger('matplotlib')
@@ -12,7 +14,7 @@ sys.path.append("test/solvers/tube")
 sys.path.append("../../..")
 from srlife import structural, receiver
 
-from neml import elasticity, models
+from neml import elasticity, models, parse
 
 from run_structural_tube_verification import cases, do_complete_comparison
 
@@ -127,7 +129,7 @@ class TestAxialStiffnessExact(unittest.TestCase):
     self.force_exact = np.pi * (self.ro**2.0 - self.ri**2.0) * self.E * self.d / self.h
     self.stiffness_exact = np.pi * (self.ro**2.0 - self.ri**2.0) * self.E / self.h
 
-    self.solver = structural.PythonTubeSolver(verbose = True) 
+    self.solver = structural.PythonTubeSolver(verbose = False) 
 
   def _solve(self, d):
     self.solver.setup_tube(self.tube)
@@ -160,3 +162,59 @@ class TestAxialStiffnessExact(unittest.TestCase):
 
     self.assertAlmostEqual(self.force_exact, state.force / cf, places = 3)
     self.assertAlmostEqual(self.stiffness_exact, state.stiffness / cf, places = 3)
+
+class TestAxialStiffnessNumerical(unittest.TestCase):
+  def setUp(self):
+    self.ro = 5
+    self.ri = 4.5
+    self.h = 2.5
+
+    self.nr = 10
+    self.nt = 20
+    self.nz = 5
+
+    self.E = 150000.0
+    self.nu = 0.35
+
+    self.tube = receiver.Tube(self.ro, self.ro - self.ri, self.h, self.nr, self.nt, self.nz)
+    self.times = np.array([0,1])
+    self.tube.set_times(self.times)
+
+    self.tube.set_pressure_bc(receiver.PressureBC(self.times, self.times / 50.0))
+
+    self.mat = parse.parse_xml(os.path.join(os.path.dirname(__file__),
+      'moose-verification', 'model.xml'), 'creeping')
+
+    self.d = 0.25
+
+    self.solver = structural.PythonTubeSolver(verbose = False) 
+
+  def _solve(self, d):
+    self.solver.setup_tube(self.tube)
+    state_n = self.solver.init_state(self.tube, self.mat)
+
+    return self.solver.solve(self.tube, 1, state_n, d)
+
+  def test_1D(self):
+    self.tube.make_1D(self.h/ 2, 0)
+
+    exact = self._solve(self.d).stiffness
+    numerical = differentiate(lambda d: self._solve(d).force, self.d)
+
+    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
+
+  def test_2D(self):
+    self.tube.make_2D(self.h/ 2)
+
+    exact = self._solve(self.d).stiffness
+    numerical = differentiate(lambda d: self._solve(d).force, self.d)
+
+    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
+
+# Too heavy
+
+#  def test_3D(self):
+#    exact = self._solve(self.d).stiffness
+#    numerical = differentiate(lambda d: self._solve(d).force, self.d)
+#
+#    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
