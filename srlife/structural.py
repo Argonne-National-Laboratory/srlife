@@ -31,6 +31,8 @@ class TubeSolver(ABC):
       1) A copied and updated state
       2) The force on the top face
       3) The derivative of the force with respect to the displacement
+
+      These three are grouped in a State object
   """
   @abstractmethod
   def solve(self, tube, i, state_n, dtop):
@@ -377,6 +379,9 @@ class PythonTubeSolver(TubeSolver):
       self.displacements = self.basis.zeros()
       self.time = 0.0
 
+      self.force = 0.0
+      self.stiffness = 0.0
+
     def define_boundary(self, tube, tol = 0.5):
       """
         Define the pressure boundary
@@ -651,13 +656,13 @@ class PythonSolver:
       print("Iter\tnR\t\tnR/nR0")
       print("%i\t%3.2e" % (0, nR0))
     
-    # Can skip iteration if the atol is met
-    if nR0 < self.options['atol']:
-      print("")
-      return
-
     # Newton-Raphson iteration
     for i in range(self.options['miter']):
+      # Can immediately skip if the initial residual is 
+      # less than the absolute tol
+      if nR0 < self.options['atol']:
+        print("")
+        break
       # Get the actual sparse jacobian
       J = self.jacobian()
       # Update the displacements
@@ -677,6 +682,69 @@ class PythonSolver:
     else:
       raise RuntimeError("Nonlinear iteration did not converge!")
 
+    # Calculate the axial force and stiffness
+    J = self.jacobian() # Need the current tangent
+    if self.state_np1.ndim == 1 or self.state_np1.ndim == 2:
+      self.calculate_axial_from_stress(R, J)
+    else:
+      self.calculate_axial_from_fea(R, J)
+  
+  def calculate_axial_from_stress(self, R, J):
+    """
+      Calculate the axial force by integrating sigma_zz over the area
+
+      Parameters:
+        R       final residual
+        J       final jacobian
+    """
+    if self.state_np1.ndim == 1:
+      dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0])[0][0] * self.state_np1.basis.dx * 2.0 * np.pi
+    else:
+      dx = self.state_np1.basis.dx
+
+    fake_force = self._internal_force(self.state_np1.tangent[:,:,2,2])
+    de = utils.solve(*utils.condense(J, fake_force, D = self.edofs),
+        solver = utils.solver_direct_scipy())
+    fake_strain = self.calculate_strain(de)
+    integrand1 = np.einsum('iijk', self.state_np1.tangent[2,2] * fake_strain)
+    integrand2 = self.state_np1.tangent[2,2,2,2]
+
+    self.state_np1.force = np.sum(self.state_np1.stress[2,2] * dx)
+    self.state_np1.stiffness = np.sum((-integrand1 + integrand2) * dx) / self.state_np1.h
+
+  def calculate_axial_from_fea(self, R, J):
+    """
+      Calculate the axial force by summing the discrete forces on the top dofs
+
+      Parameters:
+        R       final residual
+        J       final jacobian
+    """
+    node = self.state_np1.mesh.nodes_satisfying(lambda x:
+        x[2] > self.state_np1.h - self.options['dof_tol'])
+    dofs = self.state_np1.basis.nodal_dofs[2,node].flatten()
+    
+    # There is a better way to do this
+    sdofs = [list(self.edofs).index(d) for d in dofs]
+    dotme = np.zeros((len(self.edofs),))
+    dotme[sdofs] = 1.0
+
+    K = self.state_np1.basis.complement_dofs(self.edofs)
+    
+    # Straightforward
+    self.state_np1.force = np.sum(R[dofs])
+    
+    # Expensive but eh can optimize later
+    Jl = J.tolil()
+    J11 = Jl[K,:][:,K].tocsr() 
+    J12 = Jl[K,:][:,self.edofs]
+
+    J21 = Jl[self.edofs,:][:,K]
+    J22 = Jl[self.edofs,:][:,self.edofs]
+  
+    self.state_np1.stiffness = np.dot(dotme, J22.dot(dotme) - 
+        J21.dot(spla.spsolve(J11,J12.dot(dotme))))
+
   def linear_solve(self, J, R):
     """
       Do the linear solve for a particular jacobian and residual
@@ -695,16 +763,43 @@ class PythonSolver:
       Parameters:
         p       Pressure, for the BC
     """
-    if self.ndim == 1:
-      F_int = asm(self.internal, self.state_np1.basis,
-          radial = self.state_np1.stress[0,0],
-          hoop = self.state_np1.stress[1,1])
-    else:
-      F_int = asm(self.internal, self.state_np1.basis,
-          stress = self.state_np1.stress[:self.ndim,:self.ndim])
+    F_int = self._internal_force(self.state_np1.stress)
     F_ext = asm(self.external, self.state_np1.pbasis, pressure = p)
-
+    
     return F_int - F_ext
+
+  def _internal_force(self, stress):
+    """
+      Assemble the internal force
+
+      Parameters:
+        stress      stresses to use
+    """
+    if self.ndim == 1:
+      return self._internal_1d(stress[0,0], stress[1,1])
+    else:
+      return self._internal_nd(stress[:self.ndim,:self.ndim])
+
+  def _internal_1d(self, radial, hoop):
+    """
+      Assemble the internal force for the axisymmetric case
+
+      Parameters:
+        radial      radial stress
+        hoop        hoop stress
+    """
+    return asm(self.internal, self.state_np1.basis,
+          radial = radial, hoop = hoop) 
+
+  def _internal_nd(self, stress):
+    """
+      Internal force of the Cartesian cases
+
+      Parameters:
+        stress      stresses to use
+    """
+    return asm(self.internal, self.state_np1.basis,
+        stress = stress)
 
   def jacobian(self):
     """
@@ -758,7 +853,11 @@ class PythonSolver:
     self.state_np1.displacements[self.edofs] = self.evalues
     
     # Calculate total strain
-    self.calculate_strain()
+    self.state_np1.strain = self.calculate_strain(self.state_np1.displacements)
+
+    # Add the optional extra strain
+    if self.set_strain is not None:
+      self.state_np1.strain[2,2] = self.set_strain
 
     # Calculate thermal strain and mechanical strain
     self.calculate_mechanical_strain()
@@ -766,20 +865,24 @@ class PythonSolver:
     # Calculate stress and tangent
     self.calculate_stress_update()
 
-  def calculate_strain(self):
+  def calculate_strain(self, D):
     """
       Calculate the strain based on the current displacements
-    """
-    U = self.state_np1.basis.interpolate(self.state_np1.displacements)
 
-    self.state_np1.strain[:self.ndim,:self.ndim] = helpers.sym_grad(U)
+      Parameters:
+        D           displacements to use
+    """
+    U = self.state_np1.basis.interpolate(D)
+
+    E = np.zeros((3,3) + U[0][0].shape)
+
+    E[:self.ndim,:self.ndim] = helpers.sym_grad(U)
     if self.ndim == 1:
       # Cast needed b/c they don't have a divide operator!
-      self.state_np1.strain[1,1] = np.array(U
+      E[1,1] = np.array(U
           ) / np.array(self.state_np1.basis.interpolate(self.state_np1.mesh.p.flatten()))
-
-    if self.set_strain is not None:
-      self.state_np1.strain[2,2] = self.set_strain
+    
+    return E
 
   def calculate_mechanical_strain(self):
     """

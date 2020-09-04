@@ -178,8 +178,6 @@ def run_reference_simulation(d, solver):
     solver.dump_state(tube, i, state_np1)
     state_n = state_np1
   
-  tube.write_vtk("test")
-
   return tube
 
 def load_displacements_exodus(efilename, d):
