@@ -3,7 +3,9 @@
   structural problem.
 """
 
-from srlife.helpers import sym, usym, ms2ts
+from srlife.helpers import sym_faster as sym
+from srlife.helpers import ms2ts_faster as ms2ts
+from srlife.helpers import usym_faster as usym
 
 from abc import ABC, abstractmethod
 from skfem import *

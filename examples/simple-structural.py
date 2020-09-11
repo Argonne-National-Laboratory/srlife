@@ -49,9 +49,15 @@ if __name__ == "__main__":
   inner_convection = receiver.ConvectiveBC(R - t, h, nz, 
       times, ftemps)
   tube.set_bc(inner_convection, "inner")
+  
+  
+  T, TH, ZS = np.meshgrid(tube.times, 
+      np.linspace(0, 2.0*np.pi, tube.nt+1)[:tube.nt],
+      np.linspace(0, tube.h, tube.nz), indexing = 'ij')
+
 
   hflux = receiver.HeatFluxBC(R, h, nt, nz, times, 
-      np.zeros((ntime,nt,nz))+2.0)
+      np.sin(T/tmax*2*np.pi) * np.cos(TH) * (ZS/h))
   tube.set_bc(hflux, "outer")
 
   pressure = receiver.PressureBC(times, times / 3600.0 * 2.0)
@@ -68,7 +74,7 @@ if __name__ == "__main__":
 
   smat = parse.parse_xml("A740H_structural.xml", "elastic_model")
 
-  structural.setup_tube_structural_solve(tube)
+  ssolver.setup_tube(tube)
   state_n = ssolver.init_state(tube, smat)
 
   for i in range(1,len(tube.times)):

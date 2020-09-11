@@ -6,6 +6,44 @@ import itertools
 mandel = ((0,0),(1,1),(2,2),(1,2),(0,2),(0,1))
 mandel_mults = (1,1,1,np.sqrt(2),np.sqrt(2),np.sqrt(2))
 
+# Make the Mandel -> tensor array
+def make_M2T():
+  R = np.zeros((3,3,3,3,6,6))
+  for a in range(6):
+    for b in range(6):
+      ind_a = itertools.permutations(mandel[a], r=2)
+      ind_b = itertools.permutations(mandel[b], r=2)
+      ma = mandel_mults[a]
+      mb = mandel_mults[b]
+      indexes = tuple(ai+bi for ai, bi in itertools.product(ind_a, ind_b))
+      for ind in indexes:
+        R[ind+(a,b)] = 1.0 / (ma*mb)
+
+  return R
+
+M2T = make_M2T().reshape(81,36)
+
+# Make the Mandel -> symmetric tensor
+def make_usym():
+  R = np.zeros((3,3,6))
+  for a in range(6):
+    R[mandel[a][0],mandel[a][1],a] = 1.0/ mandel_mults[a]
+    R[mandel[a][1],mandel[a][0],a] = 1.0/mandel_mults[a]
+  
+  return R
+
+U = make_usym().reshape(9,6)
+
+# Make the symmetric -> Mandel tensor
+def make_sym():
+  R = np.zeros((6,3,3))
+  for a in range(6):
+    R[a,mandel[a][0],mandel[a][1]] = mandel_mults[a]
+
+  return R
+
+S = make_sym().reshape(6,9)
+
 def ms2ts(C):
   """
     Convert a Mandel notation stiffness matrix to a full stiffness tensor.
@@ -22,6 +60,12 @@ def ms2ts(C):
         Ct[ind] = C[a,b] / (ma*mb)
 
   return Ct
+
+def ms2ts_faster(C):
+  """
+    Get cute with symmetry
+  """
+  return np.dot(M2T, C.flatten()).reshape(3,3,3,3)
 
 def ts2ms(C):
   """
@@ -43,6 +87,9 @@ def sym(A):
   return np.array([A[0,0], A[1,1], A[2,2], np.sqrt(2)*A[1,2], 
     np.sqrt(2)*A[0,2], np.sqrt(2)*A[0,1]])
 
+def sym_faster(A):
+  return np.dot(S, A.flatten())
+
 def usym(v):
   """
     Take a Mandel symmetric vector to the full matrix.
@@ -52,3 +99,7 @@ def usym(v):
     [v[5]/np.sqrt(2), v[1], v[3]/np.sqrt(2)],
     [v[4]/np.sqrt(2), v[3]/np.sqrt(2), v[2]]
     ])
+
+def usym_faster(v):
+  return np.dot(U, v).reshape(3,3)
+
