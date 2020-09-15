@@ -1,0 +1,386 @@
+"""
+  Meta-structural solver defining a network of nonlinear springs
+"""
+
+from srlife.solvers import newton
+
+from abc import ABC, abstractmethod
+
+import numpy as np
+import networkx as nx
+
+class Spring(ABC):
+  """
+    Spring base class defining interface.
+
+    Class will accommodate full nonlinear tubes (through FEA) as well 
+    as simple linear springs
+  """
+  @abstractmethod
+  def force_and_stiffness(self, i, d):
+    """
+      Return the current forces and stiffness for some displacement
+
+      Parameters:
+        i           timestep
+        d           displacement
+    """
+    return
+
+  @abstractmethod
+  def update_state(self, i):
+    """
+      Update to the next state after a successful solve
+
+      Parameters:
+        i           universal timestep number
+    """
+    return
+
+class LinearSpring(Spring):
+  """
+    A linear elastic spring
+  """
+  def __init__(self, k):
+    """
+      Parameters:
+        k       spring stiffness
+    """
+    self.k = k
+
+  def force_and_stiffness(self, i, d):
+    """
+      Simple linear update
+
+      Parameters:
+        i       universal timestep index
+        d       current displacement
+    """
+    return self.k*d, self.k
+
+  def update_state(self, i):
+    """
+      We don't have state!
+
+      Parameters:
+        i       universal timestep number
+    """
+    return
+
+class TubeSpring(Spring):
+  """
+    A spring object encapsulating the entire tube thermo-structural solver
+  """
+  def __init__(self, tube, solver, material):
+    """
+      Parameters:
+        tube        tube object, with thermal history defined
+        solver      structural solver to use
+        material    tube material model (NEML)
+    """
+    self.tube = tube
+    self.solver = solver
+    self.material = material
+
+    # Setup the tube to receive results
+    self.solver.setup_tube(self.tube)
+
+    # Get the first state
+    self.state_n = self.solver.init_state(self.tube, self.material)
+
+  def force_and_stiffness(self, i, d):
+    """
+      Parameters:
+        d       current displacement
+    """
+    self.state_np1 = self.solver.solve(self.tube, i, self.state_n, d)
+
+    return self.state_np1.force, self.state_np1.stiffness
+
+  def update_state(self, i):
+    """
+      Parameters:
+        i       timestep
+    """
+    self.solver.dump_state(self.tube, i, self.state_np1)
+    self.state_n = self.state_np1
+
+class SpringNetwork(nx.MultiGraph):
+  """
+    This mimics the NEML class with some additional features.
+
+    Graph structure:
+      Nodes are displacements
+      Edges can be:
+        Bars
+        "disconnect"
+        "rigid"
+
+      Where "free" and "fixed" get factored out in the final network
+
+    Boundary conditions:
+      Live at nodes
+      Can be imposed forces or displacements (though only displacements are
+        going to bused in the end)
+      Are simply tuples of (type, function) where 
+        type:
+          force
+          displacement
+        function:
+          function of time giving the values
+
+    The object takes the time values from individual tubes by default, but
+    this can be overrode with new step values.
+  """
+  def __init__(self, *args, **kwargs):
+    super(nx.MultiGraph, self).__init__(*args, **kwargs)
+    self.times = None
+    self.displacements = None
+
+  def set_times(self, times):
+    """
+      Set the discrete times to a list
+
+      Parameters:
+        times       new times
+    """
+    self.times = times
+
+  def validate_setup(self):
+    """
+      Validate the data structure 
+    """
+    if self.times is None:
+      self.__set_default_times()
+
+    # Validate the type of each edge and the internal times (if provided)
+    for i,j,edge in self.edges(data=True):
+      if isinstance(edge['object'], TubeSpring):
+        if not np.allclose(edge.tube.times, self.times):
+          raise ValueError("A tube object has discrete times that are"
+              " not consistent with the spring network!")
+      
+      if not (isinstance(edge['object'], Spring) or isinstance(edge['object'],
+          str)):
+        raise ValueError("An edge object is not either a spring or a string!")
+
+      if isinstance(edge['object'], str) and edge['object'] not in (
+          "disconnect", "rigid"):
+        raise ValueError("Special edge type %s not recognized!" % edge)
+
+  def __set_default_times(self):
+    """
+      Grab times from the first Tube object or raise error
+    """
+    for i,j,edge in self.edges(data=True):
+      if isinstance(edge['object'], TubeSpring):
+        self.times = edge['object'].tube.times
+        break
+    else:
+      raise ValueError("No times provided and no Tube objects to copy from!")
+
+  def force_bc(self, node, function):
+    """
+      Add a force boundary condition
+
+      Parameters:
+        node        location
+        function    force as a function of time
+    """
+    self.nodes[node]['bc'] = ('force', function)
+
+  def displacement_bc(self, node, function):
+    """
+      Add a displacement boundary condition
+
+      Parameters:
+        node        location
+        function    displacement as a function of time
+    """
+    self.nodes[node]['bc'] = ('displacement', function)
+
+  def reduce_graph(self):
+    """
+      Reduce the graph structure to a list of graphs which can be
+      solved by:
+
+      1) Removing rigid links
+      2) Splitting the graph at disconnect
+    """
+    self.remove_rigid()
+    return self.split_disconnect()
+
+  def remove_rigid(self):
+    """
+      Remove rigid links by merging the nodes in place
+    """
+    while True:
+      for i,j, edge in self.edges(data=True):
+        # Can't handle duplicate springs
+        if edge['object'] == "rigid":
+          if self.number_of_edges(i,j) != 1:
+            raise RuntimeError("Cannot have a rigid link across a spring!")
+          bci = 'bc' in self.nodes[i]
+          bcj = 'bc' in self.nodes[j]
+          if bci and bcj:
+            raise RuntimeError("Cannot merge two nodes with BCs!")
+          self.remove_edge(i,j)
+          if bci or ((not bci) and (not bcj)):
+            self.replace(nx.contracted_nodes(self, i, j))
+          else:
+            self.replace(nx.contracted_nodes(self, j, i))
+          break
+      else:
+        break
+
+  def replace(self, other):
+    """
+      Replace the graph data structure with a new graph
+    """
+    self.clear()
+    self.update(other)
+
+  def split_disconnect(self):
+    """
+      Split the graph into disjoint parts by taking apart at the disconnects
+    """
+    while True:
+      for i,j,key,edge in self.edges(data=True, keys = True):
+        if edge['object'] == "disconnect":
+          self.remove_edge(i,j, key = key)
+          break
+      else:
+        break
+    
+    components = list(nx.connected_components(self))
+
+    nobjs = [SpringNetwork(self.subgraph(nset)) for nset in components]
+    for obj in nobjs:
+      obj.times = self.times
+
+    return nobjs
+
+  def validate_solve(self):
+    """
+      Validate that the graph is ready to actually solve
+
+      Conditions:
+        1) All dummy edges removed
+        2) At least one fixed condition
+    """
+    # Check that we have times
+    if self.times is None:
+      raise ValueError("Discrete times must be established at solve!")
+
+    # Check that everything is a spring
+    for i,j,edge in self.edges(data=True):
+      if not isinstance(edge['object'], Spring):
+        raise ValueError("All edges must be springs at solve!")
+    
+    # Check that there is at least one fixed boundary
+    ndisp = 0
+    for node in self.nodes():
+      if 'bc' in self.nodes[node]:
+        if self.nodes[node]['bc'][0] == 'displacement':
+          ndisp += 1
+
+    if ndisp == 0:
+      raise ValueError("Spring network requires at least one fixed BC!")
+
+  def solve(self, i):
+    """
+      Solve discrete step i
+
+      Parameter:
+        i       discrete time step
+    """
+    # Keep forces and displacements for debug
+    if self.displacements is None:
+      self.displacements = np.zeros((len(self.nodes),))
+
+    # Make sure we can solve
+    self.validate_solve()
+
+    # Set the time step
+    self.i = i
+    
+    # Figure out free/fixed displacements
+    (self.free, self.forces, self.fixed,
+        self.fixed_displacements) = self.dof_maps(i)
+    
+    # Actually solve
+    d = newton(lambda x: self.RJ(x),
+        self.displacements[self.free], verbose = True)
+
+    # Store the displacements, for fun
+    self.displacements[self.free] = d
+    self.displacements[self.fixed] = self.fixed_displacements
+
+    # Advance the state
+    for i,j, edge in self.edges(data=True):
+      edge['object'].update_state(self.i)
+
+  def RJ(self, d):
+    """
+      Actually calculate the residual and Jacobian equation for the step
+      
+      Parameters:
+        d       free displacements
+    """
+    dall = np.zeros((len(self.nodes),))
+    dall[self.fixed] = self.fixed_displacements
+    dall[self.free] = d
+    
+    Fint = np.zeros((len(self.nodes),))
+    J = np.zeros((len(self.nodes),len(self.nodes)))
+
+    # This is the loop that can/should be parallelized
+    for i,j,edge in self.edges(data=True):
+      f, k = edge['object'].force_and_stiffness(self.i, dall[j] - dall[i])
+      Fint[i] += -f
+      Fint[j] += f
+
+      J[i,i] += k
+      J[i,j] += -k
+      J[j,i] += -k
+      J[j,j] += k
+    
+    return Fint[self.free] - self.forces, J[self.free,:][:,self.free]
+
+  def dof_maps(self, i):
+    """
+      Get the degree of freedom maps for the given time step
+
+      Parameters:
+        i       discrete time step
+    """
+    free = []
+    fixed = []
+    forces = []
+    displacements = []
+    time = self.times[i]
+    for i,node in enumerate(self.nodes()):
+      if 'bc' in self.nodes[node]:
+        if self.nodes[node]['bc'][0] == 'displacement':
+          fixed.append(i)
+          displacements.append(self.nodes[node]['bc'][1](time))
+        elif self.nodes[node]['bc'][0] == 'force':
+          free.append(i)
+          forces.append(self.nodes[node]['bc'][1](time))
+        else:
+          raise ValueError("Unknown BC type %s!" % self.nodes[node]['bc'][0])
+      else:
+        free.append(i)
+        forces.append(0)
+
+    return np.array(free, dtype = int), np.array(forces), np.array(fixed,
+        dtype = int), np.array(displacements)
+
+  def solve_all(self):
+    """
+      Solve all time steps
+    """
+    self.validate_solve()
+    for i in range(1, len(self.times)):
+      self.solve(i)
+

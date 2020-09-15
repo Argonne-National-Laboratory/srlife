@@ -8,3 +8,4 @@ pylint
 neml
 scikit-fem
 meshio
+networkx
