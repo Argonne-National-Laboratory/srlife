@@ -721,10 +721,9 @@ class PythonSolver:
         J       final jacobian
     """
     #pylint: disable=no-value-for-parameter, invalid-unary-operand-type
-    #pylint: disable=pointless-statement
     if self.state_np1.ndim == 1:
-      dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0])[0][0]
-      * self.state_np1.basis.dx * 2.0 * np.pi
+      dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0]
+          )[0][0] * self.state_np1.basis.dx * 2.0 * np.pi
     else:
       dx = self.state_np1.basis.dx
 
