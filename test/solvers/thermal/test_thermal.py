@@ -5,7 +5,7 @@ import numpy as np
 from srlife import materials, thermal, receiver
 
 import sys
-sys.path.append("test/solvers")
+sys.path.append("test/solvers/thermal")
 from thermalsol import ManufacturedSolution
 
 class TestThermalManufactured(unittest.TestCase):

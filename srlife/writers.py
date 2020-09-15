@@ -48,6 +48,7 @@ class VTKWriter:
     writer.Start()
     for i in range(self.tube.ntime):
       self._dump_point_data(grid, i)
+      self._dump_element_data(grid, i)
       writer.WriteNextTime(self.tube.times[i])
     writer.Stop()
   
@@ -66,6 +67,16 @@ class VTKWriter:
       for d in data[i].flatten():
         pdata.InsertNextValue(d)
       grid.GetPointData().AddArray(pdata)
+
+  def _dump_element_data(self, grid, i):
+    for field, data in self.tube.quadrature_results.items():
+      pdata = vtk.vtkFloatArray()
+      pdata.SetNumberOfComponents(1)
+      pdata.SetName(field)
+      avg = np.mean(data[i], axis = 1)
+      for d in avg:
+        pdata.InsertNextValue(d)
+      grid.GetCellData().AddArray(pdata)
     
   def _set_grid(self, grid):
     """
