@@ -212,9 +212,8 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
     self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
 
 # Too heavy
+  def test_3D(self):
+    exact = self._solve(self.d).stiffness
+    numerical = differentiate(lambda d: self._solve(d).force, self.d)
 
-#  def test_3D(self):
-#    exact = self._solve(self.d).stiffness
-#    numerical = differentiate(lambda d: self._solve(d).force, self.d)
-#
-#    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
+    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))

@@ -236,7 +236,7 @@ def do_complete_comparison(d, solver):
 
 
 if __name__ == "__main__":
-  solver = structural.PythonTubeSolver()
+  solver = structural.PythonTubeSolver(verbose = False)
 
   print("Analytical comparison")
   print("=====================")

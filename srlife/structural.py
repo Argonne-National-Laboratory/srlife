@@ -3,6 +3,8 @@
   structural problem.
 """
 
+from neml import block
+
 from srlife.helpers import sym_faster as sym
 from srlife.helpers import ms2ts_faster as ms2ts
 from srlife.helpers import usym_faster as usym
@@ -139,7 +141,8 @@ def mesh3D(tube):
   npt = tube.nz
 
   coords = np.ascontiguousarray(
-      np.array([[r*np.cos(t), r*np.sin(t), z] for r in rs for t in ts for z in zs]).T)
+      np.array([[r*np.cos(t), r*np.sin(t), z] 
+        for r in rs for t in ts for z in zs]).T)
 
   mapper = lambda r, c, h: r * npr + (c % tube.nt) * npt + h
 
@@ -302,7 +305,8 @@ class PythonTubeSolver(TubeSolver):
 
   def _fea2tube_element(self, tube, f):
     """
-      Rearrange the elements (first index) of the field to match the vtk convention
+      Rearrange the elements (first index) of the field to match the vtk
+      convention
     """
     return f
 
@@ -374,12 +378,16 @@ class PythonTubeSolver(TubeSolver):
       self.strain = np.zeros((3,3,self.basis.nelems,self.nqi))
       self.mechanical_strain = np.zeros((3,3,self.basis.nelems,self.nqi))
       self.thermal_strain = np.zeros((3,3,self.basis.nelems,self.nqi))
-      self.history = np.repeat(self.material.init_store()[:,np.newaxis], self.nq,
-          axis = 1).reshape(self.material.nstore,self.basis.nelems, self.nqi)
+      self.history = np.repeat(self.material.init_store()[:,np.newaxis], 
+          self.nq, axis = 1).reshape(
+              self.material.nstore,self.basis.nelems, self.nqi)
       self.tangent = np.zeros((3,3,3,3,self.basis.nelems,self.nqi))
       self.temperature = np.zeros((self.basis.nelems,self.nqi))
       self.displacements = self.basis.zeros()
       self.time = 0.0
+
+      self.energy = np.zeros((self.basis.nelems, self.nqi))
+      self.dissipation = np.zeros((self.basis.nelems, self.nqi))
 
       self.force = 0.0
       self.stiffness = 0.0
@@ -445,15 +453,30 @@ class PythonTubeSolver(TubeSolver):
       new.tangent = np.copy(self.tangent)
       new.temperature = np.copy(self.temperature)
       new.displacements = np.copy(self.displacements)
+      new.energy = np.copy(self.energy)
+      new.dissipation = np.copy(self.dissipation)
       return new
     
     @property
     def nqi(self):
+      """
+        Integration points per element
+      """
       return len(self.basis.quadrature[1])
 
     @property
     def nq(self):
+      """
+        Total number of integration points (size of array)
+      """
       return self.nqi * self.basis.mesh.nelements
+
+    @property
+    def ne(self):
+      """
+        Number of elements
+      """
+      return self.basis.mesh.nelements
 
 def solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, top_np1,
     solver_options):
@@ -882,7 +905,8 @@ class PythonSolver:
     if self.ndim == 1:
       # Cast needed b/c they don't have a divide operator!
       E[1,1] = np.array(U
-          ) / np.array(self.state_np1.basis.interpolate(self.state_np1.mesh.p.flatten()))
+          ) / np.array(self.state_np1.basis.interpolate(
+            self.state_np1.mesh.p.flatten()))
     
     return E
 
@@ -906,24 +930,40 @@ class PythonSolver:
       self.state_n.temperature))
 
     # Mechanical strain = total - thermal
-    self.state_np1.mechanical_strain = self.state_np1.strain - self.state_np1.thermal_strain
+    self.state_np1.mechanical_strain = (self.state_np1.strain -
+        self.state_np1.thermal_strain)
 
   def calculate_stress_update(self):
     """
       The expensive function: update the stress and tangent
     """
-    for e in range(self.state_np1.basis.nelems):
-      for q in range(self.state_np1.nqi):
-        s, h, A, _, _ = self.state_np1.material.update_sd(
-            sym(self.state_np1.mechanical_strain[:,:,e,q]),
-            sym(self.state_n.mechanical_strain[:,:,e,q]),
-            self.state_np1.temperature[e,q],
-            self.state_n.temperature[e,q],
-            self.state_np1.time, self.state_n.time,
-            sym(self.state_n.stress[:,:,e,q]), 
-            self.state_n.history[:,e,q], 0, 0)
-        
-        self.state_np1.stress[:,:,e,q] = usym(s)
-        self.state_np1.history[:,e,q] = h
-        self.state_np1.tangent[:,:,:,:,e,q] = ms2ts(A)
+    # Ya, you can't a view of these arrays...
+    # We could reorder everything and then it would just work natively
+    stress_np1 = np.zeros((self.state_np1.nq,3,3))
+    hist_np1 = np.zeros((self.state_np1.nq,self.state_np1.material.nstore))
+    A_np1 = np.zeros((self.state_np1.nq,3,3,3,3))
+    
+    block.block_evaluate(self.state_np1.material,
+        self.state_np1.mechanical_strain.transpose(2,3,0,1).reshape(-1,3,3), 
+        self.state_n.mechanical_strain.transpose(2,3,0,1).reshape(-1, 3,3),
+        self.state_np1.temperature.flatten(), 
+        self.state_n.temperature.flatten(),
+        self.state_np1.time, self.state_n.time,
+        stress_np1, self.state_n.stress.transpose(2,3,0,1).reshape(-1,3,3),
+        hist_np1, 
+        self.state_n.history.transpose(1,2,0).reshape(
+          -1,self.state_n.material.nstore),
+        A_np1,
+        self.state_np1.energy.flatten(), 
+        self.state_n.energy.flatten(),
+        self.state_np1.dissipation.flatten(),
+        self.state_n.dissipation.flatten())
+    
+    self.state_np1.stress = stress_np1.reshape((self.state_np1.ne,
+      self.state_np1.nqi, 3, 3)).transpose(2,3,0,1)
+    self.state_np1.history = hist_np1.reshape((self.state_np1.ne,
+      self.state_np1.nqi, self.state_np1.material.nstore)
+        ).transpose(2,0,1)
+    self.state_np1.tangent = A_np1.reshape((self.state_np1.ne,
+      self.state_np1.nqi, 3,3,3,3)).transpose(2,3,4,5,0,1)
     
