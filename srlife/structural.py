@@ -1,27 +1,24 @@
+#pylint: disable=unused-wildcard-import, wildcard-import
+
 """
   This module solves the receiver system or the single tube
   structural problem.
 """
 
-from neml import block
-
-from srlife.helpers import sym_faster as sym
-from srlife.helpers import ms2ts_faster as ms2ts
-from srlife.helpers import usym_faster as usym
-
 from abc import ABC, abstractmethod
-from skfem import *
-from skfem import mesh, element, mapping
-from skfem.helpers import dot as skdot
-from skfem import helpers, utils
-
-import scipy.sparse as sp
-import scipy.sparse.linalg as spla
-import numpy.linalg as la
 
 import copy
 
+import scipy.sparse.linalg as spla
+import numpy.linalg as la
+
 import numpy as np
+
+from skfem import *
+from skfem import mesh, element
+from skfem import helpers, utils
+
+from neml import block
 
 class TubeSolver(ABC):
   """
@@ -49,7 +46,7 @@ class TubeSolver(ABC):
         state:      state object
         dtop:       top displacement
     """
-    pass
+    return
 
   @abstractmethod
   def setup_tube(self, tube):
@@ -59,7 +56,7 @@ class TubeSolver(ABC):
       Parameters:
         tube:       tube object
     """
-    pass
+    return
 
   @abstractmethod
   def init_state(self, tube, mat):
@@ -70,7 +67,7 @@ class TubeSolver(ABC):
         tube:       tube object
         mat:        NEML material
     """
-    pass
+    return
 
   @abstractmethod
   def dump_state(self, tube, i, state):
@@ -83,7 +80,7 @@ class TubeSolver(ABC):
         i:          which time step this is
         state:      state object
     """
-    pass
+    return
 
 def mesh_tube(tube):
   """
@@ -195,8 +192,6 @@ class PythonTubeSolver(TubeSolver):
       Parameters:
         tube        tube object
     """
-    nt = tube.ntime
-    
     suffixes = ['_xx', '_yy', '_zz', '_yz', '_xz', '_xy']
     fields = ['stress', 'strain', 'mechanical_strain', 'thermal_strain']
 
@@ -645,6 +640,9 @@ class PythonSolver:
 
   @property
   def ndim(self):
+    """
+      Problem dimension
+    """
     return self.state_np1.ndim
 
   def setup_guess(self):
@@ -722,8 +720,11 @@ class PythonSolver:
         R       final residual
         J       final jacobian
     """
+    #pylint: disable=no-value-for-parameter, invalid-unary-operand-type
+    #pylint: disable=pointless-statement
     if self.state_np1.ndim == 1:
-      dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0])[0][0] * self.state_np1.basis.dx * 2.0 * np.pi
+      dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0])[0][0]
+      * self.state_np1.basis.dx * 2.0 * np.pi
     else:
       dx = self.state_np1.basis.dx
 
@@ -778,6 +779,7 @@ class PythonSolver:
         J       Jacobian sparse matrix
         R       residual vector
     """
+    #pylint: disable=no-value-for-parameter
     return utils.solve(*utils.condense(J, R, D = self.edofs),
         solver = utils.solver_direct_scipy())
   
@@ -943,6 +945,7 @@ class PythonSolver:
     hist_np1 = np.zeros((self.state_np1.nq,self.state_np1.material.nstore))
     A_np1 = np.zeros((self.state_np1.nq,3,3,3,3))
     
+    #pylint: disable=c-extension-no-member
     block.block_evaluate(self.state_np1.material,
         self.state_np1.mechanical_strain.transpose(2,3,0,1).reshape(-1,3,3), 
         self.state_n.mechanical_strain.transpose(2,3,0,1).reshape(-1, 3,3),

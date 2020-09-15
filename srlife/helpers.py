@@ -1,13 +1,20 @@
+"""
+  Helper functions for converting to and from tensor notation
+"""
+
 from __future__ import division
 
-import numpy as np
 import itertools
+
+import numpy as np
 
 mandel = ((0,0),(1,1),(2,2),(1,2),(0,2),(0,1))
 mandel_mults = (1,1,1,np.sqrt(2),np.sqrt(2),np.sqrt(2))
 
-# Make the Mandel -> tensor array
 def make_M2T():
+  """
+    Make the tensor that goes from rank 4 Mandel to rank 4 tensors
+  """
   R = np.zeros((3,3,3,3,6,6))
   for a in range(6):
     for b in range(6):
@@ -23,8 +30,10 @@ def make_M2T():
 
 M2T = make_M2T().reshape(81,36)
 
-# Make the Mandel -> symmetric tensor
 def make_usym():
+  """
+    Make the tensor that goes from Mandel to tensors
+  """
   R = np.zeros((3,3,6))
   for a in range(6):
     R[mandel[a][0],mandel[a][1],a] = 1.0/ mandel_mults[a]
@@ -34,8 +43,10 @@ def make_usym():
 
 U = make_usym().reshape(9,6)
 
-# Make the symmetric -> Mandel tensor
 def make_sym():
+  """
+    Make the tensor that goes from tensors to Mandel
+  """
   R = np.zeros((6,3,3))
   for a in range(6):
     R[a,mandel[a][0],mandel[a][1]] = mandel_mults[a]
@@ -65,6 +76,7 @@ def ms2ts_faster(C):
   """
     Get cute with symmetry
   """
+  #pylint: disable=too-many-function-args
   return np.dot(M2T, C.flatten()).reshape(3,3,3,3)
 
 def ts2ms(C):
@@ -88,6 +100,9 @@ def sym(A):
     np.sqrt(2)*A[0,2], np.sqrt(2)*A[0,1]])
 
 def sym_faster(A):
+  """
+    Take a symmetric tensor to the Mandel convention with multiplication
+  """
   return np.dot(S, A.flatten())
 
 def usym(v):
@@ -101,5 +116,7 @@ def usym(v):
     ])
 
 def usym_faster(v):
+  """
+    Take a tensor to Mandel using multiplication
+  """
   return np.dot(U, v).reshape(3,3)
-
