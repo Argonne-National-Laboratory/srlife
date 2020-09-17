@@ -14,4 +14,41 @@
       <values>12.38e-06 12.38e-06 13.55e-06 14.32e-06 15.12e-06 15.55e-06 16.00e-06 17.68e-06 20.39e-06 22.46e-06</values>
     </alpha>
   </elastic_model>
+  <creep_plasticity type="SmallStrainCreepPlasticity">
+    <tol>1.0e-4</atol>
+    <miter>25</miter>
+    <verbose>false</verbose>
+    <elastic type="IsotropicLinearElasticModel">
+      <m1 type="PiecewiseLinearInterpolate">
+        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+        <values>221000 218000 212000 206000 200000 193000 186000 178000 169000 160000</values>
+      </m1>
+      <m1_type>youngs</m1_type>
+      <m2>0.31</m2>
+      <m2_type>poissons</m2_type>
+    </elastic>
+    <plastic type="SmallStrainElasticity">
+      <elastic type="IsotropicLinearElasticModel">
+        <m1 type="PiecewiseLinearInterpolate">
+          <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+          <values>221000 218000 212000 206000 200000 193000 186000 178000 169000 160000</values>
+        </m1>
+        <m1_type>youngs</m1_type>
+        <m2>0.31</m2>
+        <m2_type>poissons</m2_type>
+      </elastic>
+    </plastic>
+    <creep type="J2CreepModel">
+      <tol>1e-4</tol>
+      <verbose>false</verbose>
+      <rule type="PowerLawCreep">
+        <A>1.85e-17</A>
+        <n>2.5</n>
+      </rule>
+    </creep>
+    <alpha type="PiecewiseLinearInterpolate">
+      <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+      <values>12.38e-06 12.38e-06 13.55e-06 14.32e-06 15.12e-06 15.55e-06 16.00e-06 17.68e-06 20.39e-06 22.46e-06</values>
+    </alpha>
+  </creep_plasticity>
 </materials>

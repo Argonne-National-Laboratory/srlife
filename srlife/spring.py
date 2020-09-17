@@ -156,7 +156,7 @@ class SpringNetwork(nx.MultiGraph):
     # Validate the type of each edge and the internal times (if provided)
     for i,j,edge in self.edges(data=True):
       if isinstance(edge['object'], TubeSpring):
-        if not np.allclose(edge.tube.times, self.times):
+        if not np.allclose(edge['object'].tube.times, self.times):
           raise ValueError("A tube object has discrete times that are"
               " not consistent with the spring network!")
       
@@ -270,12 +270,12 @@ class SpringNetwork(nx.MultiGraph):
     """
     # Check that we have times
     if self.times is None:
-      raise ValueError("Discrete times must be established at solve!")
+      raise RuntimeError("Discrete times must be established at solve!")
 
     # Check that everything is a spring
     for i,j,edge in self.edges(data=True):
       if not isinstance(edge['object'], Spring):
-        raise ValueError("All edges must be springs at solve!")
+        raise RuntimeError("All edges must be springs at solve!")
     
     # Check that there is at least one fixed boundary
     ndisp = 0
@@ -285,7 +285,11 @@ class SpringNetwork(nx.MultiGraph):
           ndisp += 1
 
     if ndisp == 0:
-      raise ValueError("Spring network requires at least one fixed BC!")
+      raise RuntimeError("Spring network requires at least one fixed BC!")
+
+    # To to see if the graph is fully-connected
+    if not nx.is_connected(self):
+      raise RuntimeError("Spring network must be fully connected at solve!")
 
   def solve(self, i):
     """
@@ -305,16 +309,17 @@ class SpringNetwork(nx.MultiGraph):
     self.i = i
     
     # Figure out free/fixed displacements
-    (self.free, self.forces, self.fixed,
+    (self.dmap, self.free, self.forces, self.fixed,
         self.fixed_displacements) = self.dof_maps(i)
     
     # Actually solve
     d = newton(lambda x: self.RJ(x),
-        self.displacements[self.free], verbose = True)
+        self.displacements[self.dmap[self.free]], verbose = True,
+        abs_tol = 1.0e-4)
 
     # Store the displacements, for fun
-    self.displacements[self.free] = d
-    self.displacements[self.fixed] = self.fixed_displacements
+    self.displacements[self.dmap[self.free]] = d
+    self.displacements[self.dmap[self.fixed]] = self.fixed_displacements
 
     # Advance the state
     for i,j, edge in self.edges(data=True):
@@ -328,24 +333,26 @@ class SpringNetwork(nx.MultiGraph):
         d       free displacements
     """
     dall = np.zeros((len(self.nodes),))
-    dall[self.fixed] = self.fixed_displacements
-    dall[self.free] = d
+    dall[self.dmap[self.fixed]] = self.fixed_displacements
+    dall[self.dmap[self.free]] = d
     
     Fint = np.zeros((len(self.nodes),))
     J = np.zeros((len(self.nodes),len(self.nodes)))
 
     # This is the loop that can/should be parallelized
     for i,j,edge in self.edges(data=True):
-      f, k = edge['object'].force_and_stiffness(self.i, dall[j] - dall[i])
-      Fint[i] += -f
-      Fint[j] += f
+      f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
+          - dall[self.dmap[i]])
+      Fint[self.dmap[i]] += -f
+      Fint[self.dmap[j]] += f
 
-      J[i,i] += k
-      J[i,j] += -k
-      J[j,i] += -k
-      J[j,j] += k
+      J[self.dmap[i],self.dmap[i]] += k
+      J[self.dmap[i],self.dmap[j]] += -k
+      J[self.dmap[j],self.dmap[i]] += -k
+      J[self.dmap[j],self.dmap[j]] += k
     
-    return Fint[self.free] - self.forces, J[self.free,:][:,self.free]
+    return (Fint[self.dmap[self.free]] - self.forces, 
+        J[self.dmap[self.free],:][:,self.dmap[self.free]])
 
   def dof_maps(self, i):
     """
@@ -359,21 +366,26 @@ class SpringNetwork(nx.MultiGraph):
     forces = []
     displacements = []
     time = self.times[i]
-    for i,node in enumerate(self.nodes()):
+    for node in self.nodes:
       if 'bc' in self.nodes[node]:
         if self.nodes[node]['bc'][0] == 'displacement':
-          fixed.append(i)
+          fixed.append(node)
           displacements.append(self.nodes[node]['bc'][1](time))
         elif self.nodes[node]['bc'][0] == 'force':
-          free.append(i)
+          free.append(node)
           forces.append(self.nodes[node]['bc'][1](time))
         else:
           raise ValueError("Unknown BC type %s!" % self.nodes[node]['bc'][0])
       else:
-        free.append(i)
+        free.append(node)
         forces.append(0)
 
-    return np.array(free, dtype = int), np.array(forces), np.array(fixed,
+    nodes = np.array(self.nodes, dtype=int)
+    total = (np.array(range(0, max(nodes)+1), dtype = int)*0)-1
+    rnums = np.array(range(len(nodes)), dtype = int)
+    total[nodes] = rnums
+
+    return total,np.array(free, dtype = int), np.array(forces), np.array(fixed,
         dtype = int), np.array(displacements)
 
   def solve_all(self):

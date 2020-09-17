@@ -684,7 +684,8 @@ class PythonSolver:
       # Can immediately skip if the initial residual is 
       # less than the absolute tol
       if nR0 < self.options['atol']:
-        print("")
+        if self.options['verbose']:
+          print("")
         break
       # Get the actual sparse jacobian
       J = self.jacobian()
