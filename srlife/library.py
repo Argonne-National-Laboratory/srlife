@@ -67,7 +67,7 @@ def load_deformation(name, model):
   """
   fdir = os.path.join(LIBRARY_DIR, "deformation")
   filename = get_file(fdir, name)
-  return parse.parse_xml(filename, model)
+  return materials.DeformationMaterial(filename, model)
 
 def load_damage(name, model):
   """

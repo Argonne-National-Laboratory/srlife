@@ -2,6 +2,8 @@
   Solution managers actually walk a model through all the steps to solve
 """
 
+import tqdm
+
 import multiprocess
 import itertools
 
@@ -50,6 +52,24 @@ class SolutionManager:
     return itertools.chain(*(panel.tubes.values() 
       for panel in self.receiver.panels.values()))
 
+  @property
+  def ntubes(self):
+    return len(list(self.tubes))
+  
+  def progress_decorator(self, base, ntotal):
+    """
+      Either wrap with a progress bar decorator or not
+
+      Parameters:
+        base            base function to wrap
+        ntotal          total number in iterator, needed for wrapping
+                        iterators
+    """
+    if self.progress:
+      return tqdm.tqdm(base, total = ntotal)
+    else:
+      return base
+
   def solve_life(self):
     """
       The trigger for everything: solve the complete problem and report the
@@ -57,12 +77,19 @@ class SolutionManager:
     """
     self.solve_heat_transfer()
 
+    self.solve_structural_problem()
+
     return 0
 
   def solve_heat_transfer(self):
     """
       Solve the heat transfer problem for each tube
     """
+    if self.progress:
+      print("Running thermal analysis:")
     with multiprocess.Pool(self.nthreads) as p:
-      list(p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material),
-        self.tubes))
+      list(
+          self.progress_decorator(
+          p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material),
+        self.tubes), self.ntubes)
+          )

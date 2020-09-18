@@ -4,11 +4,32 @@
   XML files for archiving.
 """
 
+from neml import parse, models
+
 import xml.etree.ElementTree as ET
 from collections import ChainMap
 
 import numpy as np
 import scipy.interpolate as inter
+
+class DeformationMaterial:
+  """
+    Incredibly thin wrapper around a NEML XML file
+  """
+  def __init__(self, xmlfile, modelname):
+    """
+      Parameters:
+        xmlfile:    file location for the input file
+        modelname:  which model to load
+    """
+    self.xmlfile = xmlfile
+    self.modelname = modelname
+
+  def get_neml_model(self):
+    """
+      Return the actual model for use in a solve
+    """
+    return parse.parse_xml(xmlfile, modelname)
 
 class ThermalMaterial:
   """

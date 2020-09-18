@@ -277,7 +277,7 @@ class PythonTubeSolver(TubeSolver):
         tube:       tube object
         mat:        NEML material
     """
-    return PythonTubeSolver.State(tube, mat, self.qorder)
+    return PythonTubeSolver.State(tube, get_mat(mat), self.qorder)
 
   def dump_state(self, tube, i, state):
     """
@@ -977,4 +977,12 @@ class PythonSolver:
         ).transpose(2,0,1)
     self.state_np1.tangent = A_np1.reshape((self.state_np1.ne,
       self.state_np1.nqi, 3,3,3,3)).transpose(2,3,4,5,0,1)
-    
+   
+def get_mat(object):
+  """
+    Small helper to wrap NEML for pickling issues
+  """
+  try:
+    object.get_neml_model()
+  except AttributeError:
+    return object
