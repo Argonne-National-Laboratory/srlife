@@ -13,8 +13,8 @@ class Receiver:
     Basic definition of the tubular receiver geometry.
 
     A receiver is a collection of panels linked together by
-    an elastic spring stiffness.  This stiffness can be zero (disconnected)
-    or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    "rigid" or "disconnect"
 
     Panels can be labeled by strings.  By default the names
     are sequential numbers.
@@ -144,8 +144,8 @@ class Panel:
     Basic definition of a panel in a tubular receiver.
 
     A panel is a collection of Tube object linked together by
-    an elastic spring stiffness.  This stiffness can be zero
-    (disconnected) or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    a string "disconnect" or a string "rigid"
 
     Tubes in the panel can be labeled by strings.  By default the
     names are sequential numbers.

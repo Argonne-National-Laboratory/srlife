@@ -20,6 +20,8 @@ from skfem import helpers, utils
 
 from neml import block
 
+from srlife import solverparams
+
 class TubeSolver(ABC):
   """
     This class takes as input:
@@ -167,12 +169,13 @@ class PythonTubeSolver(TubeSolver):
   """
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
-  def __init__(self, rtol = 1.0e-6, atol = 1.0e-8, qorder = 1,
-      dof_tol = 1.0e-6, miter = 10, verbose = False):
+  def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
+      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False):
     """
       Setup the solver with common parameters
 
-      Parameters:
+      Additional Parameters:
+        pset        parameter set with solver parameters
         rtol        relative tolerance for NR iterations
         atol        absolute tolerance for NR iterations
         qorder      quadrature order
@@ -182,8 +185,13 @@ class PythonTubeSolver(TubeSolver):
         verbose     verbose solve
     """
     self.qorder = qorder
-    self.solver_options = {'rtol': rtol, 'atol': atol,
-        'dof_tol': dof_tol, 'miter': miter, 'verbose': verbose}
+    self.rtol = pset.get_default("rtol", rtol)
+    self.atol = pset.get_default("atol", atol)
+    self.dof_tol = pset.get_default("dof_tol", dof_tol)
+    self.miter = pset.get_default("miter", miter)
+    self.verbose = pset.get_default("verbose", verbose)
+    self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
+        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
 
   def setup_tube(self, tube):
     """

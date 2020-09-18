@@ -136,6 +136,23 @@ class SpringNetwork(nx.MultiGraph):
     super(nx.MultiGraph, self).__init__(*args, **kwargs)
     self.times = None
     self.displacements = None
+    self.atol = kwargs.pop("atol", 1.0e-8)
+    self.rtol = kwargs.pop("rtol", 1.0e-6)
+    self.miter = kwargs.pop("miter", 25)
+    self.verbose = kwargs.pop("verbose", False)
+
+  def __copy(self, other):
+    """
+      Copy ancillary information from one network to another
+
+      Parameters:
+        other       other network
+    """
+    other.times = self.times
+    other.rtol = self.rtol
+    other.atol = self.atol
+    other.miter = self.miter
+    other.verbose = self.verbose
 
   def set_times(self, times):
     """
@@ -256,7 +273,7 @@ class SpringNetwork(nx.MultiGraph):
 
     nobjs = [SpringNetwork(self.subgraph(nset)) for nset in components]
     for obj in nobjs:
-      obj.times = self.times
+      self.__copy(obj)
 
     return nobjs
 
@@ -291,12 +308,15 @@ class SpringNetwork(nx.MultiGraph):
     if not nx.is_connected(self):
       raise RuntimeError("Spring network must be fully connected at solve!")
 
-  def solve(self, i):
+  def solve(self, i, nthreads = 1):
     """
       Solve discrete step i
 
       Parameter:
-        i       discrete time step
+        i           discrete time step
+
+      Additional parameters:
+        nthreads    number of threads to use
     """
     # Keep forces and displacements for debug
     if self.displacements is None:
@@ -314,8 +334,8 @@ class SpringNetwork(nx.MultiGraph):
     
     # Actually solve
     d = newton(lambda x: self.RJ(x),
-        self.displacements[self.dmap[self.free]], verbose = True,
-        abs_tol = 1.0e-4)
+        self.displacements[self.dmap[self.free]], verbose = self.verbose,
+        rel_tol = self.rtol, abs_tol = self.atol, miter = self.miter)
 
     # Store the displacements, for fun
     self.displacements[self.dmap[self.free]] = d
@@ -388,11 +408,14 @@ class SpringNetwork(nx.MultiGraph):
     return total,np.array(free, dtype = int), np.array(forces), np.array(fixed,
         dtype = int), np.array(displacements)
 
-  def solve_all(self):
+  def solve_all(self, nthreads = 1):
     """
       Solve all time steps
+
+      Additional parameters:
+        nthreads        number of threads to use
     """
     self.validate_solve()
     for i in range(1, len(self.times)):
-      self.solve(i)
+      self.solve(i, nthreads)
 
