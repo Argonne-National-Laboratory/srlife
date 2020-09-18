@@ -3,12 +3,13 @@
 import sys
 sys.path.append('../..')
 
-from srlife import receiver, solverparams, spring, structural, thermal, system, library
+from srlife import receiver, solverparams, spring, structural, thermal, system, library, managers
 
 def sample_parameters():
   params = solverparams.ParameterSet()
 
   params["nthreads"] = 4
+  params["progress_bars"] = True
 
   params["thermal"]["rtol"] = 1.0e-6
   params["thermal"]["atol"] = 1.0e-4
@@ -52,8 +53,13 @@ if __name__ == "__main__":
       "elastic_model", "base")
 
   # The solution manager
+  solver = managers.SolutionManager(model, thermal_solver, thermal, fluid,
+      structural_solver, deformation, damage, system_solver, 
+      pset = params)
 
   # Heuristics would go here
 
   # Report the best-estimate life of the receiver 
+  life = solver.solve_life()
 
+  print("Best estimate life: %f years" % life)

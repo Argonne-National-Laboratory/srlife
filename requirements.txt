@@ -9,3 +9,6 @@ neml
 scikit-fem
 meshio
 networkx
+tqdm
+multiprocess
+dill
