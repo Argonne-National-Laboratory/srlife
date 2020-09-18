@@ -1,7 +1,4 @@
 <!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
-<!-- rupturetime=10**(sum[a*log10(stress)**n]/T-C)-->
-<!-- cycles_to_failure=10**(sum[a*log10(strain range)**n])-->
-
 <models>
   <base>
     <averageRupture>

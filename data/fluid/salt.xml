@@ -1,3 +1,4 @@
+<!-- temperature in K, heat transfer coefficient in W/mm^2-K -->
 <models>
   <base type="PiecewiseLinearFluidMaterial">
     <default>

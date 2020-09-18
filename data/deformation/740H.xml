@@ -1,3 +1,4 @@
+<!-- Units: stress in MPa, strain in mm/mm, time in hours, temperature in K -->
 <materials>
   <elastic_model type="SmallStrainElasticity">
     <elastic type="IsotropicLinearElasticModel">

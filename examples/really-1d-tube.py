@@ -16,7 +16,7 @@ if __name__ == "__main__":
   nz = 10
   T0 = 50
 
-  tmax = 8.0 * 3600.0
+  tmax = 8.0
 
   ntime = 10
 
