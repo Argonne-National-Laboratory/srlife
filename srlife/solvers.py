@@ -6,7 +6,7 @@ import numpy as np
 import numpy.linalg as la
 
 def newton(RJ, x0, rel_tol = 1.0-6, abs_tol = 1.0e-8, miters = 20,
-    linear_solver = la.solve, verbose = False, return_extra = False):
+    linear_solver = la.solve, verbose = True, return_extra = False):
   """
     Simple newton-raphson solver
 

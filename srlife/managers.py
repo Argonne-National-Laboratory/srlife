@@ -76,8 +76,7 @@ class SolutionManager:
       best-estimate life
     """
     self.solve_heat_transfer()
-
-    self.solve_structural_problem()
+    self.solve_structural()
 
     return 0
 
@@ -93,3 +92,13 @@ class SolutionManager:
           p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material),
         self.tubes), self.ntubes)
           )
+
+  def solve_structural(self):
+    """
+      Solve the structural problem for the complete system
+    """
+    if self.progress:
+      print("Running structural analysis:")
+    self.system_solver.solve(self.receiver, self.deformation_material,
+        self.structural_solver, nthreads = self.nthreads, 
+        decorator = self.progress_decorator, verbose = self.progress)

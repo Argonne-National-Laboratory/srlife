@@ -29,7 +29,7 @@ class DeformationMaterial:
     """
       Return the actual model for use in a solve
     """
-    return parse.parse_xml(xmlfile, modelname)
+    return parse.parse_xml(self.xmlfile, self.modelname)
 
 class ThermalMaterial:
   """

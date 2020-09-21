@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from srlife import spring, solverparams
+from srlife import spring, solverparams, receiver
 
 class SystemSolver(ABC):
   """
@@ -49,7 +49,8 @@ class SpringSystemSolver(SystemSolver):
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
 
-  def solve(self, receiver, smat, ssolver, nthreads = 1):
+  def solve(self, receiver, smat, ssolver, nthreads = 1,
+      verbose = False, decorator = lambda fn: fn):
     """
       Solve a receiver model using a spring system
 
@@ -59,11 +60,17 @@ class SpringSystemSolver(SystemSolver):
         ssolver         structural solver to use
 
       Additional parameters:
+        verbose         print stuff
         nthreads        number of threads to use
+        decorator       progress decorator
     """
     network = self.make_network(receiver, smat, ssolver)
-    for subproblem in network.reduce_graph():
-      subproblem.solve_all(nthreads)
+    subproblems = network.reduce_graph()
+
+    for i,subproblem in enumerate(subproblems):
+      if verbose:
+        print("Solving substructure %i of %i" % (i+1, len(subproblems)))
+      subproblem.solve_all(nthreads, decorator = decorator)
 
   def make_network(self, receiver, smat, ssolver):
     """
@@ -93,10 +100,10 @@ class SpringSystemSolver(SystemSolver):
           panel.stiffness, smat, ssolver))
         network.add_node(cn)
         cn += 1
-        network.add_edge(cn-2, cn-1, obbject = convert_to_spring(tube,
+        network.add_edge(cn-2, cn-1, object = convert_to_spring(tube,
           smat, ssolver))
         network.displacement_bc(cn-1, lambda t: 0.0)
-
+    
     network.validate_setup()
 
     return network
@@ -115,6 +122,7 @@ def convert_to_spring(thing, smat, ssolver):
   elif isinstance(thing, str):
     if thing not in ["disconnect", "rigid"]:
       raise ValueError("Special spring types are either 'disconnect' or 'rigid'!")
+    return thing
   elif isinstance(thing, receiver.Tube):
     return spring.TubeSpring(thing, ssolver, smat)
   else:

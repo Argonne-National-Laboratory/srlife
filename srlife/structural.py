@@ -277,7 +277,7 @@ class PythonTubeSolver(TubeSolver):
         tube:       tube object
         mat:        NEML material
     """
-    return PythonTubeSolver.State(tube, get_mat(mat), self.qorder)
+    return PythonTubeSolver.State(tube, mat, self.qorder)
 
   def dump_state(self, tube, i, state):
     """
@@ -351,7 +351,7 @@ class PythonTubeSolver(TubeSolver):
       """
         Initialize a full state object
       """
-      self.material = mat
+      self.mat = mat
       self.mesh = mesh_tube(tube)
       self.qorder = qorder
       self.ndim = tube.ndim
@@ -394,6 +394,10 @@ class PythonTubeSolver(TubeSolver):
 
       self.force = 0.0
       self.stiffness = 0.0
+
+    @property
+    def material(self):
+      return get_mat(self.mat)
 
     def define_boundary(self, tube, tol = 0.5):
       """
@@ -983,6 +987,6 @@ def get_mat(object):
     Small helper to wrap NEML for pickling issues
   """
   try:
-    object.get_neml_model()
+    return object.get_neml_model()
   except AttributeError:
     return object

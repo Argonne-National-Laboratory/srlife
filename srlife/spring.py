@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import networkx as nx
+import multiprocess
 
 class Spring(ABC):
   """
@@ -275,7 +276,12 @@ class SpringNetwork(nx.MultiGraph):
     for obj in nobjs:
       self.__copy(obj)
 
-    return nobjs
+    fobjs = []
+    for obj in nobjs:
+      if obj.size() != 0:
+        fobjs.append(obj)
+
+    return fobjs
 
   def validate_solve(self):
     """
@@ -331,11 +337,11 @@ class SpringNetwork(nx.MultiGraph):
     # Figure out free/fixed displacements
     (self.dmap, self.free, self.forces, self.fixed,
         self.fixed_displacements) = self.dof_maps(i)
-    
+
     # Actually solve
-    d = newton(lambda x: self.RJ(x),
+    d = newton(lambda x: self.RJ(x, nthreads = nthreads),
         self.displacements[self.dmap[self.free]], verbose = self.verbose,
-        rel_tol = self.rtol, abs_tol = self.atol, miter = self.miter)
+        rel_tol = self.rtol, abs_tol = self.atol, miters = self.miter)
 
     # Store the displacements, for fun
     self.displacements[self.dmap[self.free]] = d
@@ -345,7 +351,7 @@ class SpringNetwork(nx.MultiGraph):
     for i,j, edge in self.edges(data=True):
       edge['object'].update_state(self.i)
 
-  def RJ(self, d):
+  def RJ(self, d, nthreads = 1):
     """
       Actually calculate the residual and Jacobian equation for the step
       
@@ -355,24 +361,36 @@ class SpringNetwork(nx.MultiGraph):
     dall = np.zeros((len(self.nodes),))
     dall[self.dmap[self.fixed]] = self.fixed_displacements
     dall[self.dmap[self.free]] = d
-    
-    Fint = np.zeros((len(self.nodes),))
-    J = np.zeros((len(self.nodes),len(self.nodes)))
 
-    # This is the loop that can/should be parallelized
-    for i,j,edge in self.edges(data=True):
-      f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
-          - dall[self.dmap[i]])
-      Fint[self.dmap[i]] += -f
-      Fint[self.dmap[j]] += f
+    with multiprocess.Pool(nthreads) as p:
+      res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
+    #res = list(map(lambda e: self.fj(dall, *e), self.edges(data=True)))
+    Fint = sum(r[0] for r in res)
+    J = sum(r[1] for r in res)
 
-      J[self.dmap[i],self.dmap[i]] += k
-      J[self.dmap[i],self.dmap[j]] += -k
-      J[self.dmap[j],self.dmap[i]] += -k
-      J[self.dmap[j],self.dmap[j]] += k
-    
+    for k,(i,j,edge) in enumerate(self.edges(data=True)):
+      edge['object'].state_np1 = res[k][2]
+
     return (Fint[self.dmap[self.free]] - self.forces, 
         J[self.dmap[self.free],:][:,self.dmap[self.free]])
+
+  def fj(self,dall,i,j,edge):
+    """
+      Calculate the force and jacobian contributions for a single edge 
+    """
+    Fint = np.zeros((len(self.nodes),))
+    J = np.zeros((len(self.nodes),len(self.nodes)))
+    f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
+        - dall[self.dmap[i]])
+    Fint[self.dmap[i]] += -f
+    Fint[self.dmap[j]] += f
+    
+    J[self.dmap[i],self.dmap[i]] += k
+    J[self.dmap[i],self.dmap[j]] += -k
+    J[self.dmap[j],self.dmap[i]] += -k
+    J[self.dmap[j],self.dmap[j]] += k
+
+    return Fint, J, edge['object'].state_np1
 
   def dof_maps(self, i):
     """
@@ -408,7 +426,7 @@ class SpringNetwork(nx.MultiGraph):
     return total,np.array(free, dtype = int), np.array(forces), np.array(fixed,
         dtype = int), np.array(displacements)
 
-  def solve_all(self, nthreads = 1):
+  def solve_all(self, nthreads = 1, decorator = lambda x, nitems: x):
     """
       Solve all time steps
 
@@ -416,6 +434,7 @@ class SpringNetwork(nx.MultiGraph):
         nthreads        number of threads to use
     """
     self.validate_solve()
-    for i in range(1, len(self.times)):
-      self.solve(i, nthreads)
+    list(decorator(
+      map(lambda i: self.solve(i, nthreads), range(1, len(self.times))), 
+      len(self.times)-1))
 

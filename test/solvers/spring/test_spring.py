@@ -57,6 +57,37 @@ class TestSimple(unittest.TestCase):
 
     self.assertTrue(np.allclose(network.displacements,exact))
 
+  def test_system_thrads(self):
+    k1 = 100.0
+    k2 = 200.0
+    k3 = 150.0
+    f = 100.0
+
+    network = spring.SpringNetwork()
+    network.add_node(0)
+    network.add_node(1)
+    network.add_node(2)
+    network.add_edge(0,1, object = spring.LinearSpring(k1))
+    network.add_edge(1,2, object = spring.LinearSpring(k2))
+    network.add_edge(1,2, object = spring.LinearSpring(k3))
+    
+    network.set_times([0,1])
+
+    network.validate_setup()
+
+    network.displacement_bc(2, lambda t: 0.0)
+    network.force_bc(0, lambda t: t*f)
+
+    network.solve_all(nthreads=2)
+
+    kp = k2 + k3
+    dxp = f / kp
+    dx1 = f / k1
+    
+    exact = np.array([dx1+dxp,dxp,0])
+
+    self.assertTrue(np.allclose(network.displacements,exact))
+
   def test_remove_rigid(self):
     network = spring.SpringNetwork()
     k = 100.0
