@@ -8,7 +8,7 @@ from srlife import receiver, solverparams, spring, structural, thermal, system, 
 def sample_parameters():
   params = solverparams.ParameterSet()
 
-  params["nthreads"] = 4
+  params["nthreads"] = 1
   params["progress_bars"] = True
 
   params["thermal"]["rtol"] = 1.0e-6
@@ -16,11 +16,12 @@ def sample_parameters():
   params["thermal"]["miter"] = 20
 
   params["structural"]["rtol"] = 1.0e-6
-  params["structural"]["rtol"] = 1.0e-4
-  params["structural"]["miter"] = 20
+  params["structural"]["atol"] = 1.0e-8
+  params["structural"]["miter"] = 50
+  params["structural"]["verbose"] = False
 
   params["system"]["rtol"] = 1.0e-6
-  params["system"]["atol"] = 1.0e-4
+  params["system"]["atol"] = 1.0e-8
   params["system"]["miter"] = 10
   params["system"]["verbose"] = False
   
@@ -71,3 +72,7 @@ if __name__ == "__main__":
   life = solver.solve_life()
   
   print("Best estimate life: %f daily cycles" % life)
+  
+  for pi, panel in model.panels.items():
+    for ti, tube in panel.tubes.items():
+      tube.write_vtk("tube-%s-%s" % (pi, ti))

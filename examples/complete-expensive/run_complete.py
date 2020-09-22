@@ -3,7 +3,7 @@
 import sys
 sys.path.append('../..')
 
-from srlife import receiver, solverparams, spring, structural, thermal, system, library, managers
+from srlife import receiver, solverparams, spring, structural, thermal, system, library, managers, damage
 
 def sample_parameters():
   params = solverparams.ParameterSet()
@@ -12,16 +12,17 @@ def sample_parameters():
   params["progress_bars"] = True
 
   params["thermal"]["rtol"] = 1.0e-6
-  params["thermal"]["atol"] = 1.0e-4
+  params["thermal"]["atol"] = 1.0e-6
   params["thermal"]["miter"] = 20
 
   params["structural"]["rtol"] = 1.0e-6
-  params["structural"]["rtol"] = 1.0e-4
+  params["structural"]["atol"] = 1.0e-6
   params["structural"]["miter"] = 20
 
   params["system"]["rtol"] = 1.0e-6
-  params["system"]["atol"] = 1.0e-4
-  params["system"]["miter"] = 10
+  params["system"]["atol"] = 1.0e-6
+  params["system"]["miter"] = 20
+  params["system"]["verbose"] = False
   
   return params
 
@@ -46,20 +47,26 @@ if __name__ == "__main__":
   structural_solver = structural.PythonTubeSolver(params["structural"])
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
+  # Damage model to use in calculating life
+  damage_model = damage.TimeFractionInteractionDamage()
 
   # Load the materials
   fluid = library.load_fluid("salt", "base")
   thermal, deformation, damage = library.load_material("740H", "base", 
       "elastic_model", "base")
-
+  
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal, fluid,
-      structural_solver, deformation, damage, system_solver, 
+      structural_solver, deformation, damage, system_solver, damage_model, 
       pset = params)
 
   # Heuristics would go here
 
   # Report the best-estimate life of the receiver 
   life = solver.solve_life()
-
-  print("Best estimate life: %f years" % life)
+  
+  print("Best estimate life: %f daily cycles" % life)
+  
+  for pi, panel in model.panels.items():
+    for ti, tube in panel.tubes.items():
+      tube.write_vtk("tube-%s-%s" % (pi, ti))
