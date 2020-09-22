@@ -3,7 +3,7 @@
 import sys
 sys.path.append('../..')
 
-from srlife import receiver, solverparams, spring, structural, thermal, system, library, managers
+from srlife import receiver, solverparams, spring, structural, thermal, system, library, managers, damage
 
 def sample_parameters():
   params = solverparams.ParameterSet()
@@ -52,6 +52,8 @@ if __name__ == "__main__":
   structural_solver = structural.PythonTubeSolver(params["structural"])
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
+  # Damage model to use in calculating life
+  damage_model = damage.TimeFractionInteractionDamage()
 
   # Load the materials
   fluid = library.load_fluid("salt", "base")
@@ -60,7 +62,7 @@ if __name__ == "__main__":
   
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal, fluid,
-      structural_solver, deformation, damage, system_solver, 
+      structural_solver, deformation, damage, system_solver, damage_model, 
       pset = params)
 
   # Heuristics would go here
@@ -68,4 +70,4 @@ if __name__ == "__main__":
   # Report the best-estimate life of the receiver 
   life = solver.solve_life()
   
-  print("Best estimate life: %f years" % life)
+  print("Best estimate life: %f daily cycles" % life)

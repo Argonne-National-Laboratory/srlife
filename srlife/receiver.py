@@ -2,6 +2,8 @@
   This module define the data structures used as input and output to the analysis module.
 """
 
+import itertools
+
 import numpy as np
 import scipy.interpolate as inter
 import h5py
@@ -24,21 +26,16 @@ class Receiver:
          if the analysis neglects some of the night period)
       2) The number of days (see #1) explicitly represented in the
          analysis results.
-      3) A multiplier on the analyzed results.  For example, if the
-         analysis is for a typical day and the receiver life is
-         10 years this multiplier is 10 years x 365 days / 1 days = 3650.
   """
-  def __init__(self, period, days, multiplier, panel_stiffness):
+  def __init__(self, period, days, panel_stiffness):
     """
     Parameters:
       period:           single daily cycle period
       days:             number of daily cycles explicitly represented
-      multiplier:       number of repetitions on the analysis cycle
       panel_stiffness:  panel interconnect stiffness
     """
     self.period = period
     self.days = days
-    self.multiplier = multiplier
     self.panels = {}
     self.stiffness = panel_stiffness
 
@@ -65,7 +62,6 @@ class Receiver:
     base = (
         np.isclose(self.period, other.period)
         and np.isclose(self.days, other.days)
-        and np.isclose(self.multiplier, other.multiplier)
         and np.isclose(self.stiffness, other.stiffness)
         )
     for name, panel in self.panels.items():
@@ -74,6 +70,21 @@ class Receiver:
       base = (base and panel.close(other.panels[name]))
 
     return base
+  
+  @property
+  def tubes(self):
+    """
+      Shortcut iterator over all tubes
+    """
+    return itertools.chain(*(panel.tubes.values() 
+      for panel in self.panels.values()))
+
+  @property
+  def ntubes(self):
+    """
+      Shortcut for total number of tubes
+    """
+    return len(list(self.tubes))
 
   @property
   def npanels(self):
@@ -109,7 +120,6 @@ class Receiver:
 
     fobj.attrs['period'] = self.period
     fobj.attrs['days'] = self.days
-    fobj.attrs['multiplier'] = self.multiplier
     fobj.attrs['stiffness'] = self.stiffness
 
     grp = fobj.create_group("panels")
@@ -129,8 +139,7 @@ class Receiver:
     if isinstance(fobj, str):
       fobj = h5py.File(fobj, 'r')
 
-    res = cls(fobj.attrs['period'], fobj.attrs['days'],
-        fobj.attrs['multiplier'], fobj.attrs['stiffness'])
+    res = cls(fobj.attrs['period'], fobj.attrs['days'], fobj.attrs['stiffness'])
 
     grp = fobj["panels"]
 

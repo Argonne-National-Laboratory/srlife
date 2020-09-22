@@ -147,7 +147,8 @@ class TestStructuralMaterial(unittest.TestCase):
         self.assertTrue(np.isclose(sum, fcycles))
 
     def test_rupturetime(self):
-        rtime=self.structmat.time_to_rupture(self.rupture_pname, self.T, self.stress)
+        rtime=self.structmat.time_to_rupture(self.rupture_pname, 
+            np.array([self.T]), np.array([self.stress]))[0]
 
         C=17.16
         a=np.array([-1475.23, 7289.41, -16642.64, 35684.60])

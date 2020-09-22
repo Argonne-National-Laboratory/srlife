@@ -88,6 +88,8 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
 
     tube.add_results("temperature", temperatures)
 
+    return temperatures
+
 class FiniteDifferenceImplicitThermalProblem:
   """
     The actual finite difference solver created to solve a single

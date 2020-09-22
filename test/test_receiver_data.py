@@ -18,7 +18,6 @@ inner_radius = outer_radius - thickness
 
 period = 10.0
 ndays = 10
-multiplier = 10
 
 nsteps = 10
 
@@ -92,7 +91,7 @@ def valid_panel(n = 0, results = []):
   return panel
 
 def valid_receiver(npanel = 0, ntube = 0, results = []):
-  rec = receiver.Receiver(period, ndays, multiplier, panel_k)
+  rec = receiver.Receiver(period, ndays, panel_k)
 
   for i in range(npanel):
     rec.add_panel(valid_panel(ntube, results))

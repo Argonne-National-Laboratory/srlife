@@ -16,7 +16,8 @@ class SolutionManager:
   """
   def __init__(self, receiver, thermal_solver, thermal_material,
       fluid_material, structural_solver, deformation_material,
-      damage_material, system_solver, pset = solverparams.ParameterSet()):
+      damage_material, system_solver, damage_model,
+      pset = solverparams.ParameterSet()):
     """
       Parameters:
         receiver                receiver object to solve
@@ -27,6 +28,7 @@ class SolutionManager:
         deformation_material    how things deform with time
         damage_material         how to calculate creep damage
         system_solver           how to tie tubes into the structural system
+        damage_model            how to calculate damage from the results
 
       Additional Parameters:
         pset                    optional set of solver parameters
@@ -39,6 +41,7 @@ class SolutionManager:
     self.deformation_material = deformation_material
     self.damage_material = damage_material
     self.system_solver = system_solver
+    self.damage_model = damage_model
 
     self.pset = pset
     self.nthreads = pset.get_default("nthreads", 1)
@@ -49,8 +52,7 @@ class SolutionManager:
     """
       Direct iterator over tubes
     """
-    return itertools.chain(*(panel.tubes.values() 
-      for panel in self.receiver.panels.values()))
+    return self.receiver.tubes
 
   @property
   def ntubes(self):
@@ -78,7 +80,16 @@ class SolutionManager:
     self.solve_heat_transfer()
     self.solve_structural()
 
-    return 0
+    return self.calculate_damage()
+
+  def calculate_damage(self):
+    """
+      Calculate damage from the results
+    """
+    if self.progress:
+      print("Calculating damage:")
+    return self.damage_model.determine_life(self.receiver, self.damage_material, 
+        nthreads = self.nthreads, decorator = self.progress_decorator)
 
   def solve_heat_transfer(self):
     """
@@ -87,11 +98,13 @@ class SolutionManager:
     if self.progress:
       print("Running thermal analysis:")
     with multiprocess.Pool(self.nthreads) as p:
-      list(
+      temps = list(
           self.progress_decorator(
           p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material),
         self.tubes), self.ntubes)
           )
+    for tube, temps in zip(self.tubes, temps):
+      tube.add_results("temperature", temps)
 
   def solve_structural(self):
     """

@@ -467,11 +467,20 @@ class StructuralMaterial:
 
     if a.shape != n.shape:
       raise ValueError("The lists of a and n must have equal lengths!")
+    
+    if stress.shape != temp.shape:
+      raise ValueError("Stress and temperature must have the same shape!")
+    
+    zeros = stress == 0.0
+    not_zeros = np.logical_not(zeros)
 
-    polysum = 0
+    res = np.zeros(stress.shape)
     for (b,m) in zip(a,n):
-      polysum+=b*np.log10(stress)**m
-    return 10**(polysum/temp-C)
+      res[not_zeros] += b*np.log10(stress[not_zeros])**m
+    res[not_zeros] = 10.0**(res[not_zeros]/temp[not_zeros]-C)
+    res[zeros] = np.inf
+
+    return res
 
   def inside_envelope(self, pname, damage_fatigue, damage_creep):
     """
