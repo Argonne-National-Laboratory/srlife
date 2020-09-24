@@ -87,7 +87,11 @@ class TubeSpring(Spring):
     self.solver.setup_tube(self.tube)
 
     # Get the first state
-    self.state_n = self.solver.init_state(self.tube, self.material)
+    self.state_n = self.solver.init_state(self.tube, self.material, 
+        i = 0)
+
+    # Dump this first state to the Tube
+    self.solver.dump_state(self.tube, 0, self.state_n)
 
   def force_and_stiffness(self, i, d):
     """
@@ -364,7 +368,6 @@ class SpringNetwork(nx.MultiGraph):
 
     with multiprocess.Pool(nthreads) as p:
       res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
-    #res = list(map(lambda e: self.fj(dall, *e), self.edges(data=True)))
     Fint = sum(r[0] for r in res)
     J = sum(r[1] for r in res)
 

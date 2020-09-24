@@ -269,15 +269,18 @@ class PythonTubeSolver(TubeSolver):
 
     return state_np1
 
-  def init_state(self, tube, mat):
+  def init_state(self, tube, mat, i = None):
     """
       Initialize the solver state
 
       Parameters:
         tube:       tube object
         mat:        NEML material
+
+      Additional Parameters:
+        i:          if not none, also dump state into the tube
     """
-    return PythonTubeSolver.State(tube, mat, self.qorder)
+    return PythonTubeSolver.State(tube, mat, self.qorder, i = i)
 
   def dump_state(self, tube, i, state):
     """
@@ -347,7 +350,7 @@ class PythonTubeSolver(TubeSolver):
     """
       Subclass for maintaining state with the python solver
     """
-    def __init__(self, tube, mat, qorder):
+    def __init__(self, tube, mat, qorder, i = None):
       """
         Initialize a full state object
       """
@@ -394,6 +397,9 @@ class PythonTubeSolver(TubeSolver):
 
       self.force = 0.0
       self.stiffness = 0.0
+
+      if i is not None:
+        self.temperature = self.sbasis.interpolate(tube.results['temperature'][i].flatten()).value
 
     @property
     def material(self):
