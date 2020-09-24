@@ -5,6 +5,8 @@
 
 from abc import ABC, abstractmethod
 
+import multiprocess
+
 from srlife import spring, solverparams, receiver
 
 class SystemSolver(ABC):
@@ -67,10 +69,32 @@ class SpringSystemSolver(SystemSolver):
     network = self.make_network(receiver, smat, ssolver)
     subproblems = network.reduce_graph()
 
-    for i,subproblem in enumerate(subproblems):
+    # Simple heuristic for deciding who gets threads
+    nprobs = len(subproblems)
+    max_sub = max(sum(1 for i,j,data in sb.edges(data=True) 
+      if isinstance(data['object'], spring.TubeSpring)) for sb in
+      subproblems)
+
+    if nprobs < max_sub:
+      results = []
       if verbose:
-        print("Solving substructure %i of %i" % (i+1, len(subproblems)))
-      subproblem.solve_all(nthreads, decorator = decorator)
+        print("Solving substructures sequentially")
+      for i,subproblem in enumerate(subproblems):
+        if verbose:
+          print("Solving substructure %i of %i" % (i+1, len(subproblems)))
+        results.append(subproblem.solve_all(nthreads, decorator = decorator))
+    else:
+      sfn = lambda x: x.solve_all(1)
+      if verbose: 
+        print("Solving subproblems in parallel")
+      with multiprocess.Pool(nthreads) as p:
+        results = list(decorator(p.imap(sfn, subproblems), len(subproblems)))
+
+    # Sigh, now need to copy the tube data into the correct location...
+    for new, orig in zip(results, subproblems):
+      for i,j,k in new.edges(keys=True):
+        if isinstance(orig[i][j][k]['object'], spring.TubeSpring):
+          orig[i][j][k]['object'].tube.copy_results(new[i][j][k]['object'].tube)
 
   def make_network(self, receiver, smat, ssolver):
     """

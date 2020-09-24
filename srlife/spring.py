@@ -365,9 +365,12 @@ class SpringNetwork(nx.MultiGraph):
     dall = np.zeros((len(self.nodes),))
     dall[self.dmap[self.fixed]] = self.fixed_displacements
     dall[self.dmap[self.free]] = d
-
-    with multiprocess.Pool(nthreads) as p:
-      res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
+    
+    if nthreads > 1:
+      with multiprocess.Pool(nthreads) as p:
+        res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
+    else:
+        res = list(map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
     Fint = sum(r[0] for r in res)
     J = sum(r[1] for r in res)
 
@@ -440,4 +443,5 @@ class SpringNetwork(nx.MultiGraph):
     list(decorator(
       map(lambda i: self.solve(i, nthreads), range(1, len(self.times))), 
       len(self.times)-1))
+    return self
 

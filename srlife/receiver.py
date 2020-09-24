@@ -326,6 +326,16 @@ class Tube:
 
     self.T0 = T0
 
+  def copy_results(self, other):
+    """
+      Copy the results fields from one tube to another
+
+      Parameters:
+        other:      other tube object
+    """
+    self.results = other.results
+    self.quadrature_results = other.quadrature_results
+
   @property
   def ndim(self):
     """
