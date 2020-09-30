@@ -178,7 +178,7 @@ class SpringNetwork(nx.MultiGraph):
       self.__set_default_times()
 
     # Validate the type of each edge and the internal times (if provided)
-    for i,j,edge in self.edges(data=True):
+    for _,_,edge in self.edges(data=True):
       if isinstance(edge['object'], TubeSpring):
         if not np.allclose(edge['object'].tube.times, self.times):
           raise ValueError("A tube object has discrete times that are"
@@ -195,7 +195,7 @@ class SpringNetwork(nx.MultiGraph):
     """
       Grab times from the first Tube object or raise error
     """
-    for i,j,edge in self.edges(data=True):
+    for _,_,edge in self.edges(data=True):
       if isinstance(edge['object'], TubeSpring):
         self.times = edge['object'].tube.times
         break
@@ -301,7 +301,7 @@ class SpringNetwork(nx.MultiGraph):
       raise RuntimeError("Discrete times must be established at solve!")
 
     # Check that everything is a spring
-    for i,j,edge in self.edges(data=True):
+    for _,_,edge in self.edges(data=True):
       if not isinstance(edge['object'], Spring):
         raise RuntimeError("All edges must be springs at solve!")
     
