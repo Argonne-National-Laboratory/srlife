@@ -1,14 +1,36 @@
+#pylint: disable=dangerous-default-value, unused-import
 """
   This module contains material models containing thermal, fluid, and
   material properties.  These models can be stored to and recalled from
   XML files for archiving.
 """
 
-import xml.etree.ElementTree as ET
 from collections import ChainMap
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import scipy.interpolate as inter
+
+from neml import parse, models
+
+class DeformationMaterial:
+  """
+    Incredibly thin wrapper around a NEML XML file
+  """
+  def __init__(self, xmlfile, modelname):
+    """
+      Parameters:
+        xmlfile:    file location for the input file
+        modelname:  which model to load
+    """
+    self.xmlfile = xmlfile
+    self.modelname = modelname
+
+  def get_neml_model(self):
+    """
+      Return the actual model for use in a solve
+    """
+    return parse.parse_xml(self.xmlfile, self.modelname)
 
 class ThermalMaterial:
   """
@@ -19,22 +41,51 @@ class ThermalMaterial:
       2) the conductivity, as a function of temperature and its derivative
       3) the diffusivity, as a function of temperature and its derivative
   """
+  def get_dict(self):
+    """
+      Returns the data as a dictionary
+    """
+    raise NotImplementedError()
+
+  def get_type(self):
+    """
+      Return the string type for the data
+    """
+    raise NotImplementedError()
+
   @classmethod
-  def load(cls, fname):
+  def load(cls, fname, modelname):
     """
       Load from a dictionary
 
       Parameters:
         fname       filename
     """
-    root, data = load_dict_xml(fname)
+    tag, typ = find_name(fname, modelname)
+    data = load_node(tag)[modelname]
 
-    if root == "PiecewiseLinearThermalMaterial":
+    if typ == "PiecewiseLinearThermalMaterial":
       return PiecewiseLinearThermalMaterial.load(data)
-    elif root == "ConstantThermalMaterial":
+    elif typ == "ConstantThermalMaterial":
       return ConstantThermalMaterial.load(data)
     else:
-      raise ValueError("Unknown ThermalMaterial type %s" % root)
+      raise ValueError("Unknown ThermalMaterial type %s" % typ)
+
+  def save(self, fname, modelname):
+    """
+      Save the model to an XML file as modelname
+
+      Parameters:
+        fname       filename to use
+        modelname   (base tag) to use
+    """
+    root = ET.Element("models")
+
+    save_node(modelname, self.get_dict(), root,
+        attrib = {"type": self.get_type()})
+
+    tree = ET.ElementTree(element = root)
+    tree.write(fname)
 
 class PiecewiseLinearThermalMaterial(ThermalMaterial):
   """
@@ -96,16 +147,18 @@ class PiecewiseLinearThermalMaterial(ThermalMaterial):
     """
     return self.dfdiff(T)
 
-  def save(self, fname):
+  def get_type(self):
     """
-      Save to an XML file
+      String type
+    """
+    return "PiecewiseLinearThermalMaterial"
 
-      Parameters:
-        fname       filename
+  def get_dict(self):
     """
-    dictrep = {"name": self.name, "temps": string_array(self.temps),
-        "cond": string_array(self.cond), "diff": string_array(self.diff)}
-    save_dict_xml(dictrep, fname, "PiecewiseLinearThermalMaterial")
+      Pickled dictionary
+    """
+    return {"name": self.name, "temps": string_array(self.temps),
+        "cond": string_array(self.cond), "diff": string_array(self.diff)} 
 
   @classmethod
   def load(cls, values):
@@ -169,16 +222,18 @@ class ConstantThermalMaterial(ThermalMaterial):
     """
     return T * 0.0
 
-  def save(self, fname):
+  def get_type(self):
     """
-      Save to an XML file
+      String type
+    """
+    return "ConstantThermalMaterial"
 
-      Parameters:
-        fname       filename
+  def get_dict(self):
     """
-    dictrep = {"name": self.name, "k": str(self.cond),
+      Pickled dictionary
+    """
+    return {"name": self.name, "k": str(self.cond),
         "alpha": str(self.diff)}
-    save_dict_xml(dictrep, fname, "PiecewiseConstantThermalMaterial")
 
   @classmethod
   def load(cls, values):
@@ -199,24 +254,53 @@ class FluidMaterial:
       2) A map between a ThermalMaterial name and the corresponding
          temperature-dependent film coefficient and its derivative
   """
+  def get_dict(self):
+    """
+      Returns the data as a dictionary
+    """
+    raise NotImplementedError()
+
+  def get_type(self):
+    """
+      Return the string type for the data
+    """
+    raise NotImplementedError()
+
   @classmethod
-  def load(cls, fname):
+  def load(cls, fname, modelname):
     """
       Load a FluidMaterial object from a file
 
       Parameters:
         fname       file name to load from
     """
-    root, data = load_dict_xml(fname)
+    tag, typ = find_name(fname, modelname)
+    data = load_node(tag)[modelname]
 
-    if root == "PiecewiseLinearFluidMaterial":
+    if typ == "PiecewiseLinearFluidMaterial":
       return PiecewiseLinearFluidMaterial.load(data)
-    elif root == "ConstantFluidMaterial":
+    elif typ == "ConstantFluidMaterial":
       return ConstantFluidMaterial.load(data)
     else:
-      raise ValueError("Unknown FluidMaterial type %s" % root)
+      raise ValueError("Unknown FluidMaterial type %s" % typ)
 
-class ConstantFluidMaterial:
+  def save(self, fname, modelname):
+    """
+      Save the model to an XML file as modelname
+
+      Parameters:
+        fname       filename to use
+        modelname   (base tag) to use
+    """
+    root = ET.Element("models")
+
+    save_node(modelname, self.get_dict(), root,
+        attrib = {"type": self.get_type()})
+
+    tree = ET.ElementTree(element = root)
+    tree.write(fname)
+
+class ConstantFluidMaterial(FluidMaterial):
   """
     Supply a mapping between the material type and a constant
     film coefficient
@@ -230,16 +314,12 @@ class ConstantFluidMaterial:
         data:       the dictionary
     """
     self.data = data
+  
+  def get_dict(self):
+    return {k: str(v) for k, v in self.data.items()} 
 
-  def save(self, fname):
-    """
-      Save to an XML file
-
-      Parameters:
-        fname       file name to save to
-    """
-    dictrep = {k: str(v) for k, v in self.data.items()}
-    save_dict_xml(dictrep, fname, "ConstantFluidMaterial")
+  def get_type(self):
+    return "ConstantFluidMaterial"
 
   @classmethod
   def load(cls, values):
@@ -261,7 +341,10 @@ class ConstantFluidMaterial:
         T:              temperatures
 
     """
-    return T*0.0 + self.data[material]
+    if material in self.data:
+      return T*0.0 + self.data[material]
+    else:
+      return T*0.0 + self.data["default"]
 
   # pylint: disable=unused-argument
   def dcoefficient(self, material, T):
@@ -275,7 +358,7 @@ class ConstantFluidMaterial:
     """
     return T * 0.0
 
-class PiecewiseLinearFluidMaterial:
+class PiecewiseLinearFluidMaterial(FluidMaterial):
   """
     Supply a mapping between the material type and a piecewise linear
     interpolate defining the film coefficient as a function of temperature.
@@ -292,16 +375,12 @@ class PiecewiseLinearFluidMaterial:
 
     self.fns = {name: make_piecewise(T, v) for name, (T,v) in data.items()}
 
-  def save(self, fname):
-    """
-      Save to an XML file
-
-      Parameters:
-        fname       file name to save to
-    """
-    dictrep = {k: {'temp': string_array(T),
+  def get_dict(self):
+    return {k: {'temp': string_array(T),
       'values': string_array(v)} for k, (T, v) in self.data.items()}
-    save_dict_xml(dictrep, fname, "PiecewiseLinearFluidMaterial")
+
+  def get_type(self):
+    return "PiecewiseLinearFluidMaterial"
 
   @classmethod
   def load(cls, values):
@@ -324,7 +403,10 @@ class PiecewiseLinearFluidMaterial:
         T:              temperatures
 
     """
-    return self.fns[material][0](T)
+    if material in self.fns.keys():
+      return self.fns[material][0](T)
+    else:
+      return self.fns["default"][0](T)
 
   def dcoefficient(self, material, T):
     """
@@ -335,7 +417,10 @@ class PiecewiseLinearFluidMaterial:
         material:       material name
         T:              temperatures
     """
-    return self.fns[material][1](T)
+    if material in self.fns.keys():
+      return self.fns[material][1](T)
+    else:
+      return self.fns["default"][1](T)
 
 class StructuralMaterial:
   """
@@ -346,7 +431,6 @@ class StructuralMaterial:
     2) time to rupture as a function of temperaure and stress
     3) checks creep-fatigue interaction diagram
   """
-
   def __init__(self, data):
     self.data = data
 
@@ -408,11 +492,20 @@ class StructuralMaterial:
 
     if a.shape != n.shape:
       raise ValueError("The lists of a and n must have equal lengths!")
+    
+    if stress.shape != temp.shape:
+      raise ValueError("Stress and temperature must have the same shape!")
+    
+    zeros = stress == 0.0
+    not_zeros = np.logical_not(zeros)
 
-    polysum = 0
+    res = np.zeros(stress.shape)
     for (b,m) in zip(a,n):
-      polysum+=b*np.log10(stress)**m
-    return 10**(polysum/temp-C)
+      res[not_zeros] += b*np.log10(stress[not_zeros])**m
+    res[not_zeros] = 10.0**(res[not_zeros]/temp[not_zeros]-C)
+    res[zeros] = np.inf
+
+    return res
 
   def inside_envelope(self, pname, damage_fatigue, damage_creep):
     """
@@ -441,17 +534,25 @@ class StructuralMaterial:
     return damage_creep <= ((y_3 - y_2) / (x_3 - x_2) * (damage_fatigue - x_2) + y_2)
 
   @classmethod
-  def load(cls, fname, material):
+  def load(cls, fname, model):
     """
       Load a Structural Material object from a file
 
       Parameters:
         fname:       file name to load from
-        material:    name of material ("A740H","SS316H","A800H","A617", or "A282")
+        material:    model name
     """
-    data = load_dict_xml(fname)[1]
-    data = data[material]
-    return cls(data)
+    tag = ET.parse(fname).getroot().find(model)
+    return cls(load_node(tag)[model])
+
+  def save(self, fname, modelname):
+    """
+      Save to a particular file under a particular model name
+    """
+    root = ET.Element('models')
+    save_node(modelname, self.data, root)
+    tree = ET.ElementTree(element = root)
+    tree.write(fname)
 
 def make_piecewise(x, y):
   """
@@ -464,25 +565,20 @@ def make_piecewise(x, y):
 
   return inter.interp1d(x, y), inter.interp1d(x, ydiff, kind = "previous")
 
-def save_dict_xml(data, fname, rootname = "data"):
+def find_name(xmlfile, name):
   """
-    Dump a python dictionary to file, recursion is allowed
+    Find the base tag with name in an XML file
 
     Parameters:
-      data:     dictionary of data (can be recursive)
-      fname:    filename to use
-
-    Other Parameters:
-      rootname: what to call the root node
+      xmlfile:        file name
+      name:           tag to look for
   """
-  root = ET.Element(rootname)
-  for k,v in data.items():
-    save_node(k, v, root)
+  root = ET.parse(xmlfile).getroot()
+  tag =  root.find(name)
 
-  et = ET.ElementTree(element = root)
-  et.write(fname)
+  return tag, tag.attrib["type"]
 
-def save_node(name, entry, node):
+def save_node(name, entry, node, attrib = {}):
   """
     Save a dictionary to a particular node
 
@@ -490,25 +586,16 @@ def save_node(name, entry, node):
       name:     name of the new node
       entry:    entry of interest
       node:     ET parent node object
+
+    Additional parameters:
+      attribs   node attributes
   """
-  nnode = ET.Element(name)
+  nnode = ET.SubElement(node, name, attrib)
   if isinstance(entry, dict):
     for k,v in entry.items():
       save_node(k, v, nnode)
   else:
     nnode.text = entry
-  node.append(nnode)
-
-def load_dict_xml(fname):
-  """
-    Load a python dictionary from a file, recursion is allowed
-
-    Parameters:
-      fname:        file with the data
-  """
-  tree = ET.parse(fname)
-  rootname = tree.getroot().tag
-  return rootname, load_node(tree.getroot())[rootname]
 
 def load_node(node):
   """

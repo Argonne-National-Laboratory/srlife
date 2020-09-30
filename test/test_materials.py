@@ -7,19 +7,6 @@ import scipy.interpolate as inter
 from srlife import materials
 from helpers import differentiate
 
-class TestLoadStore(unittest.TestCase):
-  def setUp(self):
-    self.example = {"one": {"two" : {"three": "data", "four": "yaydata"},
-      "five": "moredata"}, "six": "evenmore"}
-
-  def test_recover(self):
-    tf = tempfile.mktemp()
-
-    materials.save_dict_xml(self.example, tf)
-    rn, comp = materials.load_dict_xml(tf)
-
-    self.assertTrue(comp == self.example)
-
 class CommonThermalMaterial:
   def test_derivative(self):
     Tvals = np.linspace(np.min(self.T), np.max(self.T))[1:-1]
@@ -47,12 +34,12 @@ class TestPiecewiseLinearThermalMaterial(CommonThermalMaterial, unittest.TestCas
     self.assertTrue(np.isclose(inter.interp1d(self.T, self.diff)(T),
       self.obj.diffusivity(T)))
 
-  def test_store_receover(self):
+  def test_store_recover(self):
     tf = tempfile.mktemp()
 
-    self.obj.save(tf)
+    self.obj.save(tf, "blah")
 
-    rep = materials.ThermalMaterial.load(tf)
+    rep = materials.ThermalMaterial.load(tf, "blah")
 
     self.assertEqual(rep.name, self.obj.name)
     self.assertTrue(np.allclose(rep.temps, self.obj.temps))
@@ -66,6 +53,28 @@ class CommonFluidMaterial:
       self.assertAlmostEqual(self.obj.dcoefficient(self.mat, T),
           differentiate(lambda x: self.obj.coefficient(self.mat, x), T))
 
+class TestConstantFluidMaterial(CommonFluidMaterial, unittest.TestCase):
+  def setUp(self):
+    self.value = 10.0
+    self.data = {"Computonium": self.value}
+    self.obj = materials.ConstantFluidMaterial(self.data)
+
+    self.Trange = np.linspace(0, 100)
+    self.mat = "Computonium"
+
+  def test_recover(self):
+    tfile = tempfile.mktemp()
+    self.obj.save(tfile, "blah")
+
+    comp = materials.FluidMaterial.load(tfile, "blah")
+
+    self.assertAlmostEqual(self.obj.coefficient("Computonium", 0),
+        comp.coefficient("Computonium", 0))
+
+  def test_interpolate(self):
+    self.assertAlmostEqual(self.obj.coefficient("Computonium", 0), self.value)
+
+
 class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
   def setUp(self):
     self.data = {"Computonium": (np.array([10.0,100.0,200.0,300.0]), np.array([50,10.0,5.0,2.0])),
@@ -77,9 +86,9 @@ class TestPiecewiseLinearFluidMaterial(CommonFluidMaterial, unittest.TestCase):
 
   def test_recover(self):
     tfile = tempfile.mktemp()
-    self.obj.save(tfile)
+    self.obj.save(tfile, "blah")
 
-    comp = materials.FluidMaterial.load(tfile)
+    comp = materials.FluidMaterial.load(tfile, "blah")
 
     for k, (T, vals) in self.obj.data.items():
       self.assertTrue(k in comp.data)
@@ -106,22 +115,19 @@ class TestStructuralMaterial(unittest.TestCase):
         self.fatigue_pname="nFatigue"
         self.rupture_pname="avgRupture"
         self.cfinteraction_pname="cfinteraction"
-        self.data={"Computonium": {"nFatigue": {"curve1": {"T": "950","a": "-9.2e-01 -3.8e+00 -8.4e+00 -4.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
+        self.data={"nFatigue": {"curve1": {"T": "950","a": "-9.2e-01 -3.8e+00 -8.4e+00 -4.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
         "curve2": {"T": "800", "a": "-19.2e-01 -3.8e+00 -18.4e+00 -14.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
         "curve3": {"T": "500", "a": "-0.2e-01 -0.8e+00 -0.4e+00 -0.1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"}},
         "avgRupture": {"C": "17.16","a": "-1475.23 7289.41 -16642.64 35684.60", "n": "3 2 1 0"},
         "lbRupture": {"C": "10.0","a": "-1000.0 7000.0 -10000.0 30000.0", "n": "3 2 1 0"},
-        "cfinteraction":"0.3 0.3"},
-        "Computonium2": {"nFatigue": {"curve1": {"T": "100","a": "-1e-01 -1e+00 -1e+00 -1e+00", "n": "3 2 1 0", "cutoff": "1.5e-3"},
-        "curve2": {"T": "200", "a": "-10e-01 -3.0e+00 -1.0e+00 -1e+00", "n": "3 2 1 0", "cutoff": "1e-3"},
-        "curve3": {"T": "500", "a": "-1e-01 -1e+00 -1e+00 -1e+00", "n": "3 2 1 0", "cutoff": "10e-3"}},
-        "avgRupture": {"C": "1","a": "-10 100 -100 10", "n": "3 2 1 0"},
-        "lbRupture": {"C": "10.0","a": "-1000.0 7000.0 -10000.0 30000.0", "n": "3 2 1 0"},
-        "cfinteraction":"0.1 0.1"}}
+        "cfinteraction":"0.3 0.3"}
 
-        self.fname = tempfile.mktemp()
-        materials.save_dict_xml(self.data, self.fname)
-        self.structmat = materials.StructuralMaterial.load(self.fname,self.mat)
+        self.structmat = materials.StructuralMaterial(self.data)
+
+    def test_store_receover(self):
+      tfile = tempfile.mktemp()
+      self.structmat.save(tfile, "blah")
+      test = materials.StructuralMaterial.load(tfile, "blah")
 
     def test_cycles_to_fail(self):
         fcycles = self.structmat.cycles_to_fail(self.fatigue_pname,self.T,self.erange)
@@ -141,7 +147,8 @@ class TestStructuralMaterial(unittest.TestCase):
         self.assertTrue(np.isclose(sum, fcycles))
 
     def test_rupturetime(self):
-        rtime=self.structmat.time_to_rupture(self.rupture_pname, self.T, self.stress)
+        rtime=self.structmat.time_to_rupture(self.rupture_pname, 
+            np.array([self.T]), np.array([self.stress]))[0]
 
         C=17.16
         a=np.array([-1475.23, 7289.41, -16642.64, 35684.60])

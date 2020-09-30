@@ -2,6 +2,8 @@
   This module define the data structures used as input and output to the analysis module.
 """
 
+import itertools
+
 import numpy as np
 import scipy.interpolate as inter
 import h5py
@@ -13,8 +15,8 @@ class Receiver:
     Basic definition of the tubular receiver geometry.
 
     A receiver is a collection of panels linked together by
-    an elastic spring stiffness.  This stiffness can be zero (disconnected)
-    or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    "rigid" or "disconnect"
 
     Panels can be labeled by strings.  By default the names
     are sequential numbers.
@@ -24,21 +26,16 @@ class Receiver:
          if the analysis neglects some of the night period)
       2) The number of days (see #1) explicitly represented in the
          analysis results.
-      3) A multiplier on the analyzed results.  For example, if the
-         analysis is for a typical day and the receiver life is
-         10 years this multiplier is 10 years x 365 days / 1 days = 3650.
   """
-  def __init__(self, period, days, multiplier, panel_stiffness):
+  def __init__(self, period, days, panel_stiffness):
     """
     Parameters:
       period:           single daily cycle period
       days:             number of daily cycles explicitly represented
-      multiplier:       number of repetitions on the analysis cycle
       panel_stiffness:  panel interconnect stiffness
     """
     self.period = period
     self.days = days
-    self.multiplier = multiplier
     self.panels = {}
     self.stiffness = panel_stiffness
 
@@ -65,7 +62,6 @@ class Receiver:
     base = (
         np.isclose(self.period, other.period)
         and np.isclose(self.days, other.days)
-        and np.isclose(self.multiplier, other.multiplier)
         and np.isclose(self.stiffness, other.stiffness)
         )
     for name, panel in self.panels.items():
@@ -74,6 +70,21 @@ class Receiver:
       base = (base and panel.close(other.panels[name]))
 
     return base
+  
+  @property
+  def tubes(self):
+    """
+      Shortcut iterator over all tubes
+    """
+    return itertools.chain(*(panel.tubes.values() 
+      for panel in self.panels.values()))
+
+  @property
+  def ntubes(self):
+    """
+      Shortcut for total number of tubes
+    """
+    return len(list(self.tubes))
 
   @property
   def npanels(self):
@@ -109,7 +120,6 @@ class Receiver:
 
     fobj.attrs['period'] = self.period
     fobj.attrs['days'] = self.days
-    fobj.attrs['multiplier'] = self.multiplier
     fobj.attrs['stiffness'] = self.stiffness
 
     grp = fobj.create_group("panels")
@@ -129,8 +139,7 @@ class Receiver:
     if isinstance(fobj, str):
       fobj = h5py.File(fobj, 'r')
 
-    res = cls(fobj.attrs['period'], fobj.attrs['days'],
-        fobj.attrs['multiplier'], fobj.attrs['stiffness'])
+    res = cls(fobj.attrs['period'], fobj.attrs['days'], fobj.attrs['stiffness'])
 
     grp = fobj["panels"]
 
@@ -144,8 +153,8 @@ class Panel:
     Basic definition of a panel in a tubular receiver.
 
     A panel is a collection of Tube object linked together by
-    an elastic spring stiffness.  This stiffness can be zero
-    (disconnected) or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    a string "disconnect" or a string "rigid"
 
     Tubes in the panel can be labeled by strings.  By default the
     names are sequential numbers.
@@ -316,6 +325,16 @@ class Tube:
     self.pressure_bc = None
 
     self.T0 = T0
+
+  def copy_results(self, other):
+    """
+      Copy the results fields from one tube to another
+
+      Parameters:
+        other:      other tube object
+    """
+    self.results = other.results
+    self.quadrature_results = other.quadrature_results
 
   @property
   def ndim(self):

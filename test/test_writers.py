@@ -71,8 +71,8 @@ def make_panel(D, ntube, period, stiff):
   return panel
 
 def make_receiver(D, npanel, ntube, period = 8 * 3600.0, days = 1, 
-    multiplier = 100, panel_stiffness = 0.0, manifold_stiffness = 0.0):
-  r = receiver.Receiver(period, days, multiplier, panel_stiffness)
+    panel_stiffness = 0.0, manifold_stiffness = 0.0):
+  r = receiver.Receiver(period, days, panel_stiffness)
   for i in range(npanel):
     r.add_panel(make_panel(D, ntube, period, manifold_stiffness))
 
@@ -85,13 +85,12 @@ class TestVTKWriter(unittest.TestCase):
     self.npanel = 2
     self.ntube = 3
     self.days = 1
-    self.multiplier = 100
     self.panel_stiffness = 100.0
     self.manifold_stiffness = 100.0
 
   def test_1D(self):
     r = make_receiver(1, self.npanel, self.ntube, period = self.period,
-        days = self.days, multiplier = self.multiplier, 
+        days = self.days, 
         panel_stiffness = self.panel_stiffness,
         manifold_stiffness = self.manifold_stiffness)
     tdir = tempfile.mkdtemp()
@@ -104,7 +103,7 @@ class TestVTKWriter(unittest.TestCase):
 
   def test_2D(self):
     r = make_receiver(2, self.npanel, self.ntube, period = self.period,
-        days = self.days, multiplier = self.multiplier, 
+        days = self.days,
         panel_stiffness = self.panel_stiffness,
         manifold_stiffness = self.manifold_stiffness)
     tdir = tempfile.mkdtemp()
@@ -117,7 +116,7 @@ class TestVTKWriter(unittest.TestCase):
 
   def test_3D(self):
     r = make_receiver(2, self.npanel, self.ntube, period = self.period,
-        days = self.days, multiplier = self.multiplier, 
+        days = self.days, 
         panel_stiffness = self.panel_stiffness,
         manifold_stiffness = self.manifold_stiffness)
     tdir = tempfile.mkdtemp()

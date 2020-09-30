@@ -20,6 +20,8 @@ from skfem import helpers, utils
 
 from neml import block
 
+from srlife import solverparams
+
 class TubeSolver(ABC):
   """
     This class takes as input:
@@ -167,12 +169,13 @@ class PythonTubeSolver(TubeSolver):
   """
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
-  def __init__(self, rtol = 1.0e-6, atol = 1.0e-8, qorder = 1,
-      dof_tol = 1.0e-6, miter = 10, verbose = False):
+  def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
+      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False):
     """
       Setup the solver with common parameters
 
-      Parameters:
+      Additional Parameters:
+        pset        parameter set with solver parameters
         rtol        relative tolerance for NR iterations
         atol        absolute tolerance for NR iterations
         qorder      quadrature order
@@ -182,8 +185,13 @@ class PythonTubeSolver(TubeSolver):
         verbose     verbose solve
     """
     self.qorder = qorder
-    self.solver_options = {'rtol': rtol, 'atol': atol,
-        'dof_tol': dof_tol, 'miter': miter, 'verbose': verbose}
+    self.rtol = pset.get_default("rtol", rtol)
+    self.atol = pset.get_default("atol", atol)
+    self.dof_tol = pset.get_default("dof_tol", dof_tol)
+    self.miter = pset.get_default("miter", miter)
+    self.verbose = pset.get_default("verbose", verbose)
+    self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
+        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
 
   def setup_tube(self, tube):
     """
@@ -261,15 +269,18 @@ class PythonTubeSolver(TubeSolver):
 
     return state_np1
 
-  def init_state(self, tube, mat):
+  def init_state(self, tube, mat, i = None):
     """
       Initialize the solver state
 
       Parameters:
         tube:       tube object
         mat:        NEML material
+
+      Additional Parameters:
+        i:          if not none, also dump state into the tube
     """
-    return PythonTubeSolver.State(tube, mat, self.qorder)
+    return PythonTubeSolver.State(tube, mat, self.qorder, i = i)
 
   def dump_state(self, tube, i, state):
     """
@@ -295,7 +306,7 @@ class PythonTubeSolver(TubeSolver):
     for f,d in zip(fields, data):
       for ind,o in zip(inds,order):
         tube.quadrature_results[f+o][i] = self._fea2tube_element(tube, d[ind])
-
+    
     tube.quadrature_results["temperature"][i] = self._fea2tube_element(tube, state.temperature)
 
   def _fea2tube_element(self, tube, f):
@@ -339,11 +350,11 @@ class PythonTubeSolver(TubeSolver):
     """
       Subclass for maintaining state with the python solver
     """
-    def __init__(self, tube, mat, qorder):
+    def __init__(self, tube, mat, qorder, i = None):
       """
         Initialize a full state object
       """
-      self.material = mat
+      self.mat = mat
       self.mesh = mesh_tube(tube)
       self.qorder = qorder
       self.ndim = tube.ndim
@@ -386,6 +397,16 @@ class PythonTubeSolver(TubeSolver):
 
       self.force = 0.0
       self.stiffness = 0.0
+
+      if i is not None:
+        self.temperature = self.sbasis.interpolate(tube.results['temperature'][i].flatten()).value
+
+    @property
+    def material(self):
+      """
+        Getter for material object
+      """
+      return get_mat(self.mat)
 
     def define_boundary(self, tube, tol = 0.5):
       """
@@ -684,7 +705,8 @@ class PythonSolver:
       # Can immediately skip if the initial residual is 
       # less than the absolute tol
       if nR0 < self.options['atol']:
-        print("")
+        if self.options['verbose']:
+          print("")
         break
       # Get the actual sparse jacobian
       J = self.jacobian()
@@ -968,4 +990,12 @@ class PythonSolver:
         ).transpose(2,0,1)
     self.state_np1.tangent = A_np1.reshape((self.state_np1.ne,
       self.state_np1.nqi, 3,3,3,3)).transpose(2,3,4,5,0,1)
-    
+   
+def get_mat(thing):
+  """
+    Small helper to wrap NEML for pickling issues
+  """
+  try:
+    return thing.get_neml_model()
+  except AttributeError:
+    return thing
