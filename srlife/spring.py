@@ -1,14 +1,16 @@
+#pylint: disable=no-member
+
 """
   Meta-structural solver defining a network of nonlinear springs
 """
-
-from srlife.solvers import newton
 
 from abc import ABC, abstractmethod
 
 import numpy as np
 import networkx as nx
 import multiprocess
+
+from srlife.solvers import newton
 
 class Spring(ABC):
   """
@@ -138,7 +140,7 @@ class SpringNetwork(nx.MultiGraph):
     this can be overrode with new step values.
   """
   def __init__(self, *args, **kwargs):
-    super(nx.MultiGraph, self).__init__(*args, **kwargs)
+    super().__init__(*args, **kwargs)
     self.times = None
     self.displacements = None
     self.atol = kwargs.pop("atol", 1.0e-8)
@@ -182,8 +184,7 @@ class SpringNetwork(nx.MultiGraph):
           raise ValueError("A tube object has discrete times that are"
               " not consistent with the spring network!")
       
-      if not (isinstance(edge['object'], Spring) or isinstance(edge['object'],
-          str)):
+      if not isinstance(edge['object'], (Spring,str)):
         raise ValueError("An edge object is not either a spring or a string!")
 
       if isinstance(edge['object'], str) and edge['object'] not in (
@@ -352,7 +353,7 @@ class SpringNetwork(nx.MultiGraph):
     self.displacements[self.dmap[self.fixed]] = self.fixed_displacements
 
     # Advance the state
-    for i,j, edge in self.edges(data=True):
+    for _,_,edge in self.edges(data=True):
       edge['object'].update_state(self.i)
 
   def RJ(self, d, nthreads = 1):
@@ -370,11 +371,11 @@ class SpringNetwork(nx.MultiGraph):
       with multiprocess.Pool(nthreads) as p:
         res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
     else:
-        res = list(map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
+      res = list(map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
     Fint = sum(r[0] for r in res)
     J = sum(r[1] for r in res)
 
-    for k,(i,j,edge) in enumerate(self.edges(data=True)):
+    for k,(_,_,edge) in enumerate(self.edges(data=True)):
       edge['object'].state_np1 = res[k][2]
 
     return (Fint[self.dmap[self.free]] - self.forces, 
@@ -437,11 +438,11 @@ class SpringNetwork(nx.MultiGraph):
       Solve all time steps
 
       Additional parameters:
-        nthreads        number of threads to use
+        nthreads:       number of threads to use
+        decorator:      progress bar decorator
     """
     self.validate_solve()
     list(decorator(
       map(lambda i: self.solve(i, nthreads), range(1, len(self.times))), 
       len(self.times)-1))
     return self
-

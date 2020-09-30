@@ -1,11 +1,8 @@
 """
   Solution managers actually walk a model through all the steps to solve
 """
-
-import tqdm
-
 import multiprocess
-import itertools
+import tqdm
 
 from srlife import solverparams
 
@@ -56,6 +53,9 @@ class SolutionManager:
 
   @property
   def ntubes(self):
+    """
+      Pass through to get the number of tubes that need to be analyzed
+    """
     return len(list(self.tubes))
   
   def progress_decorator(self, base, ntotal):
@@ -95,6 +95,7 @@ class SolutionManager:
     """
       Solve the heat transfer problem for each tube
     """
+    #pylint: disable=no-member
     if self.progress:
       print("Running thermal analysis:")
     with multiprocess.Pool(self.nthreads) as p:

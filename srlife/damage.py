@@ -16,6 +16,17 @@ class DamageCalculator:
   def __init__(self):
     pass
 
+  def single_cycles(self, tube, material, receiver):
+    """
+      Calculate damage for a single tube
+
+      Parameters:
+        tube:       fully-populated tube object
+        material:   damage material
+        receiver:   receiver object (for metadata)
+    """ 
+    raise NotImplementedError("Superclass not implemented")
+
   def determine_life(self, receiver, material, nthreads = 1, 
       decorator = lambda x, n: x):
     """
@@ -30,6 +41,7 @@ class DamageCalculator:
         nthreads        number of threads
         decorator       progress bar
     """
+    # pylint: disable=no-member
     with multiprocess.Pool(nthreads) as p:
       Ns = list(decorator(
         p.imap(lambda x: self.single_cycles(x, material, receiver), receiver.tubes),
@@ -96,7 +108,8 @@ class TimeFractionInteractionDamage(DamageCalculator):
         (tube.quadrature_results['stress_xx'] - tube.quadrature_results['stress_yy'])**2.0 + 
         (tube.quadrature_results['stress_yy'] - tube.quadrature_results['stress_zz'])**2.0 + 
         (tube.quadrature_results['stress_zz'] - tube.quadrature_results['stress_xx'])**2.0 + 
-        3.0 * (tube.quadrature_results['stress_xy']**2.0 + tube.quadrature_results['stress_yz']**2.0 + 
+        3.0 * (tube.quadrature_results['stress_xy']**2.0 + 
+          tube.quadrature_results['stress_yz']**2.0 + 
           tube.quadrature_results['stress_xz']**2.0))/2.0)
 
     tR = material.time_to_rupture("averageRupture", tube.quadrature_results['temperature'], vm)
@@ -118,16 +131,19 @@ class TimeFractionInteractionDamage(DamageCalculator):
     tm = np.mod(tube.times, receiver.period)
     inds = list(np.where(tm == 0)[0])
     if len(inds) != (receiver.days + 1):
-      raise ValueError("Tube times not compatible with the receiver number of days and cycle period!")
+      raise ValueError("Tube times not compatible with the receiver"
+          " number of days and cycle period!")
 
     # Run through each cycle and ID max strain range and fatigue damage
     strain_names = ['mechanical_strain_xx', 'mechanical_strain_yy', 'mechanical_strain_zz',
         'mechanical_strain_yz', 'mechanical_strain_xz', 'mechanical_strain_xy']
     strain_factors = [1.0,1.0,1.0,np.sqrt(2), np.sqrt(2), np.sqrt(2)]
     
-    return sum(self.cycle_fatigue(np.array([ef*tube.quadrature_results[en][inds[i]:inds[i+1]] for 
+    return sum(self.cycle_fatigue(np.array([ef*tube.quadrature_results[en][
+      inds[i]:inds[i+1]] for 
       en,ef in zip(strain_names, strain_factors)]), 
-      tube.quadrature_results['temperature'][inds[i]:inds[i+1]], material) for i in range(receiver.days))
+      tube.quadrature_results['temperature'][inds[i]:inds[i+1]], material)
+      for i in range(receiver.days))
   
   def cycle_fatigue(self, strains, temperatures, material, nu = 0.5):
     """
@@ -155,6 +171,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
         pt_eranges = np.maximum(pt_eranges, eq)
     
     dmg = np.zeros(pt_eranges.shape)
+    # pylint: disable=not-an-iterable
     for ind in np.ndindex(*dmg.shape):
       dmg[ind] = 1.0 / material.cycles_to_fail("nominalFatigue", pt_temps[ind], pt_eranges[ind])
 

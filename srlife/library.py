@@ -4,11 +4,9 @@
 import os.path
 
 from srlife import materials
-from neml import parse, models
 
 LIBRARY_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', 'data'))
-
 
 def get_file(directory, name):
   """

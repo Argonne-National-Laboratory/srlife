@@ -1,16 +1,17 @@
+#pylint: disable=dangerous-default-value, unused-import
 """
   This module contains material models containing thermal, fluid, and
   material properties.  These models can be stored to and recalled from
   XML files for archiving.
 """
 
-from neml import parse, models
-
-import xml.etree.ElementTree as ET
 from collections import ChainMap
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import scipy.interpolate as inter
+
+from neml import parse, models
 
 class DeformationMaterial:
   """
@@ -40,6 +41,18 @@ class ThermalMaterial:
       2) the conductivity, as a function of temperature and its derivative
       3) the diffusivity, as a function of temperature and its derivative
   """
+  def get_dict(self):
+    """
+      Returns the data as a dictionary
+    """
+    raise NotImplementedError()
+
+  def get_type(self):
+    """
+      Return the string type for the data
+    """
+    raise NotImplementedError()
+
   @classmethod
   def load(cls, fname, modelname):
     """
@@ -48,15 +61,15 @@ class ThermalMaterial:
       Parameters:
         fname       filename
     """
-    tag, type = find_name(fname, modelname)
+    tag, typ = find_name(fname, modelname)
     data = load_node(tag)[modelname]
 
-    if type == "PiecewiseLinearThermalMaterial":
+    if typ == "PiecewiseLinearThermalMaterial":
       return PiecewiseLinearThermalMaterial.load(data)
-    elif type == "ConstantThermalMaterial":
+    elif typ == "ConstantThermalMaterial":
       return ConstantThermalMaterial.load(data)
     else:
-      raise ValueError("Unknown ThermalMaterial type %s" % type)
+      raise ValueError("Unknown ThermalMaterial type %s" % typ)
 
   def save(self, fname, modelname):
     """
@@ -241,6 +254,18 @@ class FluidMaterial:
       2) A map between a ThermalMaterial name and the corresponding
          temperature-dependent film coefficient and its derivative
   """
+  def get_dict(self):
+    """
+      Returns the data as a dictionary
+    """
+    raise NotImplementedError()
+
+  def get_type(self):
+    """
+      Return the string type for the data
+    """
+    raise NotImplementedError()
+
   @classmethod
   def load(cls, fname, modelname):
     """
@@ -249,15 +274,15 @@ class FluidMaterial:
       Parameters:
         fname       file name to load from
     """
-    tag, type = find_name(fname, modelname)
+    tag, typ = find_name(fname, modelname)
     data = load_node(tag)[modelname]
 
-    if type == "PiecewiseLinearFluidMaterial":
+    if typ == "PiecewiseLinearFluidMaterial":
       return PiecewiseLinearFluidMaterial.load(data)
-    elif type == "ConstantFluidMaterial":
+    elif typ == "ConstantFluidMaterial":
       return ConstantFluidMaterial.load(data)
     else:
-      raise ValueError("Unknown FluidMaterial type %s" % type)
+      raise ValueError("Unknown FluidMaterial type %s" % typ)
 
   def save(self, fname, modelname):
     """

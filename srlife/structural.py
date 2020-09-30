@@ -403,6 +403,9 @@ class PythonTubeSolver(TubeSolver):
 
     @property
     def material(self):
+      """
+        Getter for material object
+      """
       return get_mat(self.mat)
 
     def define_boundary(self, tube, tol = 0.5):
@@ -988,11 +991,11 @@ class PythonSolver:
     self.state_np1.tangent = A_np1.reshape((self.state_np1.ne,
       self.state_np1.nqi, 3,3,3,3)).transpose(2,3,4,5,0,1)
    
-def get_mat(object):
+def get_mat(thing):
   """
     Small helper to wrap NEML for pickling issues
   """
   try:
-    return object.get_neml_model()
+    return thing.get_neml_model()
   except AttributeError:
-    return object
+    return thing

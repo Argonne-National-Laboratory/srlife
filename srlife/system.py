@@ -1,3 +1,5 @@
+#pylint: disable=no-member
+
 """
   Complete receiver system structural solvers.  These operate
   under the assumption that you've already done the thermal problem.
@@ -19,12 +21,12 @@ class SystemSolver(ABC):
       1) The updated receiver, with all the structural results defined
   """
   @abstractmethod
-  def solve(self, receiver, smat):
+  def solve(self, model, smat):
     """
       Solve the receiver system
 
       Parameters:
-        receiver    receiver object
+        model       receiver object
         smat        structural material
     """
     return
@@ -51,13 +53,13 @@ class SpringSystemSolver(SystemSolver):
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
 
-  def solve(self, receiver, smat, ssolver, nthreads = 1,
+  def solve(self, model, smat, ssolver, nthreads = 1,
       verbose = False, decorator = lambda fn: fn):
     """
       Solve a receiver model using a spring system
 
       Parameters:
-        receiver        receiver model, with temperatures
+        model           receiver model, with temperatures
         smat            structural material
         ssolver         structural solver to use
 
@@ -66,7 +68,7 @@ class SpringSystemSolver(SystemSolver):
         nthreads        number of threads to use
         decorator       progress decorator
     """
-    network = self.make_network(receiver, smat, ssolver)
+    network = self.make_network(model, smat, ssolver)
     subproblems = network.reduce_graph()
 
     # Simple heuristic for deciding who gets threads
@@ -96,13 +98,13 @@ class SpringSystemSolver(SystemSolver):
         if isinstance(orig[i][j][k]['object'], spring.TubeSpring):
           orig[i][j][k]['object'].tube.copy_results(new[i][j][k]['object'].tube)
 
-  def make_network(self, receiver, smat, ssolver):
+  def make_network(self, model, smat, ssolver):
     """
       Setup the complete spring network, given the receiver and
       material objects
 
       Parameters:
-        receiver        fully-defined receiver object
+        model           fully-defined receiver object
         smat            structural material model
         ssolver         structural solver to use
     """
@@ -111,11 +113,11 @@ class SpringSystemSolver(SystemSolver):
     cn = 0
     network.add_node(cn)
     cn += 1
-    for panel in receiver.panels.values():
+    for panel in model.panels.values():
       network.add_node(cn)
       cn += 1
       network.add_edge(0, cn-1, object = convert_to_spring(
-        receiver.stiffness, smat, ssolver))
+        model.stiffness, smat, ssolver))
       top = cn-1
       for tube in panel.tubes.values():
         network.add_node(cn)
@@ -141,7 +143,7 @@ def convert_to_spring(thing, smat, ssolver):
       smat          structural material
       ssolver       structural solver
   """
-  if isinstance(thing, float) or isinstance(thing, int):
+  if isinstance(thing, (float,int)):
     return spring.LinearSpring(thing)
   elif isinstance(thing, str):
     if thing not in ["disconnect", "rigid"]:
