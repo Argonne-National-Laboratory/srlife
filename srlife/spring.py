@@ -438,7 +438,6 @@ class SpringNetwork(nx.MultiGraph):
       Parameters:
         d       free displacements
     """
-    print(d)
     dall = np.zeros((len(self.nodes),))
     dall[self.dmap[self.fixed]] = (self.prev_fixed_displacements + 
         self.fraction * self.inc_fixed_displacements)

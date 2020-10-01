@@ -678,7 +678,7 @@ class PythonSolver:
     """
       Estimate the displacements
     """
-    self.state_np1.displacements = self.state_n.displacements
+    self.state_np1.displacements = np.copy(self.state_n.displacements)
 
   def solve(self, t_n, t_np1, p):
     """
@@ -929,7 +929,6 @@ class PythonSolver:
         D           displacements to use
     """
     U = self.state_np1.basis.interpolate(D)
-
     E = np.zeros((3,3) + U[0][0].shape)
 
     E[:self.ndim,:self.ndim] = helpers.sym_grad(U)
