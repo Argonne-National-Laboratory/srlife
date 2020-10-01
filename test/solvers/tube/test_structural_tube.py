@@ -181,39 +181,46 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
     self.tube.set_times(self.times)
 
     self.tube.set_pressure_bc(receiver.PressureBC(self.times, self.times / 50.0))
-
-    self.mat = parse.parse_xml(os.path.join(os.path.dirname(__file__),
-      'moose-verification', 'model.xml'), 'creeping')
+    
+    xml = os.path.join(os.path.dirname(__file__), 'moose-verification', 'model.xml')
+    self.mats = [
+        parse.parse_xml(xml, 'creeping'),
+        parse.parse_xml(xml, 'ponly'),
+        parse.parse_xml(xml, 'eonly')
+        ]
 
     self.d = 0.25
 
     self.solver = structural.PythonTubeSolver(verbose = False) 
 
-  def _solve(self, d):
+  def _solve(self, d, mat):
     self.solver.setup_tube(self.tube)
-    state_n = self.solver.init_state(self.tube, self.mat)
+    state_n = self.solver.init_state(self.tube, mat)
 
     return self.solver.solve(self.tube, 1, state_n, d)
 
   def test_1D(self):
     self.tube.make_1D(self.h/ 2, 0)
+    
+    for mat in self.mats:
+      exact = self._solve(self.d, mat).stiffness
+      numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
-    exact = self._solve(self.d).stiffness
-    numerical = differentiate(lambda d: self._solve(d).force, self.d)
-
-    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
+      self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
 
   def test_2D(self):
     self.tube.make_2D(self.h/ 2)
+    
+    for mat in self.mats:
+      exact = self._solve(self.d, mat).stiffness
+      numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
-    exact = self._solve(self.d).stiffness
-    numerical = differentiate(lambda d: self._solve(d).force, self.d)
+      self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
 
-    self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))
-
-# Too heavy
   def test_3D(self):
-    exact = self._solve(self.d).stiffness
-    numerical = differentiate(lambda d: self._solve(d).force, self.d)
+    
+    for mat in self.mats:
+      exact = self._solve(self.d, mat).stiffness
+      numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
     self.assertTrue(np.isclose(exact, numerical, rtol = 1e-4))

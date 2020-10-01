@@ -37,7 +37,8 @@ class SpringSystemSolver(SystemSolver):
     in the springs module
   """
   def __init__(self, pset = solverparams.ParameterSet(),
-      rtol = 1.0e-6, atol = 1.0e-4, miter = 25, verbose = False):
+      rtol = 1.0e-6, atol = 1.0e-4, miter = 25, verbose = False,
+      mdiv = 5):
     """
       Initialize the solver
 
@@ -47,11 +48,13 @@ class SpringSystemSolver(SystemSolver):
         atol        absolute tolerance
         miter       number of permissible nonlinear iterations
         verbose     print a lot of debug info
+        mdiv        maximum adaptive subdivisions
     """
     self.rtol = pset.get_default("rtol", rtol)
     self.atol = pset.get_default("atol", atol)
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
+    self.mdiv = pset.get_default("mdiv", mdiv)
 
   def solve(self, model, smat, ssolver, nthreads = 1,
       verbose = False, decorator = lambda fn: fn):
@@ -77,7 +80,7 @@ class SpringSystemSolver(SystemSolver):
       if isinstance(data['object'], spring.TubeSpring)) for sb in
       subproblems)
 
-    if nprobs < max_sub:
+    if nprobs < max_sub or nthreads == 1:
       results = []
       if verbose:
         print("Solving substructures sequentially")
@@ -109,7 +112,7 @@ class SpringSystemSolver(SystemSolver):
         ssolver         structural solver to use
     """
     network = spring.SpringNetwork(atol = self.atol, rtol = self.rtol,
-        miter = self.miter, verbose = self.verbose)
+        miter = self.miter, verbose = self.verbose, mdiv = self.mdiv)
     cn = 0
     network.add_node(cn)
     cn += 1

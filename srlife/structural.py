@@ -38,7 +38,7 @@ class TubeSolver(ABC):
       These three are grouped in a State object
   """
   @abstractmethod
-  def solve(self, tube, i, state_n, dtop):
+  def solve(self, tube, i, state_n, dtop, sf = 1.0):
     """
       Solve the structural tube problem for a single time step
 
@@ -47,6 +47,9 @@ class TubeSolver(ABC):
         i:          time index to reference in tube results
         state:      state object
         dtop:       top displacement
+
+      Additional parameters:
+        sf:         step fraction, if we're requesting a partial step
     """
     return
 
@@ -224,7 +227,7 @@ class PythonTubeSolver(TubeSolver):
     nelem = (tube.dim[0] - 1) * (tube.dim[1]) * nz
     return (nelem, (self.qorder+1)**tube.ndim)
 
-  def solve(self, tube, i, state_n, dtop):
+  def solve(self, tube, i, state_n, dtop, sf = 1.0):
     """
       Solve the structural tube problem for a single time step
 
@@ -233,28 +236,33 @@ class PythonTubeSolver(TubeSolver):
         i:          time index to reference in tube results
         state:      state object
         dtop:       top disoplacement
+
+      Additional parameters:
+        sf:         step fraction, if we're requesting a partial step
     """
     state_np1 = state_n.copy()
 
-    t_np1 = tube.times[i]
     t_n = tube.times[i-1]
+    t_np1 = t_n + sf * (tube.times[i] - t_n)
 
     if 'temperature' in tube.results:
-      state_np1.temperature = self._res2quad(state_np1,
-          self._tube2fea(tube, tube.results['temperature'][i]))
       state_n.temperature = self._res2quad(state_n,
           self._tube2fea(tube, tube.results['temperature'][i-1]))
+      state_np1.temperature = state_n.temperature + (self._res2quad(state_np1,
+          self._tube2fea(tube, tube.results['temperature'][i])) - 
+          state_n.temperature) * sf
     else:
       state_np1.temperature = np.zeros(state_np1.temperature.shape)
       state_n.temperature = np.zeros(state_n.temperature.shape)
 
     if tube.pressure_bc:
-      p_np1 = tube.pressure_bc.pressure(t_np1)
       p_n = tube.pressure_bc.pressure(t_n)
+      # The np.array is a library quirk, I assume they will fix in the future
+      p_np1 = np.array(p_n + (tube.pressure_bc.pressure(t_np1) - p_n) * sf)
     else:
       p_np1 = 0.0
       p_n = 0.0
-
+    
     if tube.ndim == 1:
       solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
           self.solver_options)

@@ -26,6 +26,7 @@
       <m2_type>poissons</m2_type>
     </elastic>
     <plastic type="SmallStrainRateIndependentPlasticity">
+      <tol>1.0e-6</tol>
       <elastic type="IsotropicLinearElasticModel">
         <m1_type>youngs</m1_type>
         <m1 type="PiecewiseLinearInterpolate">
@@ -81,7 +82,6 @@
     <miter>50</miter>
     <verbose>false</verbose>
     <tol>1e-6</tol>
-    <sf>1</sf>
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
         <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
@@ -128,4 +128,30 @@
       <values>12.38e-06 12.38e-06 13.55e-06 14.32e-06 15.12e-06 15.55e-06 16.00e-06 17.68e-06 20.39e-06 22.46e-06</values>
     </alpha>
   </elastic_creep>
+
+
+  <plastic_only type="SmallStrainRateIndependentPlasticity">
+    <tol>1.0e-6</tol>
+    <verbose>false</verbose>
+    <elastic type="IsotropicLinearElasticModel">
+      <m1_type>youngs</m1_type>
+      <m1 type="PiecewiseLinearInterpolate">
+        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+        <values>221000 218000 212000 206000 200000 193000 186000 178000 169000 160000</values>
+      </m1>
+      <m2_type>poissons</m2_type>
+      <m2>0.31</m2>
+    </elastic>
+    <flow type="RateIndependentAssociativeFlow">
+      <surface type="IsoJ2"/>
+      <hardening type="LinearIsotropicHardeningRule">
+        <s0>40</s0>
+        <K>1000.0</K>
+      </hardening>
+    </flow>
+    <alpha type="PiecewiseLinearInterpolate">
+      <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+      <values>12.38e-06 12.38e-06 13.55e-06 14.32e-06 15.12e-06 15.55e-06 16.00e-06 17.68e-06 20.39e-06 22.46e-06</values>
+    </alpha>
+  </plastic_only>
 </materials>

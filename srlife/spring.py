@@ -20,25 +20,33 @@ class Spring(ABC):
     as simple linear springs
   """
   @abstractmethod
-  def force_and_stiffness(self, i, d):
+  def force_and_stiffness(self, i, d, sf):
     """
       Return the current forces and stiffness for some displacement
 
       Parameters:
         i           timestep
         d           displacement
+        sf          partial step fraction
     """
     return
 
   @abstractmethod
-  def update_state(self, i):
+  def update_state(self):
     """
       Update to the next state after a successful solve
-
-      Parameters:
-        i           universal timestep number
     """
     return
+
+  @abstractmethod
+  def dump_state(self, i):
+    """
+      Save the current state to the next timestep
+
+      Parameters:
+        i       timestep number
+    """
+    pass
 
 class LinearSpring(Spring):
   """
@@ -50,25 +58,34 @@ class LinearSpring(Spring):
         k       spring stiffness
     """
     self.k = k
+    self.state_np1 = None
+    self.state_n = None
 
-  def force_and_stiffness(self, i, d):
+  def force_and_stiffness(self, i, d, sf):
     """
       Simple linear update
 
       Parameters:
         i       universal timestep index
         d       current displacement
+        sf      step fraction
     """
     return self.k*d, self.k
 
-  def update_state(self, i):
+  def update_state(self):
     """
       We don't have state!
-
-      Parameters:
-        i       universal timestep number
     """
     return
+
+  def dump_state(self, i):
+    """
+      Dump state, except we don't have state
+
+      Parameters:
+        i       step number
+    """
+    pass
 
 class TubeSpring(Spring):
   """
@@ -95,22 +112,32 @@ class TubeSpring(Spring):
     # Dump this first state to the Tube
     self.solver.dump_state(self.tube, 0, self.state_n)
 
-  def force_and_stiffness(self, i, d):
+  def force_and_stiffness(self, i, d, sf):
     """
       Parameters:
+        i       current step
         d       current displacement
+        sf      current step fraction
     """
-    self.state_np1 = self.solver.solve(self.tube, i, self.state_n, d)
+    self.state_np1 = self.solver.solve(self.tube, i, 
+        self.state_n, d, sf = sf)
 
     return self.state_np1.force, self.state_np1.stiffness
 
-  def update_state(self, i):
+  def update_state(self):
     """
+      Update state to the next increment
+    """
+    self.state_n = self.state_np1
+
+  def dump_state(self, i):
+    """
+      Dump state into the underlying object
+
       Parameters:
         i       timestep
     """
     self.solver.dump_state(self.tube, i, self.state_np1)
-    self.state_n = self.state_np1
 
 class SpringNetwork(nx.MultiGraph):
   """
@@ -147,6 +174,7 @@ class SpringNetwork(nx.MultiGraph):
     self.rtol = kwargs.pop("rtol", 1.0e-6)
     self.miter = kwargs.pop("miter", 25)
     self.verbose = kwargs.pop("verbose", False)
+    self.mdiv = kwargs.pop('mdiv', 5)
 
   def __copy(self, other):
     """
@@ -160,6 +188,7 @@ class SpringNetwork(nx.MultiGraph):
     other.atol = self.atol
     other.miter = self.miter
     other.verbose = self.verbose
+    other.mdiv = self.mdiv
 
   def set_times(self, times):
     """
@@ -340,13 +369,15 @@ class SpringNetwork(nx.MultiGraph):
     self.i = i
     
     # Figure out free/fixed displacements
-    (self.dmap, self.free, self.forces, self.fixed,
-        self.fixed_displacements) = self.dof_maps(i)
+    (self.dmap, self.free, self.forces, self.prev_forces, self.fixed,
+        self.fixed_displacements, self.prev_fixed_displacements) = self.dof_maps(i)
+    # Will use these several times...
+    self.inc_fixed_displacements = self.fixed_displacements - self.prev_fixed_displacements
+    self.inc_forces = self.forces - self.prev_forces
 
     # Actually solve
-    d = newton(lambda x: self.RJ(x, nthreads = nthreads),
-        self.displacements[self.dmap[self.free]], verbose = self.verbose,
-        rel_tol = self.rtol, abs_tol = self.atol, miters = self.miter)
+    d = self.solve_adaptively(self.displacements[self.dmap[self.free]],
+        nthreads = nthreads)
 
     # Store the displacements, for fun
     self.displacements[self.dmap[self.free]] = d
@@ -354,7 +385,51 @@ class SpringNetwork(nx.MultiGraph):
 
     # Advance the state
     for _,_,edge in self.edges(data=True):
-      edge['object'].update_state(self.i)
+      edge['object'].dump_state(self.i)
+
+  def solve_adaptively(self, dguess, nthreads = 1):
+    """
+      Solve the next increment adaptively, if required
+
+      Parameters:
+        dguess:         guess at the next displacements
+
+      Additional parameters:
+        nthreads:       threads to use in solving the system of equations
+    """
+    # Setup for adaptive stepping
+    total = 2**self.mdiv
+    attempt = total
+    current = 0
+    ndiv = 0
+
+    while current < total:
+      self.fraction = float(current + attempt) / total
+      if self.verbose:
+        print(current, attempt, total)
+        print("Attempting to advance to %f of the step" % self.fraction) 
+      try:
+        d = newton(lambda x: self.RJ(x, nthreads = nthreads), 
+            dguess, verbose = self.verbose, rel_tol = self.rtol, 
+            abs_tol = self.atol, miters = self.miter)
+      except Exception as e:
+        attempt = attempt // 2
+        ndiv += 1
+        if self.verbose:
+          print("Solve failed, reducing load increment to %f" % (float(attempt) / total))
+        if ndiv == self.mdiv:
+          raise RuntimeError("Exceeded maximum adaptive steps in the system solver!")
+        continue
+
+      if self.verbose:
+        print("Solve succeeded")
+
+      current += attempt
+
+      for _,_,edge in self.edges(data=True):
+        edge['object'].update_state()
+
+    return d
 
   def RJ(self, d, nthreads = 1):
     """
@@ -363,8 +438,10 @@ class SpringNetwork(nx.MultiGraph):
       Parameters:
         d       free displacements
     """
+    print(d)
     dall = np.zeros((len(self.nodes),))
-    dall[self.dmap[self.fixed]] = self.fixed_displacements
+    dall[self.dmap[self.fixed]] = (self.prev_fixed_displacements + 
+        self.fraction * self.inc_fixed_displacements)
     dall[self.dmap[self.free]] = d
     
     if nthreads > 1:
@@ -378,7 +455,9 @@ class SpringNetwork(nx.MultiGraph):
     for k,(_,_,edge) in enumerate(self.edges(data=True)):
       edge['object'].state_np1 = res[k][2]
 
-    return (Fint[self.dmap[self.free]] - self.forces, 
+    curr_forces = self.prev_forces + self.fraction * self.inc_forces
+
+    return (Fint[self.dmap[self.free]] - curr_forces, 
         J[self.dmap[self.free],:][:,self.dmap[self.free]])
 
   def fj(self,dall,i,j,edge):
@@ -388,7 +467,7 @@ class SpringNetwork(nx.MultiGraph):
     Fint = np.zeros((len(self.nodes),))
     J = np.zeros((len(self.nodes),len(self.nodes)))
     f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
-        - dall[self.dmap[i]])
+        - dall[self.dmap[i]], self.fraction)
     Fint[self.dmap[i]] += -f
     Fint[self.dmap[j]] += f
     
@@ -411,27 +490,34 @@ class SpringNetwork(nx.MultiGraph):
     forces = []
     displacements = []
     time = self.times[i]
+    prev_time = self.times[i-1]
+    prev_forces = []
+    prev_displacements = []
     for node in self.nodes:
       if 'bc' in self.nodes[node]:
         if self.nodes[node]['bc'][0] == 'displacement':
           fixed.append(node)
           displacements.append(self.nodes[node]['bc'][1](time))
+          prev_displacements.append(self.nodes[node]['bc'][1](prev_time))
         elif self.nodes[node]['bc'][0] == 'force':
           free.append(node)
           forces.append(self.nodes[node]['bc'][1](time))
+          prev_forces.append(self.nodes[node]['bc'][1](prev_time))
         else:
           raise ValueError("Unknown BC type %s!" % self.nodes[node]['bc'][0])
       else:
         free.append(node)
         forces.append(0)
+        prev_forces.append(0)
 
     nodes = np.array(self.nodes, dtype=int)
     total = (np.array(range(0, max(nodes)+1), dtype = int)*0)-1
     rnums = np.array(range(len(nodes)), dtype = int)
     total[nodes] = rnums
 
-    return total,np.array(free, dtype = int), np.array(forces), np.array(fixed,
-        dtype = int), np.array(displacements)
+    return (total, np.array(free, dtype = int), np.array(forces), 
+        np.array(prev_forces), np.array(fixed, dtype = int), np.array(displacements),
+        np.array(prev_displacements))
 
   def solve_all(self, nthreads = 1, decorator = lambda x, nitems: x):
     """
