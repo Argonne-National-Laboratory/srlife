@@ -38,7 +38,7 @@ class SpringSystemSolver(SystemSolver):
   """
   def __init__(self, pset = solverparams.ParameterSet(),
       rtol = 1.0e-6, atol = 1.0e-4, miter = 25, verbose = False,
-      mdiv = 5):
+      mdiv = 5, backtrack = True):
     """
       Initialize the solver
 
@@ -55,6 +55,7 @@ class SpringSystemSolver(SystemSolver):
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
     self.mdiv = pset.get_default("mdiv", mdiv)
+    self.backtrack = pset.get_default("backtrack", backtrack)
 
   def solve(self, model, smat, ssolver, nthreads = 1,
       verbose = False, decorator = lambda fn: fn):
@@ -112,7 +113,8 @@ class SpringSystemSolver(SystemSolver):
         ssolver         structural solver to use
     """
     network = spring.SpringNetwork(atol = self.atol, rtol = self.rtol,
-        miter = self.miter, verbose = self.verbose, mdiv = self.mdiv)
+        miter = self.miter, verbose = self.verbose, mdiv = self.mdiv,
+        backtrack = self.backtrack)
     cn = 0
     network.add_node(cn)
     cn += 1

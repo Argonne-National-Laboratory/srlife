@@ -173,19 +173,22 @@ class PythonTubeSolver(TubeSolver):
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
   def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
-      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False):
+      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False,
+      linesearch = True, max_linesearch = 10):
     """
       Setup the solver with common parameters
 
       Additional Parameters:
-        pset        parameter set with solver parameters
-        rtol        relative tolerance for NR iterations
-        atol        absolute tolerance for NR iterations
-        qorder      quadrature order
-        dof_tol     geometric tolerance on finding boundary
-                    degrees of freedom
-        miter       maximum newton-raphson iterations
-        verbose     verbose solve
+        pset            parameter set with solver parameters
+        rtol            relative tolerance for NR iterations
+        atol            absolute tolerance for NR iterations
+        qorder          quadrature order
+        dof_tol         geometric tolerance on finding boundary
+                        degrees of freedom
+        miter           maximum newton-raphson iterations
+        verbose         verbose solve
+        linesearch      use backtracking linesearch during the solve
+        max_linesearch  maximum number of backtracking divisions before giving up
     """
     self.qorder = qorder
     self.rtol = pset.get_default("rtol", rtol)
@@ -193,8 +196,11 @@ class PythonTubeSolver(TubeSolver):
     self.dof_tol = pset.get_default("dof_tol", dof_tol)
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
+    self.linesearch = pset.get_default("backtracking", linesearch)
+    self.max_linesearch = pset.get_default("max_backtracking", max_linesearch)
     self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
-        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
+        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose,
+        'linesearch': self.linesearch, 'max_linesearch': self.max_linesearch}
 
   def setup_tube(self, tube):
     """
@@ -702,11 +708,16 @@ class PythonSolver:
     # Calculate the initial residual and jacobian
     R = self.residual(p)
     nR0 = la.norm(R[self.kdofs])
+    nR = nR0
 
     # Printing, if you want
     if self.options['verbose']:
-      print("Iter\tnR\t\tnR/nR0")
-      print("%i\t%3.2e" % (0, nR0))
+      if self.options['linesearch']:
+        print("Iter\tnR\t\tnR/nR0\t\talpha")
+        print("%i\t%3.2e\t%3.2e\t%3.2e" % (0, nR, 1.0, 1.0))
+      else:
+        print("Iter\tnR\t\tnR/nR0")
+        print("%i\t%3.2e\t%3.2e" % (0, nR, 1.0))
     
     # Newton-Raphson iteration
     for i in range(self.options['miter']):
@@ -719,15 +730,42 @@ class PythonSolver:
       # Get the actual sparse jacobian
       J = self.jacobian()
       # Update the displacements
-      self.state_np1.displacements -= self.linear_solve(J,R)
-      # Recalculate the state
-      self.update_state()
-      # Calculate the residual
-      R = self.residual(p)
-      # Do the convergence check and print update
-      nR = la.norm(R[self.kdofs])
+      direction = self.linear_solve(J,R)
+
+      if self.options["linesearch"]:
+        # Setup
+        alpha = 1.0
+        nRl = nR
+        prev_d = np.copy(self.state_np1.displacements)
+        nls = 0
+        while True:
+          # Current attempt
+          self.state_np1.displacements = prev_d - alpha * direction
+          # Recalculate the state
+          self.update_state()
+          # Calculate the residual
+          R = self.residual(p)
+          nR = la.norm(R[self.kdofs])
+          if nR < nRl:
+            break
+          else:
+            alpha /= 2
+            nls += 1
+            if nls >= self.options['max_linesearch']:
+              raise RuntimeError("Exceeded maximum number of linesearch steps!")
+      else:
+        self.state_np1.displacements -= direction
+        # Recalculate the state
+        self.update_state()
+        # Calculate the residual
+        R = self.residual(p)
+        # Do the convergence check and print update
+        nR = la.norm(R[self.kdofs])
       if self.options['verbose']:
-        print("%i\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0))
+        if self.options['linesearch']:
+          print("%i\t%3.2e\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0, alpha))
+        else:
+          print("%i\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0))
       if nR < self.options['atol'] or nR / nR0 < self.options['rtol']:
         if self.options['verbose']:
           print("")
@@ -907,7 +945,7 @@ class PythonSolver:
     """
     # Enforce the Dirichlet BCs in the vector
     self.state_np1.displacements[self.edofs] = self.evalues
-    
+
     # Calculate total strain
     self.state_np1.strain = self.calculate_strain(self.state_np1.displacements)
 

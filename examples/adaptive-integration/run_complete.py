@@ -8,23 +8,25 @@ from srlife import receiver, solverparams, spring, structural, thermal, system, 
 def sample_parameters():
   params = solverparams.ParameterSet()
 
-  params["nthreads"] = 1
+  params["nthreads"] = 2
   params["progress_bars"] = False
 
   params["thermal"]["rtol"] = 1.0e-6
   params["thermal"]["atol"] = 1.0e-4
   params["thermal"]["miter"] = 20
 
-  params["structural"]["rtol"] = 1.0e-6
-  params["structural"]["atol"] = 1.0e-8
+  params["structural"]["rtol"] = 1.0e-8
+  params["structural"]["atol"] = 1.0e-10
   params["structural"]["miter"] = 50
   params["structural"]["verbose"] = False
+  params["structural"]["backtracking"] = True
 
   params["system"]["rtol"] = 1.0e-6
   params["system"]["atol"] = 1.0e-8
-  params["system"]["miter"] = 10
+  params["system"]["miter"] = 50
   params["system"]["verbose"] = True
-  params["system"]["mdiv"] = 5
+  params["system"]["mdiv"] = 10
+  params["system"]["backtracking"] = True
   
   return params
 
@@ -36,11 +38,11 @@ if __name__ == "__main__":
   #     Pressure boundary conditions
   #     Interconnect stiffnesses
   model = receiver.Receiver.load("example-small.hdf5")
-
+  
   # Cut down on run time for now
-  for panel in model.panels.values():
-    for tube in panel.tubes.values():
-      tube.make_1D(tube.h/2, 0.0)
+  #for panel in model.panels.values():
+  #  for tube in panel.tubes.values():
+  #    tube.make_2D(tube.h/2)
 
   # Load some customized solution parameters
   # These are all optional, all the solvers have default values

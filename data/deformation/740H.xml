@@ -26,7 +26,6 @@
       <m2_type>poissons</m2_type>
     </elastic>
     <plastic type="SmallStrainRateIndependentPlasticity">
-      <tol>1.0e-6</tol>
       <elastic type="IsotropicLinearElasticModel">
         <m1_type>youngs</m1_type>
         <m1 type="PiecewiseLinearInterpolate">
@@ -81,7 +80,6 @@
   <elastic_creep type="SmallStrainCreepPlasticity">
     <miter>50</miter>
     <verbose>false</verbose>
-    <tol>1e-6</tol>
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
         <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
@@ -104,7 +102,6 @@
     </plastic>
     <creep type="J2CreepModel">
       <verbose>false</verbose>
-      <tol>1e-6</tol>
       <rule type="RegionKMCreep">
         <emodel type="IsotropicLinearElasticModel">
           <m1_type>youngs</m1_type>
@@ -131,7 +128,6 @@
 
 
   <plastic_only type="SmallStrainRateIndependentPlasticity">
-    <tol>1.0e-6</tol>
     <verbose>false</verbose>
     <elastic type="IsotropicLinearElasticModel">
       <m1_type>youngs</m1_type>

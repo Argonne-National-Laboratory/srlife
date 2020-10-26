@@ -175,6 +175,7 @@ class SpringNetwork(nx.MultiGraph):
     self.miter = kwargs.pop("miter", 25)
     self.verbose = kwargs.pop("verbose", False)
     self.mdiv = kwargs.pop('mdiv', 5)
+    self.backtrack = kwargs.pop("backtrack", True)
 
   def __copy(self, other):
     """
@@ -189,6 +190,7 @@ class SpringNetwork(nx.MultiGraph):
     other.miter = self.miter
     other.verbose = self.verbose
     other.mdiv = self.mdiv
+    other.backtrack = self.backtrack
 
   def set_times(self, times):
     """
@@ -403,15 +405,16 @@ class SpringNetwork(nx.MultiGraph):
     current = 0
     ndiv = 0
 
+    d = np.copy(dguess)
+
     while current < total:
       self.fraction = float(current + attempt) / total
       if self.verbose:
-        print(current, attempt, total)
         print("Attempting to advance to %f of the step" % self.fraction) 
       try:
         d = newton(lambda x: self.RJ(x, nthreads = nthreads), 
-            dguess, verbose = self.verbose, rel_tol = self.rtol, 
-            abs_tol = self.atol, miters = self.miter)
+            d, verbose = self.verbose, rel_tol = self.rtol, 
+            abs_tol = self.atol, miters = self.miter, backtrack = self.backtrack)
       except Exception as e:
         attempt = attempt // 2
         ndiv += 1
@@ -430,6 +433,28 @@ class SpringNetwork(nx.MultiGraph):
         edge['object'].update_state()
 
     return d
+
+  def RJ_intercept(self, d, nthreads = 1):
+    R, J = self.RJ(d, nthreads)
+    
+    Jp = np.zeros(J.shape)
+    for i in range(len(d)):
+      da = 1.0e-6 * np.abs(d[i])
+      if da < 1.0e-6:
+        da = 1.0e-6
+      dp = np.copy(d)
+      dp[i] += da
+      Rp, _ = self.RJ(dp, nthreads)
+      Jp[i] = (Rp - R) / da
+
+    R, J = self.RJ(d, nthreads)
+    
+    print("Comparison")
+    print(J)
+    print(Jp)
+    print(J/Jp)
+
+    return R, J
 
   def RJ(self, d, nthreads = 1):
     """
@@ -467,6 +492,7 @@ class SpringNetwork(nx.MultiGraph):
     J = np.zeros((len(self.nodes),len(self.nodes)))
     f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
         - dall[self.dmap[i]], self.fraction)
+
     Fint[self.dmap[i]] += -f
     Fint[self.dmap[j]] += f
     

@@ -177,7 +177,7 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
     self.nu = 0.35
 
     self.tube = receiver.Tube(self.ro, self.ro - self.ri, self.h, self.nr, self.nt, self.nz)
-    self.times = np.array([0,1])
+    self.times = np.array([0,1,2])
     self.tube.set_times(self.times)
 
     self.tube.set_pressure_bc(receiver.PressureBC(self.times, self.times / 50.0))
@@ -191,18 +191,22 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
 
     self.d = 0.25
 
-    self.solver = structural.PythonTubeSolver(verbose = False) 
-
-  def _solve(self, d, mat):
+    self.solver = structural.PythonTubeSolver() 
+  
+  def _setup_state(self, d, mat):
     self.solver.setup_tube(self.tube)
     state_n = self.solver.init_state(self.tube, mat)
+    self.state_n = self.solver.solve(self.tube, 1, state_n, d/2)
+    self.solver.dump_state(self.tube,1,self.state_n)
 
-    return self.solver.solve(self.tube, 1, state_n, d)
+  def _solve(self, d, mat):
+    return self.solver.solve(self.tube, 2, self.state_n, d)
 
   def test_1D(self):
     self.tube.make_1D(self.h/ 2, 0)
     
     for mat in self.mats:
+      self._setup_state(self.d,mat)
       exact = self._solve(self.d, mat).stiffness
       numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
@@ -212,6 +216,8 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
     self.tube.make_2D(self.h/ 2)
     
     for mat in self.mats:
+      self._setup_state(self.d,mat)
+
       exact = self._solve(self.d, mat).stiffness
       numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
@@ -219,7 +225,9 @@ class TestAxialStiffnessNumerical(unittest.TestCase):
 
   def test_3D(self):
     
-    for mat in self.mats:
+    for mat in self.mats[2:3]:
+      self._setup_state(self.d,mat)
+
       exact = self._solve(self.d, mat).stiffness
       numerical = differentiate(lambda d: self._solve(d, mat).force, self.d)
 
