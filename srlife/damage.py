@@ -43,10 +43,14 @@ class DamageCalculator:
     """
     # pylint: disable=no-member
     with multiprocess.Pool(nthreads) as p:
-      Ns = list(decorator(
+      res = list(decorator(
         p.imap(lambda x: self.single_cycles(x, material, receiver), receiver.tubes),
         receiver.ntubes))
+    Ns = [r[0] for r in res]
     N = min(Ns)
+
+    for tube,r in zip(receiver.tubes,res):
+      tube.add_quadrature_results("max_cycles", r[1] * receiver.days)
 
     # Translate to days
     return N * receiver.days
@@ -71,8 +75,11 @@ class TimeFractionInteractionDamage(DamageCalculator):
     Df = self.fatigue_damage(tube, material, receiver)
 
     # This is going to be expensive, but I don't see much way around it
-    return min(self.calculate_max_cycles(c, f, material) for c,f in 
-        zip(Dc.flatten(), Df.flatten()))
+    mc = np.zeros(Df.shape)
+    for ind in np.ndindex(*Df.shape):
+      mc[ind] = self.calculate_max_cycles(Dc[ind], Df[ind], material)
+    
+    return np.min(mc), np.broadcast_to(mc, (len(tube.times),) + mc.shape) 
   
   def calculate_max_cycles(self, Dc, Df, material, rep_min = 1, rep_max = 1e6):
     """
