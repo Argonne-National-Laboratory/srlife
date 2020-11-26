@@ -2,6 +2,8 @@
   This module define the data structures used as input and output to the analysis module.
 """
 
+import itertools
+
 import numpy as np
 import scipy.interpolate as inter
 import h5py
@@ -13,8 +15,8 @@ class Receiver:
     Basic definition of the tubular receiver geometry.
 
     A receiver is a collection of panels linked together by
-    an elastic spring stiffness.  This stiffness can be zero (disconnected)
-    or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    "rigid" or "disconnect"
 
     Panels can be labeled by strings.  By default the names
     are sequential numbers.
@@ -24,21 +26,16 @@ class Receiver:
          if the analysis neglects some of the night period)
       2) The number of days (see #1) explicitly represented in the
          analysis results.
-      3) A multiplier on the analyzed results.  For example, if the
-         analysis is for a typical day and the receiver life is
-         10 years this multiplier is 10 years x 365 days / 1 days = 3650.
   """
-  def __init__(self, period, days, multiplier, panel_stiffness):
+  def __init__(self, period, days, panel_stiffness):
     """
     Parameters:
       period:           single daily cycle period
       days:             number of daily cycles explicitly represented
-      multiplier:       number of repetitions on the analysis cycle
       panel_stiffness:  panel interconnect stiffness
     """
     self.period = period
     self.days = days
-    self.multiplier = multiplier
     self.panels = {}
     self.stiffness = panel_stiffness
 
@@ -65,7 +62,6 @@ class Receiver:
     base = (
         np.isclose(self.period, other.period)
         and np.isclose(self.days, other.days)
-        and np.isclose(self.multiplier, other.multiplier)
         and np.isclose(self.stiffness, other.stiffness)
         )
     for name, panel in self.panels.items():
@@ -74,6 +70,21 @@ class Receiver:
       base = (base and panel.close(other.panels[name]))
 
     return base
+  
+  @property
+  def tubes(self):
+    """
+      Shortcut iterator over all tubes
+    """
+    return itertools.chain(*(panel.tubes.values() 
+      for panel in self.panels.values()))
+
+  @property
+  def ntubes(self):
+    """
+      Shortcut for total number of tubes
+    """
+    return len(list(self.tubes))
 
   @property
   def npanels(self):
@@ -109,7 +120,6 @@ class Receiver:
 
     fobj.attrs['period'] = self.period
     fobj.attrs['days'] = self.days
-    fobj.attrs['multiplier'] = self.multiplier
     fobj.attrs['stiffness'] = self.stiffness
 
     grp = fobj.create_group("panels")
@@ -129,8 +139,7 @@ class Receiver:
     if isinstance(fobj, str):
       fobj = h5py.File(fobj, 'r')
 
-    res = cls(fobj.attrs['period'], fobj.attrs['days'],
-        fobj.attrs['multiplier'], fobj.attrs['stiffness'])
+    res = cls(fobj.attrs['period'], fobj.attrs['days'], fobj.attrs['stiffness'])
 
     grp = fobj["panels"]
 
@@ -144,8 +153,8 @@ class Panel:
     Basic definition of a panel in a tubular receiver.
 
     A panel is a collection of Tube object linked together by
-    an elastic spring stiffness.  This stiffness can be zero
-    (disconnected) or infinity (rigidly connected).
+    an elastic spring stiffness.  This stiffness can be a real number,
+    a string "disconnect" or a string "rigid"
 
     Tubes in the panel can be labeled by strings.  By default the
     names are sequential numbers.
@@ -309,11 +318,23 @@ class Tube:
 
     self.times = []
     self.results = {}
+    self.quadrature_results = {}
 
     self.outer_bc = None
     self.inner_bc = None
+    self.pressure_bc = None
 
     self.T0 = T0
+
+  def copy_results(self, other):
+    """
+      Copy the results fields from one tube to another
+
+      Parameters:
+        other:      other tube object
+    """
+    self.results = other.results
+    self.quadrature_results = other.quadrature_results
 
   @property
   def ndim(self):
@@ -327,7 +348,7 @@ class Tube:
     elif self.abstraction == "1D":
       return 1
     else:
-      raise ValueError("Tube abstraction unknown!") 
+      raise ValueError("Tube abstraction unknown!")
 
   @property
   def dim(self):
@@ -433,6 +454,11 @@ class Tube:
         return False
       base = (base and self.inner_bc.close(other.inner_bc))
 
+    if self.pressure_bc:
+      if not other.pressure_bc:
+        return False
+      base = (base and self.pressure_bc.close(other.pressure_bc))
+
     base = (base and self.abstraction == other.abstraction)
     if self.abstraction == "2D" or self.abstraction == "1D":
       base = (base and np.isclose(self.plane, other.plane))
@@ -474,6 +500,18 @@ class Tube:
     self._check_rdim(data)
     self.results[name] = data
 
+  def add_quadrature_results(self, name, data):
+    """
+      Add a result at the quadrature points
+
+      Parameters:
+        name:       parameter set name
+        data:       actual results data
+    """
+    if data.shape[0] != self.ntime:
+      raise ValueError("Quadrature data must have time axis first!")
+    self.quadrature_results[name] = data
+
   def _check_rdim(self, data):
     """
       Make sure the results array aligns with the correct dimension for the
@@ -514,6 +552,15 @@ class Tube:
     else:
       raise ValueError("Wall location must be either inner or outer")
 
+  def set_pressure_bc(self, bc):
+    """
+      Set the pressure boundary condition
+
+      Parameters:
+        bc:     boundary condition object
+    """
+    self.pressure_bc = bc
+
   def save(self, fobj):
     """
       Save to an HDF5 file
@@ -541,6 +588,10 @@ class Tube:
     for name, result in self.results.items():
       grp.create_dataset(name, data = result)
 
+    grp = fobj.create_group("quadrature_results")
+    for name, result in self.quadrature_results.items():
+      grp.create_dataset(name, data = result)
+
     if self.outer_bc:
       grp = fobj.create_group("outer_bc")
       self.outer_bc.save(grp)
@@ -548,6 +599,10 @@ class Tube:
     if self.inner_bc:
       grp = fobj.create_group("inner_bc")
       self.inner_bc.save(grp)
+
+    if self.pressure_bc:
+      grp = fobj.create_group("pressure_bc")
+      self.pressure_bc.save(grp)
 
     fobj.attrs["T0"] = self.T0
 
@@ -574,11 +629,18 @@ class Tube:
     for name in grp:
       res.add_results(name, np.copy(grp[name]))
 
+    grp = fobj["quadrature_results"]
+    for name in grp:
+      res.add_quadrature_results(name, np.copy(grp[name]))
+
     if "outer_bc" in fobj:
       res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")
 
     if "inner_bc" in fobj:
       res.set_bc(ThermalBC.load(fobj["inner_bc"]), "inner")
+
+    if "pressure_bc" in fobj:
+      res.set_pressure_bc(PressureBC.load(fobj["pressure_bc"]))
 
     return res
 
@@ -613,6 +675,67 @@ def _make_ifn(base):
       return _vector_interpolate(base, ndata)
 
   return ifn
+
+class PressureBC:
+  """
+    Simple class to store tube pressure, assumed to be constant
+    in space and just vary with time.
+  """
+  def __init__(self, times, data):
+    """
+      Parameters:
+        times       times throughout load cycle
+        data        pressure values
+    """
+    self.times = times
+    if self.times.shape != data.shape:
+      raise ValueError("Times and data should have the same shape!")
+    self.data = data
+
+    self.ifn = inter.interp1d(self.times, self.data)
+
+  @classmethod
+  def load(cls, fobj):
+    """
+      Load from an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    return cls(np.copy(fobj["times"]), np.copy(fobj["data"]))
+
+  def save(self, fobj):
+    """
+      Save to an HDF5 file
+
+      Parameters:
+        fobj        h5py group
+    """
+    fobj.create_dataset("times", data = self.times)
+    fobj.create_dataset("data", data = self.data)
+
+  @property
+  def ntime(self):
+    """
+      Number of time steps
+    """
+    return len(self.times)
+
+  def pressure(self, t):
+    """
+      Return the pressure as a function of time
+    """
+    return self.ifn(t)
+
+  def close(self, other):
+    """
+      Test method for comparing BCs
+
+      Parameters:
+        other       other object
+    """
+    return (np.allclose(self.times, other.times)
+        and np.allclose(self.data, other.data))
 
 class ThermalBC:
   """

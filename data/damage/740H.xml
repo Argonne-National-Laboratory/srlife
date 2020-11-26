@@ -1,0 +1,30 @@
+<!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
+<models>
+  <base>
+    <averageRupture>
+      <C>18.520243321642944</C>
+      <a>-2187.36263527 4401.34469161 24497.58573134</a>
+      <n>2 1 0</n>
+    </averageRupture>
+    <lowerboundRupture>
+      <C>18.520243321642944</C>
+      <a>-2333.22776603 5099.88095659 23399.79024925</a>
+      <n>2 1 0</n>
+    </lowerboundRupture>
+    <nominalFatigue>
+      <curve1>
+        <T>973</T>
+        <a>-1.675084965947688964e+00 -1.336549425105300593e+01 -1.591458437096616763e+01</a>
+        <n>2 1 0</n>
+        <cutoff>2e-3</cutoff>
+      </curve1>
+      <curve2>
+        <T>1123.15</T>
+        <a>-9.799638105989135761e-01 -9.130930944943729699e+00 -1.095030455398071645e+01</a>
+        <n>2 1 0</n>
+        <cutoff>1e-3</cutoff>
+      </curve2>
+    </nominalFatigue>
+    <cfinteraction>0.05 0.05</cfinteraction>
+  </base>
+</models>

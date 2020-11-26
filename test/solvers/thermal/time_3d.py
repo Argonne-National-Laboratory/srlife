@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-sys.path.append('../..')
+sys.path.append('../../..')
 from srlife import materials, thermal
 
 from thermalsol import ManufacturedSolution

@@ -9,7 +9,7 @@ import numpy.linalg as la
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
-from srlife import receiver
+from srlife import receiver, solverparams
 
 class ThermalSolver(ABC):
   """
@@ -42,6 +42,25 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
 
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
+  def __init__(self, pset = solverparams.ParameterSet(),
+      rtol = 1.0e-6, atol = 1.0e-2, miter = 100, substep = 1, verbose = False):
+    """
+      Setup the solver
+
+      Additional parameters:
+        pset        object with solver parameters 
+        rtol        iteration relative tolerance
+        atol        iteration absolute tolerance
+        miter       maximum iterations
+        substep     divide user-provided time increments into smaller values 
+        verbose     print a lot of debug info
+    """
+    self.rtol = pset.get_default("rtol", rtol)
+    self.atol = pset.get_default("atol", atol)
+    self.miter = pset.get_default("miter", miter)
+    self.substep = pset.get_default("substep", substep)
+    self.verbose = pset.get_default("verbose", verbose)
+
   def solve(self, tube, material, fluid, source = None, 
       T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
       miter = 100, substep = 1):
@@ -62,15 +81,14 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         T0:         if present override the tube IC with a function of
                     the coordinates
         fix_edge:   an exact solution to fix edge BCs for testing
-        rtol        iteration relative tolerance
-        atol        iteration absolute tolerance
-        miter       maximum iterations
-        substep     divide user-provided time increments into smaller values
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
-        material, fluid, source, T0, fix_edge, rtol, atol, miter, substep).solve()
+        material, fluid, source, T0, fix_edge, self.rtol, self.atol, 
+        self.miter, self.substep, self.verbose).solve()
 
     tube.add_results("temperature", temperatures)
+
+    return temperatures
 
 class FiniteDifferenceImplicitThermalProblem:
   """
@@ -78,7 +96,8 @@ class FiniteDifferenceImplicitThermalProblem:
     tube problem
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
-      fix_edge = None, rtol = 1.0e-6, atol = 1e-8, miter= 50, substep = 1):
+      fix_edge = None, rtol = 1.0e-6, atol = 1e-8, miter= 50, substep = 1,
+      verbose = False):
     """
       Parameters:
         tube        Tube object to solve
@@ -93,6 +112,7 @@ class FiniteDifferenceImplicitThermalProblem:
         atol        absolute tolerance
         miter       maximum iterations
         substep     divide user provided time increments into smaller steps
+        verbose     print a lot of debug info
     """
     self.tube = tube
     self.material = material
@@ -103,6 +123,8 @@ class FiniteDifferenceImplicitThermalProblem:
     self.miter = miter
 
     self.substep = substep
+
+    self.verbose = verbose
 
     self.source_term = source
     self.T0 = T0
@@ -354,8 +376,6 @@ class FiniteDifferenceImplicitThermalProblem:
 
       if i == 0:
         nr0 = nr
-
-      #print(i,nr,nr/nr0)
 
       if (nr < self.atol or nr/nr0 < self.rtol) and i > 0:
         break

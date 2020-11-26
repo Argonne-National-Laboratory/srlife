@@ -5,3 +5,10 @@ vtk
 nose
 matplotlib
 pylint
+neml
+scikit-fem
+meshio
+networkx
+tqdm
+multiprocess
+dill

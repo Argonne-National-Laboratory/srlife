@@ -18,7 +18,6 @@ inner_radius = outer_radius - thickness
 
 period = 10.0
 ndays = 10
-multiplier = 10
 
 nsteps = 10
 
@@ -29,6 +28,9 @@ tube_k = np.inf
 
 def get_temp_hdf():
   return h5py.File(tempfile.mktemp(), "w")
+
+def valid_pressure_bc():
+  return receiver.PressureBC(times, np.zeros((len(times),)))
 
 def valid_convective_bc(loc):
   if loc == "outer":
@@ -62,6 +64,10 @@ def valid_tube(results = []):
   for res in results:
     tube.add_results(res, np.zeros((len(times), nr, nt, nz)))
 
+  tube.set_bc(valid_heatflux_bc("inner"), "inner")
+  tube.set_bc(valid_convective_bc("outer"), "outer")
+  tube.set_pressure_bc(valid_pressure_bc())
+
   return tube
 
 def valid_tube_1D(results = []):
@@ -85,7 +91,7 @@ def valid_panel(n = 0, results = []):
   return panel
 
 def valid_receiver(npanel = 0, ntube = 0, results = []):
-  rec = receiver.Receiver(period, ndays, multiplier, panel_k)
+  rec = receiver.Receiver(period, ndays, panel_k)
 
   for i in range(npanel):
     rec.add_panel(valid_panel(ntube, results))
@@ -185,6 +191,20 @@ class TestTube(unittest.TestCase):
     new = receiver.Tube.load(f)
 
     self.assertTrue(tube.close(new))
+
+class TestPressureBC(unittest.TestCase):
+  """
+    Basic setup for PressureBC
+  """
+  def test_construct(self):
+    bc = valid_pressure_bc()
+
+  def test_store(self):
+    f = get_temp_hdf()
+    orig = valid_pressure_bc()
+    orig.save(f)
+    new = receiver.PressureBC.load(f)
+    self.assertTrue(orig.close(new))
 
 class TestHeatFluxBC(unittest.TestCase):
   """
