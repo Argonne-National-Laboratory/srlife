@@ -1,0 +1,9 @@
+<!-- temperature in K, conductivity in W/mm-K, diffusivity in mm^2/hr -->
+<models>
+  <base type="PiecewiseLinearThermalMaterial">
+    <name>800H</name>
+    <temps>-10000.0 293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1023.15 10000.0</temps>
+    <cond>11.5e-3 11.5e-3 13.0e-3 14.7e-3 16.4e-3 17.9e-3 19.4e-3 21.1e-3 22.9e-3 23.8e-3 23.8e-3</cond>
+    <diff>11304 11304 12456 13608 14580 15480 16308 17028 17676 18000 18000</diff>
+  </base>
+</models>

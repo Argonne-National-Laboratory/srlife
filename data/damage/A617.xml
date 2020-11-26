@@ -1,0 +1,42 @@
+<!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
+<models>
+  <base>
+    <averageRupture>
+      <C>13.222778527640372</C>
+      <a>-4676.95334052 26779.11701408</a>
+      <n>1 0</n>
+    </averageRupture>
+    <lowerboundRupture>
+      <C>13.222778527640372</C>
+      <a>-4677.52288301 25701.17795603</a>
+      <n>1 0</n>
+    </lowerboundRupture>
+    <nominalFatigue>
+      <curve1>
+        <T>698.15</T>
+        <a>-1.96840098 -15.54013564 -43.28541994 -53.44670132 -22.52590421</a>
+        <n>3 2 1 0</n>
+        <cutoff>2.5e-3</cutoff>
+      </curve1>
+      <curve2>
+        <T>977.15</T>
+        <a>-4.21810843  -36.05583109 -110.87989995 -148.67922613  -71.83115075</a>
+        <n>3 2 1 0</n>
+        <cutoff>1.8e-3</cutoff>
+      </curve2>
+      <curve3>
+        <T>1144.15</T>
+        <a>-2.90176819  -27.30295081  -91.22844138 -131.63697488  -67.71531452</a>
+        <n>3 2 1 0</n>
+        <cutoff>1.40e-3</cutoff>
+      </curve3>
+      <curve4>
+        <T>1223.15</T>
+        <a>-1.02720294 -12.20287435 -47.57002268 -77.63180075 -43.563596</a>
+        <n>3 2 1 0</n>
+        <cutoff>1.1e-3</cutoff>
+      </curve4>
+    </nominalFatigue>
+    <cfinteraction>0.1 0.1</cfinteraction>
+  </base>
+</models>
