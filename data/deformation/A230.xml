@@ -5,8 +5,8 @@
   <elastic_model type="SmallStrainElasticity">
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
-        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-        <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+        <points>298.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+        <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
       </m1>
       <m1_type>youngs</m1_type>
       <m2>0.31</m2>
@@ -20,8 +20,8 @@
   <base type="SmallStrainCreepPlasticity">
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
-        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-        <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+        <points>298.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+        <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
       </m1>
       <m1_type>youngs</m1_type>
       <m2>0.31</m2>
@@ -31,8 +31,8 @@
       <elastic type="IsotropicLinearElasticModel">
         <m1_type>youngs</m1_type>
         <m1 type="PiecewiseLinearInterpolate">
-          <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-          <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+          <points>298.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+          <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
         </m1>
         <m2_type>poissons</m2_type>
         <m2>0.31</m2>
@@ -42,7 +42,7 @@
         <hardening type="VoceIsotropicHardeningRule">
           <s0 type="PiecewiseLinearInterpolate">
             <points>811.15 922.15 1033.15 1073.15 1173.15</points>
-            <values>259.695 248.080 221.098 187.452 109.678</values>
+            <values>259.349 248.059 221.098 187.452 111.541</values>
           </s0>
           <R type="PiecewiseLinearInterpolate">
             <points>811.15 922.15 1033.15 1073.15 1173.15</points>
@@ -50,7 +50,7 @@
           </R>
           <d type="PiecewiseLinearInterpolate">
             <points>811.15 922.15 1033.15 1073.15 1173.15</points>
-            <values>107.460 136.902 136.926 95.047 133.107</values>
+            <values>106.480 136.898 136.926 95.047 103.940</values>
           </d>
         </hardening>
       </flow>
@@ -61,14 +61,14 @@
           <m1_type>youngs</m1_type>
           <m1 type="PiecewiseLinearInterpolate">
             <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-            <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+            <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
           </m1>
           <m2_type>poissons</m2_type>
           <m2>0.31</m2>
         </emodel>
         <cuts>0.0</cuts>
-        <A>-0.10174</A>
-        <B>-0.07196</B>
+        <A>-0.0935</A>
+        <B>-0.03291</B>
         <kboltz>1.38064e-20</kboltz>
         <b>2.53e-07</b>
         <eps0>1.0e13</eps0>
@@ -82,8 +82,8 @@
   <elastic_creep type="SmallStrainCreepPlasticity">
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
-        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-        <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+        <points>298.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
+        <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
       </m1>
       <m1_type>youngs</m1_type>
       <m2>0.31</m2>
@@ -94,7 +94,7 @@
         <m1_type>youngs</m1_type>
         <m1 type="PiecewiseLinearInterpolate">
           <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-          <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+          <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
         </m1>
         <m2_type>poissons</m2_type>
         <m2>0.31</m2>
@@ -106,14 +106,14 @@
           <m1_type>youngs</m1_type>
           <m1 type="PiecewiseLinearInterpolate">
             <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
-            <values>209000 207000 200000 193000 186000 181000 175000 168000 159000 150000</values>
+            <values>211000 206000 200000 195000 189000 183000 176000 168000 159000 149000</values>
           </m1>
           <m2_type>poissons</m2_type>
           <m2>0.31</m2>
         </emodel>
         <cuts>0.0</cuts>
-        <A>-0.10174</A>
-        <B>-0.07196</B>
+        <A>-0.0935</A>
+        <B>-0.03291</B>
         <kboltz>1.38064e-20</kboltz>
         <b>2.53e-07</b>
         <eps0>1.0e13</eps0>

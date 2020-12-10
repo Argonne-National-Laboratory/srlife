@@ -48,16 +48,16 @@
         <surface type="IsoJ2"/>
         <hardening type="VoceIsotropicHardeningRule">
           <s0 type="PiecewiseLinearInterpolate">
-            <points>922.15 977.15 1033.15 1089.15</points>
-            <values>636.830 602.565 578.329 530.164</values>
+            <points>922.15 977.15 1033.15 1089.15 1144.15 1200.15</points>
+            <values>636.830 602.565 578.329 544.190 502.902 307.777</values>
           </s0>
           <R type="PiecewiseLinearInterpolate">
-            <points>922.15 977.15 1033.15 1089.15</points>
-            <values>200.0 215.0 190.0 165.0</values>
+            <points>922.15 977.15 1033.15 1089.15 1144.15 1200.15</points>
+            <values>200.0 215.0 190.0 140.0 84.098 62.223</values>
           </R>
           <d type="PiecewiseLinearInterpolate">
-            <points>922.15 977.15 1033.15 1089.15</points>
-            <values>45.726 30.255 38.199 49.435</values>
+            <points>922.15 977.15 1033.15 1089.15 1144.15 1200.15</points>
+            <values>45.726 30.255 38.199 96.676 177.876 176.541</values>
           </d>
         </hardening>
       </flow>
@@ -81,7 +81,7 @@
         <B>0.0000946</B>
         <kboltz>1.38064e-20</kboltz>
         <b>2.53e-07</b>
-        <eps0>1.39e5</eps0>
+        <eps0>5.0e8</eps0>
       </rule>
     </creep>
     <alpha type="PiecewiseLinearInterpolate">
