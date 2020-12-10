@@ -78,10 +78,6 @@
     </alpha>
   </base>
   <elastic_creep type="SmallStrainCreepPlasticity">
-    <miter>50</miter>
-    <verbose>false</verbose>
-    <rtol>1e-6</tol>
-    <sf>1</sf>
     <elastic type="IsotropicLinearElasticModel">
       <m1 type="PiecewiseLinearInterpolate">
         <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15</points>
@@ -103,8 +99,6 @@
       </elastic>
     </plastic>
     <creep type="J2CreepModel">
-      <verbose>false</verbose>
-      <rtol>1e-6</tol>
       <rule type="RegionKMCreep">
         <emodel type="IsotropicLinearElasticModel">
           <m1_type>youngs</m1_type>
