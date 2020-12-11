@@ -1,0 +1,43 @@
+<!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
+<!-- A740H creep-fatigue damage envelope is used which will be changed as A282 creep-fatigue data (from INL) become availavle-->
+<models>
+  <base>
+    <averageRupture>
+      <C>15.251919550811756</C>
+      <a>-2266.06411839 5185.40208367 19889.7514795</a>
+      <n>2 1 0</n>
+    </averageRupture>
+    <lowerboundRupture>
+      <C>15.251919550811756</C>
+      <a>-2291.66474549 5303.87278052 19264.73603888</a>
+      <n>2 1 0</n>
+    </lowerboundRupture>
+    <nominalFatigue>
+      <curve1>
+        <T>922.15</T>
+        <a>-1.231570542338130281e+02 -7.774493602626391748e+02 -1.637879770597228799e+03 -1.147919680937996645e+03</a>
+        <n>3 2 1 0</n>
+        <cutoff>0.00445</cutoff>
+      </curve1>
+      <curve2>
+        <T>1033.15</T>
+        <a>-7.973327574546676999e+01 -5.145112408263908037e+02 -1.108853548033886909e+03 -7.944603505597823414e+02</a>
+        <n>3 2 1 0</n>
+        <cutoff>0.003717</cutoff>
+      </curve2>
+      <curve3>
+        <T>1089.15</T>
+        <a>-9.516475827803185439e+01 -6.146397032130697653e+02 -1.324615515697332739e+03 -9.490184581433888980e+02</a>
+        <n>3 2 1 0</n>
+        <cutoff>0.003688</cutoff>
+      </curve3>
+      <curve4>
+        <T>1144.15</T>
+        <a>-3.141266277995631739e+01 -2.166914265928333521e+02 -5.032069381941175266e+02 -3.896124369066853319e+02</a>
+        <n>3 2 1 0</n>
+        <cutoff>0.002514</cutoff>
+      </curve4>
+    </nominalFatigue>
+    <cfinteraction>0.05 0.05</cfinteraction>
+  </base>
+</models>

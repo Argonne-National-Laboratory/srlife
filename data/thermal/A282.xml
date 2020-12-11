@@ -1,0 +1,9 @@
+<!-- temperature in K, conductivity in W/mm-K, diffusivity in mm^2/hr -->
+<models>
+  <base type="PiecewiseLinearThermalMaterial">
+    <name>A282</name>
+    <temps>-10000.0 293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15 1273.15 10000.0</temps>
+    <cond>0.0103 0.0103 0.0120 0.0141 0.0163 0.0185 0.0205 0.0226 0.0248 0.0261 0.0273 0.0289 0.0289</cond>
+    <diff>10368 10368 11340 12528 13716 14868 15984 17028 18324 17568 17928 18756 18756</diff>
+  </base>
+</models>
