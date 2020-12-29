@@ -6,8 +6,8 @@ jobs:
             steps:
             - uses: actions/checkout@v2
             - run: sudo apt-get install cmake libblas-dev liblapack-dev
-            - run: python --version
-            - run: pip install -r requirements.txt
-            - run: nosetests
-            - run: pylint srlife
+            - run: python3 --version
+            - run: pip3 install -r requirements.txt
+            - run: nosetests3
+            - run: pylint3 srlife
 
