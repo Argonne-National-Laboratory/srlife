@@ -5,9 +5,9 @@ jobs:
             runs-on: ubuntu-latest
             steps:
             - uses: actions/checkout@v2
-            - run: sudo apt-get install cmake libblas-dev liblapack-dev
+            - run: sudo apt-get install cmake libblas-dev liblapack-dev python3-setuptools
             - run: python3 --version
-            - run: sudo pip3 install -r requirements.txt
+            - run: pip3 install --user -r requirements.txt
             - run: nosetests3
             - run: pylint3 srlife
 
