@@ -1,6 +1,6 @@
 # srlife: solar receiver life estimation tool
 
-[![Build Status](https://travis-ci.org/Argonne-National-Laboratory/neml.svg?branch=master)](https://travis-ci.org/Argonne-National-Laboratory/srlife)
+![Test Status](https://github.com/Argonne-National-Laboratory/srlife/workflows/tests/badge.svg?branch=master)
 
 This package evaluates the structural life of tubular solar receivers against
 creep rupture, fatigue, and creep-fatigue damage modes.
