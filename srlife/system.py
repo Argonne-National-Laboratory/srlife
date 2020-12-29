@@ -54,7 +54,7 @@ class SpringSystemSolver(SystemSolver):
     self.verbose = pset.get_default("verbose", verbose)
 
   def solve(self, model, smat, ssolver, nthreads = 1,
-      verbose = False, decorator = lambda fn: fn):
+      verbose = False, decorator = lambda fn, l: fn):
     """
       Solve a receiver model using a spring system
 
