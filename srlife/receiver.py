@@ -661,6 +661,9 @@ def _make_ifn(base):
     Helper to deal with getting both a scalar and a vector input
   """
   def ifn(mdata):
+    """
+      Interpolation function that handles both the scalar and vector cases
+    """
     allscalar = all(map(np.isscalar, mdata))
     anyscalar = any(map(np.isscalar, mdata))
     if allscalar:
