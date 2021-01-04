@@ -14,8 +14,6 @@ jobs:
         sudo apt-get install cmake libblas-dev liblapack-dev python3-setuptools python3-pip python3-dev
         pip3 install --user setuptools wheel twine
         pip3 install --user -r requirements.txt
-    - name: Test twine
-      run: which twine3
     - name: Build and publish
       env:
         TWINE_USERNAME: __token__
