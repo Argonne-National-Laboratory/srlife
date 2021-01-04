@@ -17,7 +17,7 @@ setup (
     # Name of the project
     name = 'srlife',
     # Version
-    version = '1.0.0',
+    version = '1.0.0-rc2',
     # One line-description
     description = "Evaluate the structural life of a solar receiver",
     # README
