@@ -32,7 +32,7 @@ class Receiver:
     Args:
       period (float): single daily cycle period
       days (int): number of daily cycles explicitly represented
-      panel_stiffness (float or string): panel interconnect stiffness (float) or "rigid" or "disconnect"
+      panel_stiffness (float or string): panel stiffness (float) or "rigid" or "disconnect"
   """
   def __init__(self, period, days, panel_stiffness):
     """ Initialize a Receiver object

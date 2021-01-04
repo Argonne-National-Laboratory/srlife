@@ -1,0 +1,9 @@
+version: 2
+formats: all
+
+python:
+      version: 3.7
+
+sphinx:
+      builder: html
+      configuration: doc/sphinx/source/conf.py

@@ -7,3 +7,6 @@
 doc/sphinx/build
 examples/large-experiments
 examples/small-experiments
+build/
+srlife.egg-info/
+dist/
