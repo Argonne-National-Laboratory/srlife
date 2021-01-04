@@ -15,10 +15,9 @@ jobs:
         python-version: '3.x'
     - name: Install dependencies
       run: |
-        sudo apt-get install python3-dev python3-pip cmake libboost-dev libblas-dev liblapack-dev
-        python -m pip install --upgrade pip
-        pip install --user setuptools wheel twine
-        pip install --user -r requirements.txt
+        sudo apt-get install cmake libblas-dev liblapack-dev python3-setuptools python3-pip python3-dev
+        pip3 install --user setuptools wheel twine
+        pip3 install --user -r requirements.txt
     - name: Build and publish
       env:
         TWINE_USERNAME: __token__
