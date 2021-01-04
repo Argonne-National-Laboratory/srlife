@@ -1,5 +1,8 @@
 """
   This module define the data structures used as input and output to the analysis module.
+
+  The require input data can be provided by constructing a Receiver object in python or by 
+  loading an HDF5 datafile, which will populate the python class hierarchy.
 """
 
 import itertools
@@ -11,8 +14,7 @@ import h5py
 from srlife import writers
 
 class Receiver:
-  """
-    Basic definition of the tubular receiver geometry.
+  """ Basic definition of the tubular receiver geometry.
 
     A receiver is a collection of panels linked together by
     an elastic spring stiffness.  This stiffness can be a real number,
@@ -26,13 +28,14 @@ class Receiver:
          if the analysis neglects some of the night period)
       2) The number of days (see #1) explicitly represented in the
          analysis results.
+
+    Args:
+      period (float): single daily cycle period
+      days (int): number of daily cycles explicitly represented
+      panel_stiffness (float or string): panel interconnect stiffness (float) or "rigid" or "disconnect"
   """
   def __init__(self, period, days, panel_stiffness):
-    """
-    Parameters:
-      period:           single daily cycle period
-      days:             number of daily cycles explicitly represented
-      panel_stiffness:  panel interconnect stiffness
+    """ Initialize a Receiver object
     """
     self.period = period
     self.days = days
@@ -40,24 +43,27 @@ class Receiver:
     self.stiffness = panel_stiffness
 
   def write_vtk(self, basename):
-    """
-      Write out the receiver as individual panels with names
-      basename_panelname
+    """  Write out the receiver as individual panels with names basename_panelname
 
-      Parameters:
-        basename        base file name
+    The VTK format is mostly used for additional postprocessing.  The VTK
+    format cannot be used for input.
+
+    Args:
+      basename (str):  base file name
     """
     for n, panel in self.panels.items():
       panel.write_vtk(basename + "_" + n)
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (Receiver):      the object to compare against
+
+      Returns:
+        bool:   True if the receivers are similar.
     """
     base = (
         np.isclose(self.period, other.period)
@@ -73,35 +79,38 @@ class Receiver:
   
   @property
   def tubes(self):
-    """
-      Shortcut iterator over all tubes
+    """ Shortcut iterator over all tubes
+
+      Returns:
+        iterator over panels
     """
     return itertools.chain(*(panel.tubes.values() 
       for panel in self.panels.values()))
 
   @property
   def ntubes(self):
-    """
-      Shortcut for total number of tubes
+    """ Shortcut for total number of tubes
+
+    Returns:
+      int: Number of tubes in all panels
     """
     return len(list(self.tubes))
 
   @property
   def npanels(self):
-    """
-      Number of panels in the receiver
+    """ Number of panels in the receiver
+
+    Returns:
+      int:  Number of panels
     """
     return len(self.panels)
 
   def add_panel(self, panel, name = None):
-    """
-      Add a panel object to the receiver
+    """ Add a panel object to the receiver
 
-      Parameters:
-        panel:          panel object
-
-      Other Parameters:
-        name:           optional, string name
+      Args:
+        panel (Panel):          panel object
+        name (Optional[str]):   panel name, by default follows fixed scheme
       """
     if not name:
       name = next_name(self.panels.keys())
@@ -109,11 +118,12 @@ class Receiver:
     self.panels[name] = panel
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        either a h5py file object or a filename
+      This saves a Receiver object to the HDF5 format.
+
+      Args:
+        fobj (str):  either a h5py file object or a filename
     """
     if isinstance(fobj, str):
       fobj = h5py.File(fobj, 'w')
@@ -130,11 +140,15 @@ class Receiver:
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load a Receiver from an HDF5 file
 
-      Parameters:
-        fobj        either a h5py file object or a filename
+      A full description of the HDF format is included in the module documentation
+
+      Args:
+        fobj (string):  either a h5py file object or a filename
+
+      Returns:
+        Receiver: The constructed receiver object.
     """
     if isinstance(fobj, str):
       fobj = h5py.File(fobj, 'r')
@@ -149,8 +163,7 @@ class Receiver:
     return res
 
 class Panel:
-  """
-    Basic definition of a panel in a tubular receiver.
+  """ Basic definition of a panel in a tubular receiver.
 
     A panel is a collection of Tube object linked together by
     an elastic spring stiffness.  This stiffness can be a real number,
@@ -158,34 +171,35 @@ class Panel:
 
     Tubes in the panel can be labeled by strings.  By default the
     names are sequential numbers.
+
+    Args:
+      stiffness:       manifold spring stiffness
   """
   def __init__(self, stiffness):
-    """
-      Parameters:
-        stiffness:       manifold spring stiffness
+    """ Initialize the panel
     """
     self.tubes = {}
     self.stiffness = stiffness
 
   def write_vtk(self, basename):
-    """
-      Write out the panels as individual tubes with names
-      basename_tubename
+    """ Write out the panels as individual tubes with names basename_tubename
 
-      Parameters:
-        basename        base file name
+      Args:
+        basename (string): base file name
     """
     for n, tube in self.tubes.items():
       tube.write_vtk(basename + "_" + n)
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (Panel): the object to compare against
+
+      Returns:
+        bool: true if the panels are sufficiently similar
     """
     base = np.isclose(self.stiffness, other.stiffness)
     for name, tube in self.tubes.items():
@@ -197,20 +211,19 @@ class Panel:
 
   @property
   def ntubes(self):
-    """
-      Number of tubes in the panel
+    """ Number of tubes in the panel
+
+    Returns:
+      int:  number of tubes in the panel
     """
     return len(self.tubes)
 
   def add_tube(self, tube, name = None):
-    """
-      Add a tube object to the panel
+    """ Add a tube object to the panel
 
-      Parameters:
-        tube:       tube object
-
-      Other Parameters:
-        name:       optional, string name
+      Args:
+        tube (Tube): tube object
+        name (Optional[str]): Tube name, defaults to fixed scheme.
     """
     if not name:
       name = next_name(self.tubes.keys())
@@ -218,11 +231,10 @@ class Panel:
     self.tubes[name] = tube
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group
     """
     fobj.attrs['stiffness'] = self.stiffness
 
@@ -234,11 +246,10 @@ class Panel:
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group containing the panel
     """
     res = cls(fobj.attrs['stiffness'])
 
@@ -250,11 +261,10 @@ class Panel:
     return res
 
 def next_name(names):
-  """
-    Determine the next numeric string name based on a list
+  """ Determine the next numeric string name based on a list
 
-    Parameters:
-      names:        list of current names (string)
+    Args:
+      names (list): list of current names (string)
   """
   curr_ints = []
   for name in names:
@@ -268,8 +278,7 @@ def next_name(names):
   return str(max(curr_ints) + 1)
 
 class Tube:
-  """
-    Geometry, boundary conditions, and results for a single tube.
+  """ Geometry, boundary conditions, and results for a single tube.
 
     The basic tube geometry is defined by an outer radius, thickness, and
     height.
@@ -291,20 +300,19 @@ class Tube:
     Boundary conditions may be provided in two ways, either
     as fluid conditions or net heat fluxes.  These are defined
     in the HeatFluxBC or ConvectionBC objects below.
+
+    Args:
+      outer_radius (float): tube outer radius
+      thickness (float): tube thickness
+      height (float): tube height
+      nr (int): number of radial increments
+      nt (int): number of circumferential increments
+      nz (int): number of axial increments
+      T0 (Optional[float]): initial temperature
   """
   def __init__(self, outer_radius, thickness, height, nr, nt, nz, 
       T0 = 0.0):
-    """
-      Parameters:
-        outer_radius:        tube outer radius
-        thickness:           tube thickness
-        height:              tube height
-        nr:                  number of radial increments
-        nt:                  number of circumferential increments
-        nz:                  number of axial increments
-
-      Other Parameters:
-        T0                   initial temperature
+    """ Initialize the tube
     """
     self.r = outer_radius
     self.t = thickness
@@ -327,8 +335,7 @@ class Tube:
     self.T0 = T0
 
   def copy_results(self, other):
-    """
-      Copy the results fields from one tube to another
+    """ Copy the results fields from one tube to another
 
       Parameters:
         other:      other tube object
@@ -338,8 +345,10 @@ class Tube:
 
   @property
   def ndim(self):
-    """
-      Number of problem dimensions
+    """ Number of problem dimensions
+
+    Returns:
+      int:  tube dimension
     """
     if self.abstraction == "3D":
       return 3
@@ -352,8 +361,10 @@ class Tube:
 
   @property
   def dim(self):
-    """
-      Actual problem dimensions
+    """ Actual problem discretization
+
+    Returns:
+      tuple(int): tuple giving the fixed grid discretization
     """
     if self.abstraction == "3D":
       return (self.nr, self.nt, self.nz)
@@ -366,8 +377,10 @@ class Tube:
 
   @property
   def mesh(self):
-    """
-      Calculate the problem mesh (should only be needed for I/O)
+    """ Calculate the problem mesh (should only be needed for I/O)
+
+    Returns:
+      Results of np.meshgrid over the problem discretization
     """
     r = np.linspace(self.r-self.t, self.r, self.nr)
     if self.ndim > 1:
@@ -382,22 +395,25 @@ class Tube:
     return np.meshgrid(*[r,t,z], indexing = 'ij')
 
   def write_vtk(self, fname):
-    """
-      Write to a VTK file
+    """ Write to a VTK file
 
-      Parameters:
-        fname       base filename
+      The tube VTK files are only used for output and 
+      postprocessign
+
+      Args:
+        fname (string): base filename
     """
     writer = writers.VTKWriter(self, fname)
     writer.write()
 
   def make_2D(self, height):
-    """
+    """ Abstract the tube as 2D
+
       Reduce to a 2D abstraction by slicing the tube at the
       indicated height
 
-      Parameters:
-        height      the height at which to slice
+      Args:
+        height (float): the height at which to slice
     """
     if height < 0.0 or height > self.h:
       raise ValueError("2D slice height must be within the tube height")
@@ -406,13 +422,14 @@ class Tube:
     self.plane = height
 
   def make_1D(self, height, angle):
-    """
+    """ Abstract the tube as 1D
+
       Reduce to a 1D abstraction along a ray given by the provided
       height and angle.
 
-      Parameters:
-        height      the height of the ray
-        angle       the angle, in radians
+      Args:
+        height (float): the height of the ray
+        angle (float): the angle, in radians
     """
     if height < 0.0 or height > self.h:
       raise ValueError("Ray height must be within the tube height")
@@ -422,13 +439,15 @@ class Tube:
     self.angle = angle
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (Tube): the object to compare against
+
+      Returns:
+        bool: true if the tubes are similar
     """
     base = (
         np.isclose(self.r, other.r)
@@ -471,17 +490,21 @@ class Tube:
 
   @property
   def ntime(self):
-    """
-      Number of time steps
+    """ Number of time steps
+
+    Returns:
+      int:  number of time steps
     """
     return len(self.times)
 
   def set_times(self, times):
-    """
-      Set the times at which data is provided
+    """ Set the times at which data is provided
 
-      Parameters:
-        times:      time values
+      All results arrays must provide data at these 
+      discrete times.
+
+      Args:
+        times (np.array): time values
     """
     for _,res in self.results.items():
       if res.shape[0] != len(times):
@@ -490,35 +513,37 @@ class Tube:
     self.times = times
 
   def add_results(self, name, data):
-    """
-      Add a result
+    """ Add a node point result field
 
-      Parameters:
-        name:       parameter set name
-        data:       actual results data
+      Args:
+        name (str): parameter set name
+        data (np.array): actual results data
     """
     self._check_rdim(data)
     self.results[name] = data
 
   def add_quadrature_results(self, name, data):
-    """
-      Add a result at the quadrature points
+    """ Add a result at the quadrature points
 
-      Parameters:
-        name:       parameter set name
-        data:       actual results data
+      Args:
+        name (str): parameter set name
+        data (np.array): actual results data
     """
     if data.shape[0] != self.ntime:
       raise ValueError("Quadrature data must have time axis first!")
     self.quadrature_results[name] = data
 
   def _check_rdim(self, data):
-    """
+    """ Verify the dimensions of a results array
+
       Make sure the results array aligns with the correct dimension for the
       abstraction
 
-      Parameters:
-        name:       parameter set name
+      Args:
+        data (np.array): data array
+
+      Raises:
+        ValueError: If the data array shape is not correct for the problem dimensions
     """
     if self.abstraction == "3D":
       if data.shape != (self.ntime, self.nr, self.nt, self.nz):
@@ -534,12 +559,11 @@ class Tube:
           self.abstraction)
 
   def set_bc(self, bc, loc):
-    """
-      Set the inner or outer heat flux BC
+    """ Set the inner or outer heat flux BC
 
-      Parameters:
-        bc:     boundary condition object
-        loc:    location -- either "inner" or "outer" wall
+      Args:
+        bc (ThermalBC):  boundary condition object
+        loc (string): location -- either "inner" or "outer" wall
     """
     if loc == "inner":
       if not np.isclose(bc.r, self.r - self.t) or not np.isclose(bc.h, self.h):
@@ -553,20 +577,18 @@ class Tube:
       raise ValueError("Wall location must be either inner or outer")
 
   def set_pressure_bc(self, bc):
-    """
-      Set the pressure boundary condition
+    """ Set the pressure boundary condition
 
-      Parameters:
-        bc:     boundary condition object
+      Args:
+        bc (PressureBC):  boundary condition object
     """
     self.pressure_bc = bc
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group to save to
     """
     fobj.attrs["r"] = self.r
     fobj.attrs["t"] = self.t
@@ -608,11 +630,10 @@ class Tube:
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
       Parameters:
-        fobj        h5py group
+        fobj (h5py.Group):  h5py to load from
     """
     res = cls(fobj.attrs["r"], fobj.attrs["t"], fobj.attrs["h"], fobj.attrs["nr"], fobj.attrs["nt"],
         fobj.attrs["nz"], T0 = fobj.attrs["T0"])
@@ -645,8 +666,11 @@ class Tube:
     return res
 
 def _vector_interpolate(base, data):
-  """
-    Interpolate as a vector
+  """ Interpolate as a vector
+
+  Args:
+    base (function): base interpolation method
+    data (np.array): data to interpolate
   """
   res = np.zeros(data[0].shape)
   
@@ -657,8 +681,13 @@ def _vector_interpolate(base, data):
   return res
 
 def _make_ifn(base):
-  """
-    Helper to deal with getting both a scalar and a vector input
+  """ Helper to deal with getting both a scalar and a vector input
+
+  Args:
+    base (function): base interpolation method
+
+  Returns:
+    function: a function that interpolates a vector using base at each component
   """
   def ifn(mdata):
     """
@@ -680,15 +709,17 @@ def _make_ifn(base):
   return ifn
 
 class PressureBC:
-  """
+  """ Stores information about the tube internal pressure
+
     Simple class to store tube pressure, assumed to be constant
     in space and just vary with time.
+
+    Args:
+      times (np.array): times throughout load cycle
+      data (np.array):  pressure values
   """
   def __init__(self, times, data):
-    """
-      Parameters:
-        times       times throughout load cycle
-        data        pressure values
+    """ Initialize the PressureBC
     """
     self.times = times
     if self.times.shape != data.shape:
@@ -699,60 +730,65 @@ class PressureBC:
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group to load from
     """
     return cls(np.copy(fobj["times"]), np.copy(fobj["data"]))
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group to save to
     """
     fobj.create_dataset("times", data = self.times)
     fobj.create_dataset("data", data = self.data)
 
   @property
   def ntime(self):
-    """
-      Number of time steps
+    """ Number of time steps
+
+    Returns:
+      int:      number of time steps in the pressure history definition
     """
     return len(self.times)
 
   def pressure(self, t):
-    """
-      Return the pressure as a function of time
+    """ Return the pressure as a function of time
+
+    Args:
+      t (float): time
+
+    Returns:
+      float: internal pressure at that time
     """
     return self.ifn(t)
 
   def close(self, other):
-    """
-      Test method for comparing BCs
+    """ Test method for comparing BCs
 
-      Parameters:
-        other       other object
+      Args:
+        other (PressureBC): other object
+
+      Returns:
+        bool: true if the objects are sufficiently similar
     """
     return (np.allclose(self.times, other.times)
         and np.allclose(self.data, other.data))
 
 class ThermalBC:
-  """
-    Superclass for thermal boundary conditions.
+  """ Superclass for thermal boundary conditions.
 
     Currently just here to handle dispatch for HDF files
   """
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to load from
     """
     if fobj.attrs["type"] == "HeatFlux":
       return HeatFluxBC.load(fobj)
@@ -765,8 +801,15 @@ class ThermalBC:
   
   # pylint: disable=no-member
   def _generate_surface_mesh(self):
-    """
-      Generate the appropriate finite difference mesh for a particular problem
+    """ Make the finite difference mesh for the BC
+
+      Generate the appropriate finite difference surface
+      mesh for a particular problem
+
+      Returns:
+        np.array:   discrete times
+        np.array:   theta coordinates
+        np.array:   z coordinates
     """
     ts = np.linspace(0, 2*np.pi, self.nt + 1)[:-1]
     zs = np.linspace(0, self.h, self.nz)
@@ -774,11 +817,13 @@ class ThermalBC:
     return self.times, ts, zs
 
   def _generate_ifn(self, data):
-    """
-      Generate an interpolation function for the given data array
+    """ Generate an interpolation function for the given data array
 
-      Parameters:
-        data            (ntime, ntheta, nz) array
+      Args:
+        data (np.array):  (ntime, ntheta, nz) shaped array
+
+      Returns:
+        function: appropriate interpolation function
     """
     base = inter.RegularGridInterpolator(self._generate_surface_mesh(),
         data, method = "linear", bounds_error = False, fill_value = None)
@@ -798,17 +843,16 @@ class HeatFluxBC(ThermalBC):
     The heat flux is given on a regular grid of theta, z points each defined
     but a number of increments.  This grid need not agree with the Tube
     solid grid.
+
+    Args:
+      radius (float): boundary condition application radius
+      height (float): tube height
+      nt (int): number of circumferential increments
+      nz (int): number of axial increments
+      times (np.array): heat flux times
+      data (np.array): heat flux data
   """
   def __init__(self, radius, height, nt, nz, times, data):
-    """
-       Parameters:
-        radius:          boundary condition application radius
-        height:          tube height
-        nt:              number of circumferential increments
-        nz:              number of axial increments
-        times:           heat flux times
-        data:            heat flux data
-    """
     self.r = radius
     self.h = height
 
@@ -826,28 +870,31 @@ class HeatFluxBC(ThermalBC):
 
   @property
   def ntime(self):
-    """
-      Number of time steps
+    """ Number of time steps
+
+    Returns:
+      int:  number of time steps
     """
     return len(self.times)
 
   def flux(self, t, theta, z):
-    """
-      Flux as a function of time, angle, and height
+    """ Flux as a function of time, angle, and height
 
-      Parameters:
-        t       time
-        theta   angle
-        z       height
+      Args:
+        t (float): time
+        theta (float): angle
+        z (float): height
+
+      Returns:
+        float:  the flux value at this time and location
     """
     return self.ifn([t, theta, z])
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to save to
     """
     fobj.attrs["type"] = "HeatFlux"
     fobj.attrs["r"] = self.r
@@ -861,23 +908,24 @@ class HeatFluxBC(ThermalBC):
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to load from
     """
     return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nt"], fobj.attrs["nz"],
         np.copy(fobj["times"]), np.copy(fobj["data"]))
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (HeatFluxBC): the object to compare against
+
+      Returns:
+        bool: returns true if the objects are similar
     """
     return (
         np.isclose(self.r, other.r)
@@ -889,8 +937,7 @@ class HeatFluxBC(ThermalBC):
         )
 
 class FixedTempBC(ThermalBC):
-  """
-    Fixed temperature BC.
+  """ Fixed temperature BC.
 
     These conditions are defined on the surface of a tube at fixed
     times given by
@@ -900,17 +947,16 @@ class FixedTempBC(ThermalBC):
     The heat flux is given on a regular grid of theta, z points each defined
     but a number of increments.  This grid need not agree with the Tube
     solid grid.
+
+    Args:
+      radius (float): boundary condition application radius
+      height (float): tube height
+      nt (int): number of circumferential increments
+      nz (int): number of axial increments
+      times (np.array): fixed temperature times
+      data (np.array): fixed temperature data
   """
   def __init__(self, radius, height, nt, nz, times, data):
-    """
-       Parameters:
-        radius:          boundary condition application radius
-        height:          tube height
-        nt:              number of circumferential increments
-        nz:              number of axial increments
-        times:           fixed temperature times
-        data:            fixed temperature data
-    """
     self.r = radius
     self.h = height
 
@@ -928,28 +974,31 @@ class FixedTempBC(ThermalBC):
 
   @property
   def ntime(self):
-    """
-      Number of time steps
+    """ Number of time steps
+
+    Returns:
+      int:  number of time steps
     """
     return len(self.times)
 
   def temperature(self, t, theta, z):
-    """
-      Key method: return the temperature at a given time and position
+    """ Return the temperature at a given time and position
 
-      Parameters:
-        t       time
-        theta   angle
-        z       height
+      Args:
+        t (float): time
+        theta (float): angle
+        z (float):  height
+
+      Returns:
+        float: Fixed temperature at given time/location
     """
     return self.ifn([t, theta, z])
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group):  h5py group to save to
     """
     fobj.attrs["type"] = "FixedTemp"
     fobj.attrs["r"] = self.r
@@ -963,23 +1012,24 @@ class FixedTempBC(ThermalBC):
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to load from
     """
     return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nt"], fobj.attrs["nz"],
         np.copy(fobj["times"]), np.copy(fobj["data"]))
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (FixedTempBC): the object to compare against
+
+      Returns:
+        bool: true if the objects are similar
     """
     return (
         np.isclose(self.r, other.r)
@@ -991,8 +1041,7 @@ class FixedTempBC(ThermalBC):
         )
 
 class ConvectiveBC(ThermalBC):
-  """
-    A convective BC on the surface of a tube defined by a radius and height.
+  """ A convective BC on the surface of a tube defined by a radius and height.
 
     The radius is not used in defining the BC, but is used to check
     consistency with the Tube object.
@@ -1000,16 +1049,15 @@ class ConvectiveBC(ThermalBC):
     This condition is defined axially by a fluid temperature at 
     fixed times on a fixed grid of z points defined by a number of 
     increments.
+
+    Args:
+      radius (float): radius of application
+      height (float): height of fluid temperature info
+      nz (int): number of axial increments
+      times (np.array): data times
+      data (np.array): actual fluid temperature data
   """
   def __init__(self, radius, height, nz, times, data):
-    """
-      Parameters:
-        radius:     radius of application
-        height:     height of fluid temperature info
-        nz:         number of axial increments
-        times:      data times
-        data:       actual fluid temperature data
-    """
     self.r = radius
     self.h = height
 
@@ -1031,27 +1079,30 @@ class ConvectiveBC(ThermalBC):
 
   @property
   def ntime(self):
-    """
-      Number of time steps
+    """ Number of time steps
+
+    Returns:
+      int:  number of discrete time steps
     """
     return len(self.times)
 
   def fluid_temperature(self, t, z):
-    """
-      Key method: return the fluid temperature at a given time and position
+    """ Return the fluid temperature at a given time and position
 
-      Parameters:
-        t       time
-        z       height
+      Args:
+        t (float): time
+        z (float): height
+
+      Return:
+        float: fluid temperature at this location and time
     """
     return self.ifn([t, z])
 
   def save(self, fobj):
-    """
-      Save to an HDF5 file
+    """ Save to an HDF5 file
 
-      Parameters:
-        fobj:        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to save to
     """
     fobj.attrs["type"] = "Convective"
     fobj.attrs["r"] = self.r
@@ -1065,23 +1116,24 @@ class ConvectiveBC(ThermalBC):
 
   @classmethod
   def load(cls, fobj):
-    """
-      Load from an HDF5 file
+    """ Load from an HDF5 file
 
-      Parameters:
-        fobj:        h5py group
+      Args:
+        fobj (h5py.Group): h5py group to load from
     """
     return cls(fobj.attrs["r"], fobj.attrs["h"], fobj.attrs["nz"], 
         np.copy(fobj["times"]), np.copy(fobj["data"]))
 
   def close(self, other):
-    """
-      Check to see if two objects are nearly equal.
+    """ Check to see if two objects are nearly equal.
 
       Primarily used for testing
 
-      Parameters:
-        other:      the object to compare against
+      Args:
+        other (ConvectiveBC): the object to compare against
+
+      Returns:
+        bool: true if sufficiently similar
     """
     return (
         np.isclose(self.r, other.r) 

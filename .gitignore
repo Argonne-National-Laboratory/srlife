@@ -4,3 +4,4 @@
 *.prof
 *.vtu
 *~
+doc/sphinx/build

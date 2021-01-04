@@ -7,29 +7,27 @@ import tqdm
 from srlife import solverparams
 
 class SolutionManager:
-  """
+  """ Solution manager
+
     High level solution manager walking through the thermal, structural,
-    and damage calculations
+    and damage calculations.
+
+    Args:
+      receiver (receiver.Receiver): receiver object to solve
+      thermal_solver (thermal.ThermalSolver): how to solve the heat transport
+      thermal_material (materials.ThermalMaterial): solid thermal properties
+      fluid_material (materials.FluidMaterial): fluid thermal properties
+      structural_solver (structural.TubeSolver):  how to solve the mechanics problem
+      deformation_material (materials.DeformationMaterial):  how things deform with time
+      damage_material (materials.StructuralMaterial):  how to calculate creep damage
+      system_solver (system.SystemSolver):  how to tie tubes into the structural system
+      damage_model (damage.DamageCalculator): how to calculate damage from the results
+      pset (Optional[solverparams.ParameterSet]): optional set of solver parameters
   """
   def __init__(self, receiver, thermal_solver, thermal_material,
       fluid_material, structural_solver, deformation_material,
       damage_material, system_solver, damage_model,
       pset = solverparams.ParameterSet()):
-    """
-      Parameters:
-        receiver                receiver object to solve
-        thermal_solver          how to solve the heat transport
-        thermal_material        solid thermal properties
-        fluid_material          fluid thermal properties
-        structural_solver       how to solve the mechanics problem
-        deformation_material    how things deform with time
-        damage_material         how to calculate creep damage
-        system_solver           how to tie tubes into the structural system
-        damage_model            how to calculate damage from the results
-
-      Additional Parameters:
-        pset                    optional set of solver parameters
-    """
     self.receiver = receiver
     self.thermal_solver = thermal_solver
     self.thermal_material = thermal_material
@@ -46,26 +44,31 @@ class SolutionManager:
 
   @property
   def tubes(self):
-    """
-      Direct iterator over tubes
+    """ Direct iterator over tubes
+
+    Returns:
+      iterator over tubes
     """
     return self.receiver.tubes
 
   @property
   def ntubes(self):
-    """
-      Pass through to get the number of tubes that need to be analyzed
+    """ Pass through to get the number of tubes that need to be analyzed
+
+    Returns:
+      int:  total number of tubes in entire receiver
     """
     return len(list(self.tubes))
   
   def progress_decorator(self, base, ntotal):
-    """
-      Either wrap with a progress bar decorator or not
+    """ Either wrap with a progress bar decorator or return a dummy
+      
+      Args:
+        base (function): base function to wrap
+        ntotal (int): total number in iterator, needed for wrapping iterators
 
-      Parameters:
-        base            base function to wrap
-        ntotal          total number in iterator, needed for wrapping
-                        iterators
+      Returns:
+        either function wrapped with decorator or base function
     """
     if self.progress:
       return tqdm.tqdm(base, total = ntotal)
@@ -73,9 +76,13 @@ class SolutionManager:
       return base
 
   def solve_life(self):
-    """
+    """ User interface: solve everything and return receiver life
+
       The trigger for everything: solve the complete problem and report the
-      best-estimate life
+      best-estimate life.
+
+      Returns:
+        float:  Number of allowed daily cycles
     """
     self.solve_heat_transfer()
     self.solve_structural()
@@ -83,8 +90,10 @@ class SolutionManager:
     return self.calculate_damage()
 
   def calculate_damage(self):
-    """
-      Calculate damage from the results
+    """ Calculate damage from the results
+
+    Returns:
+      float:    Number of allowed daily cycles
     """
     if self.progress:
       print("Calculating damage:")
@@ -92,8 +101,9 @@ class SolutionManager:
         nthreads = self.nthreads, decorator = self.progress_decorator)
 
   def solve_heat_transfer(self):
-    """
-      Solve the heat transfer problem for each tube
+    """ Solve the heat transfer problem for each tube
+
+    Adds the thermal results to each receiver.Tube object
     """
     #pylint: disable=no-member
     if self.progress:
@@ -108,8 +118,9 @@ class SolutionManager:
       tube.add_results("temperature", temps)
 
   def solve_structural(self):
-    """
-      Solve the structural problem for the complete system
+    """ Solve the structural problem for the complete system
+
+    Adds the structural results to each tube.
     """
     if self.progress:
       print("Running structural analysis:")
