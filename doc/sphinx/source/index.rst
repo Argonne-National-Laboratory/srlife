@@ -17,7 +17,6 @@ the package for a sample analysis.
    :maxdepth: 2
    :caption: Contents:
    
-   overview
    installation
    tutorial
    managers

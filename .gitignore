@@ -5,3 +5,5 @@
 *.vtu
 *~
 doc/sphinx/build
+examples/large-experiments
+examples/small-experiments

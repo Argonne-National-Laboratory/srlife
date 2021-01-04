@@ -35,7 +35,7 @@ if __name__ == "__main__":
   #     Pressure boundary conditions
   #     Interconnect stiffnesses
   model = receiver.Receiver.load("example-small.hdf5")
-
+  
   # Cut down on run time for now
   for panel in model.panels.values():
     for tube in panel.tubes.values():

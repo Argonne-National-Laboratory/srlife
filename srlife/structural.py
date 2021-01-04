@@ -965,7 +965,7 @@ class PythonSolver:
     stress_np1 = np.zeros((self.state_np1.nq,3,3))
     hist_np1 = np.zeros((self.state_np1.nq,self.state_np1.material.nstore))
     A_np1 = np.zeros((self.state_np1.nq,3,3,3,3))
-    
+
     #pylint: disable=c-extension-no-member
     block.block_evaluate(self.state_np1.material,
         self.state_np1.mechanical_strain.transpose(2,3,0,1).reshape(-1,3,3), 
