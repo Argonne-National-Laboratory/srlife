@@ -3,6 +3,8 @@ formats: all
 
 python:
       version: 3.7
+      install:
+            - requirements: doc/requirements.txt
 
 sphinx:
       builder: html
