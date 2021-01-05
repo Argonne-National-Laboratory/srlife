@@ -12,6 +12,8 @@ the srlife analysis modules.
 Install using the pip package manager
 -------------------------------------
 
+The easiest way to install the package is to use the `pip` package manager, installing srlife from pypi automatically.  However, the neml source package requires compiling the module from source, which still has a few system-level dependencies.
+
 Ubuntu Linux
 """"""""""""
 
