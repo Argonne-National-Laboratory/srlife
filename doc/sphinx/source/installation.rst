@@ -19,8 +19,7 @@ Ubuntu Linux
 
 .. code-block:: console
 
-   sudo apt install build-essential cmake libblas-dev liblapack-dev python3-dev python3-setuptools python3-pip 
-   pip3 install --user wheel
+   sudo apt install build-essential cmake libblas-dev liblapack-dev python3-dev python3-setuptools python3-pip python3-wheel 
    pip3 install --user srlife
 
 
