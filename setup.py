@@ -17,7 +17,7 @@ setup (
     # Name of the project
     name = 'srlife',
     # Version
-    version = '1.0.1',
+    version = '1.0.2',
     # One line-description
     description = "Evaluate the structural life of a solar receiver",
     # README
@@ -61,4 +61,7 @@ setup (
       'multiprocess', 
       'dill'
       ],
+    include_package_data=True,
+    package_data={'': ['data/damage/*.xml', 'data/deformation/*.xml', 
+      'data/fluid/*.xml', 'data/thermal/*.xml']},
 )
