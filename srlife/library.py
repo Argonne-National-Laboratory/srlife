@@ -6,7 +6,7 @@ import os.path
 from srlife import materials
 
 LIBRARY_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'data'))
+    os.path.join(os.path.dirname(__file__), 'data'))
 
 def get_file(directory, name):
   """ Return a file path or raise an error

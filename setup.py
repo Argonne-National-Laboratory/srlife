@@ -61,4 +61,7 @@ setup (
       'multiprocess', 
       'dill'
       ],
+    include_package_data=True,
+    package_data={'': ['data/damage/*.xml', 'data/deformation/*.xml', 
+      'data/fluid/*.xml', 'data/thermal/*.xml']},
 )
