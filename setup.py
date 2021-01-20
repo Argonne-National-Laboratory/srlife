@@ -49,7 +49,7 @@ setup (
       'numpy==1.18',
       'scipy',
       'h5py',
-      'vtk', 
+      'vtk ; platform_system!="Darwin"', 
       'nose', 
       'matplotlib',
       'pylint', 
