@@ -20,7 +20,7 @@ Ubuntu Linux 18.04
 .. code-block:: console
 
    sudo apt install build-essential cmake libblas-dev liblapack-dev python3-dev python3-setuptools python3-pip python3-wheel 
-   pip3 install --user srlife
+   sudo pip3 install srlife
 
 MacOS Sierra 10.14 Mojave
 """""""""""""""""""""""""
@@ -31,8 +31,8 @@ Open up a terminal and run:
 
 .. code-block:: console
 
-   brew install cmake openblas superlu python vtk
-   pip3 install --user srlife
+   brew install cmake openblas superlu python vtk hdf5 pkg-config
+   sudo pip3 install srlife
 
 `srlife` will then be available as a package through the homebrew version of python (often available as `python3` instead of `python`).
 

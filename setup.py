@@ -17,7 +17,7 @@ setup (
     # Name of the project
     name = 'srlife',
     # Version
-    version = '1.0.3',
+    version = '1.0.4',
     # One line-description
     description = "Evaluate the structural life of a solar receiver",
     # README
@@ -46,7 +46,7 @@ setup (
     packages=find_packages(),
     # Python dependencies
     install_requires=[
-      'numpy==1.18',
+      'numpy >= 1.18',
       'scipy',
       'h5py',
       'vtk ; platform_system!="Darwin"', 
