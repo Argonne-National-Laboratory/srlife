@@ -50,6 +50,8 @@ class LinearSpring(Spring):
         k       spring stiffness
     """
     self.k = k
+    self.state_np1 = None
+    self.state_n = None
 
   def force_and_stiffness(self, i, d):
     """
@@ -238,7 +240,7 @@ class SpringNetwork(nx.MultiGraph):
       Remove rigid links by merging the nodes in place
     """
     while True:
-      for i,j, edge in self.edges(data=True):
+      for i,j,key, edge in self.edges(data=True,keys=True):
         # Can't handle duplicate springs
         if edge['object'] == "rigid":
           if self.number_of_edges(i,j) != 1:
@@ -247,10 +249,15 @@ class SpringNetwork(nx.MultiGraph):
           bcj = 'bc' in self.nodes[j]
           if bci and bcj:
             raise RuntimeError("Cannot merge two nodes with BCs!")
-          self.remove_edge(i,j)
-          if bci or ((not bci) and (not bcj)):
+          self.remove_edge(i,j,key=key)
+         
+          if i < j:
+            if bcj:
+              raise RuntimeError("Internal error: deleting BC")
             self.replace(nx.contracted_nodes(self, i, j))
           else:
+            if bci:
+              raise RuntimeError("Internal error: deleting BC")
             self.replace(nx.contracted_nodes(self, j, i))
           break
       else:
@@ -295,6 +302,7 @@ class SpringNetwork(nx.MultiGraph):
       Conditions:
         1) All dummy edges removed
         2) At least one fixed condition
+        3) All nodes sequentially numbers from zero
     """
     # Check that we have times
     if self.times is None:
@@ -347,7 +355,7 @@ class SpringNetwork(nx.MultiGraph):
     d = newton(lambda x: self.RJ(x, nthreads = nthreads),
         self.displacements[self.dmap[self.free]], verbose = self.verbose,
         rel_tol = self.rtol, abs_tol = self.atol, miters = self.miter)
-
+    
     # Store the displacements, for fun
     self.displacements[self.dmap[self.free]] = d
     self.displacements[self.dmap[self.fixed]] = self.fixed_displacements
@@ -372,6 +380,7 @@ class SpringNetwork(nx.MultiGraph):
         res = list(p.map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
     else:
       res = list(map(lambda e: self.fj(dall, *e),  self.edges(data=True)))
+    
     Fint = sum(r[0] for r in res)
     J = sum(r[1] for r in res)
 
@@ -385,19 +394,21 @@ class SpringNetwork(nx.MultiGraph):
     """
       Calculate the force and jacobian contributions for a single edge 
     """
+    ii = self.dmap[i]
+    jj = self.dmap[j]
+    ss = np.sign(ii-jj)
     Fint = np.zeros((len(self.nodes),))
     J = np.zeros((len(self.nodes),len(self.nodes)))
-    f, k = edge['object'].force_and_stiffness(self.i, dall[self.dmap[j]] 
-        - dall[self.dmap[i]])
-    Fint[self.dmap[i]] += -f
-    Fint[self.dmap[j]] += f
-    
-    J[self.dmap[i],self.dmap[i]] += k
-    J[self.dmap[i],self.dmap[j]] += -k
-    J[self.dmap[j],self.dmap[i]] += -k
-    J[self.dmap[j],self.dmap[j]] += k
+    f, k = edge['object'].force_and_stiffness(self.i, (dall[jj] - dall[ii])*ss)
+    Fint[ii] += -f
+    Fint[jj] += f
 
-    return Fint, J, edge['object'].state_np1
+    J[ii,ii] += k
+    J[ii,jj] += -k
+    J[jj,ii] += -k
+    J[jj,jj] += k
+
+    return Fint*ss, J, edge['object'].state_np1
 
   def dof_maps(self, i):
     """
@@ -411,7 +422,9 @@ class SpringNetwork(nx.MultiGraph):
     forces = []
     displacements = []
     time = self.times[i]
-    for node in self.nodes:
+    nodes = []
+    for node in sorted(self.nodes):
+      nodes.append(node)
       if 'bc' in self.nodes[node]:
         if self.nodes[node]['bc'][0] == 'displacement':
           fixed.append(node)
@@ -425,7 +438,7 @@ class SpringNetwork(nx.MultiGraph):
         free.append(node)
         forces.append(0)
 
-    nodes = np.array(self.nodes, dtype=int)
+    nodes = np.array(nodes, dtype=int)
     total = (np.array(range(0, max(nodes)+1), dtype = int)*0)-1
     rnums = np.array(range(len(nodes)), dtype = int)
     total[nodes] = rnums

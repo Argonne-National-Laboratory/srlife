@@ -266,7 +266,7 @@ class PythonTubeSolver(TubeSolver):
           dtop, self.solver_options)
     else:
       raise ValueError("Unknown dimension %i" % tube.ndim)
-
+    
     return state_np1
 
   def init_state(self, tube, mat, i = None):
@@ -694,7 +694,7 @@ class PythonSolver:
     # Calculate the initial residual and jacobian
     R = self.residual(p)
     nR0 = la.norm(R[self.kdofs])
-
+    
     # Printing, if you want
     if self.options['verbose']:
       print("Iter\tnR\t\tnR/nR0")
@@ -990,7 +990,7 @@ class PythonSolver:
         ).transpose(2,0,1)
     self.state_np1.tangent = A_np1.reshape((self.state_np1.ne,
       self.state_np1.nqi, 3,3,3,3)).transpose(2,3,4,5,0,1)
-   
+
 def get_mat(thing):
   """
     Small helper to wrap NEML for pickling issues
