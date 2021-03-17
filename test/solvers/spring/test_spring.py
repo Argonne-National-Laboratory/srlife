@@ -102,7 +102,7 @@ class TestSimple(unittest.TestCase):
     network.add_edge(3,5, object = spring.LinearSpring(k))
     network.add_edge(4,5, object = spring.LinearSpring(k))
     
-    network.displacement_bc(4, lambda x: 0)
+    network.displacement_bc(0, lambda x: 0)
 
     network.set_times([0,1])
     network.validate_setup()
