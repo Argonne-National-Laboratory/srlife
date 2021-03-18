@@ -103,6 +103,9 @@ class SpringSystemSolver(SystemSolver):
       Setup the complete spring network, given the receiver and
       material objects
 
+      This function must produce a network where the nodes are numbered
+      topologically where bottom_tube < top_tube < panel < start
+
       Parameters:
         model           fully-defined receiver object
         smat            structural material model
