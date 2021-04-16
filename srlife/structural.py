@@ -170,19 +170,23 @@ class PythonTubeSolver(TubeSolver):
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
   def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
-      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False):
+      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False,
+      max_divide = 4, force_divide = False):
     """
       Setup the solver with common parameters
 
       Additional Parameters:
-        pset        parameter set with solver parameters
-        rtol        relative tolerance for NR iterations
-        atol        absolute tolerance for NR iterations
-        qorder      quadrature order
-        dof_tol     geometric tolerance on finding boundary
-                    degrees of freedom
-        miter       maximum newton-raphson iterations
-        verbose     verbose solve
+        pset:            parameter set with solver parameters
+        rtol:            relative tolerance for NR iterations
+        atol:            absolute tolerance for NR iterations
+        qorder:          quadrature order
+        dof_to:l         geometric tolerance on finding boundary
+                         degrees of freedom
+        miter:           maximum newton-raphson iterations
+        verbose:         verbose solve
+        max_divide:      maximum adaptive integration subdivisions
+        force_divide:    force adaptive substeps, for tests or
+                         accuracy checks
     """
     self.qorder = qorder
     self.rtol = pset.get_default("rtol", rtol)
@@ -190,6 +194,8 @@ class PythonTubeSolver(TubeSolver):
     self.dof_tol = pset.get_default("dof_tol", dof_tol)
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
+    self.max_divide = pset.get_default("max_divide", max_divide)
+    self.force_divide = pset.get_default("force_divide", force_divide)
     self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
         'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
 
@@ -224,50 +230,106 @@ class PythonTubeSolver(TubeSolver):
     nelem = (tube.dim[0] - 1) * (tube.dim[1]) * nz
     return (nelem, (self.qorder+1)**tube.ndim)
 
+  def _setup_state(self, sf, tube, i, state_n):
+    """
+      Setup all the information needed to solve the problem for 
+      some step fraction of a whole step
+
+      Parameters:
+        sf:         step fraction
+        tube:       tube object with all the BC information
+        i:          time index for state n+1
+        state_n:    state at time n
+    """
+    state_next = state_n.copy()
+
+    t = tube.times[i-1] + (tube.times[i] - tube.times[i-1]) * sf
+    
+    if 'temperature' in tube.results:
+      T_np1 = self._res2quad(state_next,
+          self._tube2fea(tube, tube.results['temperature'][i]))
+      T_n = self._res2quad(state_n,
+          self._tube2fea(tube, tube.results['temperature'][i-1])) 
+      T = T_n + (T_np1 - T_n) * sf
+      state_next.temperature = T
+    else:
+      state_next.temperature = np.zeros(state_next.temperature.shape)
+
+    if tube.pressure_bc:
+      p = tube.pressure_bc.pressure(t)
+    else:
+      p = 0
+
+    return state_next, p, t
+
   def solve(self, tube, i, state_n, dtop):
     """
       Solve the structural tube problem for a single time step
+      using adaptive integration
 
       Parameters:
         tube:       tube object with all bcs
         i:          time index to reference in tube results
         state:      state object
-        dtop:       top disoplacement
+        dtop:       top displacement
     """
-    state_np1 = state_n.copy()
-
-    t_np1 = tube.times[i]
-    t_n = tube.times[i-1]
-
+    # Setup initial state_n
     if 'temperature' in tube.results:
-      state_np1.temperature = self._res2quad(state_np1,
-          self._tube2fea(tube, tube.results['temperature'][i]))
       state_n.temperature = self._res2quad(state_n,
           self._tube2fea(tube, tube.results['temperature'][i-1]))
     else:
-      state_np1.temperature = np.zeros(state_np1.temperature.shape)
       state_n.temperature = np.zeros(state_n.temperature.shape)
-
-    if tube.pressure_bc:
-      p_np1 = tube.pressure_bc.pressure(t_np1)
-      p_n = tube.pressure_bc.pressure(t_n)
-    else:
-      p_np1 = 0.0
-      p_n = 0.0
-
-    if tube.ndim == 1:
-      solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
-          self.solver_options)
-    elif tube.ndim == 2:
-      solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
-          self.solver_options)
-    elif tube.ndim == 3:
-      solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, 
-          dtop, self.solver_options)
-    else:
-      raise ValueError("Unknown dimension %i" % tube.ndim)
+   
+    state_last = state_n.copy()
     
-    return state_np1
+    t_last = tube.times[i-1]
+    if tube.pressure_bc:
+      p_last = tube.pressure_bc.pressure(t_last)
+    else:
+      p_last = 0.0
+
+    # Adaptively integrate
+    tprog = 2**self.max_divide
+    cprog = 0
+    if self.force_divide:
+      inc = 1
+      mdiv = self.max_divide - 1
+    else:
+      inc = tprog
+      mdiv = 0
+
+    while cprog < tprog:
+      sf = float(cprog + inc) / float(tprog)
+
+      state_next, p_next, t_next = self._setup_state(sf, tube, i, state_n) 
+      
+      try:
+        if tube.ndim == 1:
+          solve_python_1d(state_last, t_last, p_last, state_next, t_next, p_next, dtop*sf,
+              self.solver_options)
+        elif tube.ndim == 2:
+          solve_python_2d(state_last, t_last, p_last, state_next, t_next, p_next, dtop*sf,
+              self.solver_options)
+        elif tube.ndim == 3:
+          solve_python_3d(state_last, t_last, p_last, state_next, t_next, p_next, 
+              dtop*sf, self.solver_options)
+        else:
+          raise ValueError("Unknown dimension %i" % tube.ndim)
+      except RuntimeError:
+         inc /= 2
+         mdiv += 1
+         if mdiv >= self.max_divide:
+           break
+      
+      state_last = state_next
+      t_last = t_next
+      p_last = p_next
+      cprog += inc
+    
+    if mdiv >= self.max_divide:
+      raise RuntimeError("Adaptive integration failed")
+
+    return state_next
 
   def init_state(self, tube, mat, i = None):
     """
