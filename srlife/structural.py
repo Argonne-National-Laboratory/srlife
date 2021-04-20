@@ -171,7 +171,7 @@ class PythonTubeSolver(TubeSolver):
   """
   def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
       atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False,
-      max_divide = 4, force_divide = False):
+      max_divide = 4, force_divide = False, max_linesearch = 10):
     """
       Setup the solver with common parameters
 
@@ -187,6 +187,7 @@ class PythonTubeSolver(TubeSolver):
         max_divide:      maximum adaptive integration subdivisions
         force_divide:    force adaptive substeps, for tests or
                          accuracy checks
+        max_linesearch   maximum line search cutbacks
     """
     self.qorder = qorder
     self.rtol = pset.get_default("rtol", rtol)
@@ -196,8 +197,10 @@ class PythonTubeSolver(TubeSolver):
     self.verbose = pset.get_default("verbose", verbose)
     self.max_divide = pset.get_default("max_divide", max_divide)
     self.force_divide = pset.get_default("force_divide", force_divide)
+    self.max_search = pset.get_default("max_linesearch", max_linesearch)
     self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
-        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
+        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose,
+        'max_linesearch': self.max_search}
 
   def setup_tube(self, tube):
     """
@@ -756,11 +759,12 @@ class PythonSolver:
     # Calculate the initial residual and jacobian
     R = self.residual(p)
     nR0 = la.norm(R[self.kdofs])
+    nR = nR0
     
     # Printing, if you want
     if self.options['verbose']:
-      print("Iter\tnR\t\tnR/nR0")
-      print("%i\t%3.2e" % (0, nR0))
+      print("Iter\tnR\t\tnR/nR0\t\talpha")
+      print("%i\t%3.2e\t" % (0, nR0))
     
     # Newton-Raphson iteration
     for i in range(self.options['miter']):
@@ -772,16 +776,29 @@ class PythonSolver:
         break
       # Get the actual sparse jacobian
       J = self.jacobian()
-      # Update the displacements
-      self.state_np1.displacements -= self.linear_solve(J,R)
-      # Recalculate the state
-      self.update_state()
-      # Calculate the residual
-      R = self.residual(p)
-      # Do the convergence check and print update
-      nR = la.norm(R[self.kdofs])
+      # Direction
+      dx = self.linear_solve(J,R)
+      # Linesearch
+      alpha = 1.0
+      x0 = np.copy(self.state_np1.displacements)
+      nR_start = nR
+      for i in range(self.options['max_linesearch']):
+        # Trial
+        self.state_np1.displacements = x0 - alpha * dx
+        # Recalculate the state
+        self.update_state()
+        # Calculate the residual
+        R = self.residual(p)
+        # Norm of residual
+        nR = la.norm(R[self.kdofs])
+        # Check linesearch criteria
+        if nR < nR_start:
+          break
+        alpha /= 2.0
+
+      # Check convergence
       if self.options['verbose']:
-        print("%i\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0))
+        print("%i\t%3.2e\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0,alpha))
       if nR < self.options['atol'] or nR / nR0 < self.options['rtol']:
         if self.options['verbose']:
           print("")
