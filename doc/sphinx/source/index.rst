@@ -23,3 +23,4 @@ the package for a sample analysis.
    managers
    receiver
    materials
+   solvers
