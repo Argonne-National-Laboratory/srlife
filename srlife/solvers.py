@@ -5,6 +5,7 @@
 import numpy as np
 import numpy.linalg as la
 
+# pylint: disable=too-many-branches
 def newton(RJ, x0, rel_tol = 1.0-6, abs_tol = 1.0e-8, miters = 20,
     linear_solver = la.solve, verbose = True, return_extra = False,
     linesearch = True, max_search = 10):
@@ -12,19 +13,18 @@ def newton(RJ, x0, rel_tol = 1.0-6, abs_tol = 1.0e-8, miters = 20,
     Simple newton-raphson solver
 
     Parameters:
-      RJ            function that gives the residual and jacobian values
-      x0            initial guess
+      RJ:           function that gives the residual and jacobian values
+      x0:           initial guess
 
-    Additional parameters:
-      reL_tol       relative convergence tolerance
-      abs_tol       absolute convergence tolerance
-      miters        maximum number of iterations
-      linear_solver function that solves the linear system A x = b
-      verbose       if true, print debug info,
-      return_extra  if true also return the final residual vector and
-                    Jacobian matrix
-      linesearch    if true do backtracking linesearch
-      max_search    max number of backtracking steps
+    Additional Parameters:
+      rel_tol:          relative convergence tolerance
+      abs_tol:          absolute convergence tolerance
+      miters:           maximum number of iterations
+      linear_solver:    function that solves the linear system A x = b
+      verbose:          if true, print debug info,
+      return_extra:     if true also return the final residual vector and Jacobian
+      linesearch:       if true do backtracking linesearch
+      max_search:       max number of backtracking steps
   """
   x = np.copy(x0)
 
@@ -49,14 +49,13 @@ def newton(RJ, x0, rel_tol = 1.0-6, abs_tol = 1.0e-8, miters = 20,
       alpha = 1.0
       nR_last = nR
       x_last = np.copy(x)
-      for i in range(max_search):
+      for _ in range(max_search):
         x = x_last - alpha * dx
         R, J = RJ(x)
         nR = la.norm(R)
         if nR < nR_last:
           break
-        else:
-          alpha /= 2.0
+        alpha /= 2.0
     else:
       x -= dx
       R, J = RJ(x)    

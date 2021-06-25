@@ -264,7 +264,8 @@ class PythonTubeSolver(TubeSolver):
       p = 0
 
     return state_next, p, t
-
+  
+  # pylint: disable=too-many-branches
   def solve(self, tube, i, state_n, dtop):
     """
       Solve the structural tube problem for a single time step
@@ -319,10 +320,10 @@ class PythonTubeSolver(TubeSolver):
         else:
           raise ValueError("Unknown dimension %i" % tube.ndim)
       except RuntimeError:
-         inc /= 2
-         mdiv += 1
-         if mdiv >= self.max_divide:
-           break
+        inc /= 2
+        mdiv += 1
+        if mdiv >= self.max_divide:
+          break
       
       state_last = state_next
       t_last = t_next
@@ -478,10 +479,10 @@ class PythonTubeSolver(TubeSolver):
         Define the pressure boundary
 
         Parameters:
-          tube      tube object for geometry
+          tube:     tube object for geometry
 
         Additional parameters:
-          tol       thickness tolerance for finding faces
+          tol:      thickness tolerance for finding faces
       """
       atol = tol * tube.t
       if self.ndim == 1:
@@ -782,7 +783,7 @@ class PythonSolver:
       alpha = 1.0
       x0 = np.copy(self.state_np1.displacements)
       nR_start = nR
-      for i in range(self.options['max_linesearch']):
+      for _ in range(self.options['max_linesearch']):
         # Trial
         self.state_np1.displacements = x0 - alpha * dx
         # Recalculate the state
