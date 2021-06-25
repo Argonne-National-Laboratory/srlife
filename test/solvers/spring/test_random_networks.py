@@ -363,7 +363,7 @@ class TestNetworksNoDisconnects(unittest.TestCase):
         
         self.assertEqual(len(disp1), len(disp2))
         print(disp1, disp2)
-        self.assertTrue(np.allclose(disp1,disp2))
+        self.assertTrue(np.allclose(disp1,disp2, rtol=1e-4))
 
       ran += 1
 
