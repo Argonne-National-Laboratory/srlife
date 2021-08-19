@@ -43,7 +43,8 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def __init__(self, pset = solverparams.ParameterSet(),
-      rtol = 1.0e-6, atol = 1.0e-2, miter = 100, substep = 1, verbose = False):
+      rtol = 1.0e-6, atol = 1.0e-2, miter = 100, substep = 1, 
+      verbose = False, steady = False):
     """
       Setup the solver
 
@@ -54,12 +55,14 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         miter       maximum iterations
         substep     divide user-provided time increments into smaller values 
         verbose     print a lot of debug info
+        steady      ignore thermal mass and use conduction only
     """
     self.rtol = pset.get_default("rtol", rtol)
     self.atol = pset.get_default("atol", atol)
     self.miter = pset.get_default("miter", miter)
     self.substep = pset.get_default("substep", substep)
     self.verbose = pset.get_default("verbose", verbose)
+    self.steady = pset.get_default('steady', steady)
 
   def solve(self, tube, material, fluid, source = None, 
       T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
@@ -84,7 +87,7 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, self.rtol, self.atol, 
-        self.miter, self.substep, self.verbose).solve()
+        self.miter, self.substep, self.verbose, self.steady).solve()
 
     tube.add_results("temperature", temperatures)
 
@@ -97,7 +100,7 @@ class FiniteDifferenceImplicitThermalProblem:
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
       fix_edge = None, rtol = 1.0e-6, atol = 1e-8, miter= 50, substep = 1,
-      verbose = False):
+      verbose = False, steady = False):
     """
       Parameters:
         tube        Tube object to solve
@@ -113,6 +116,7 @@ class FiniteDifferenceImplicitThermalProblem:
         miter       maximum iterations
         substep     divide user provided time increments into smaller steps
         verbose     print a lot of debug info
+        steady      use steady state (conduction) theory
     """
     self.tube = tube
     self.material = material
@@ -125,6 +129,8 @@ class FiniteDifferenceImplicitThermalProblem:
     self.substep = substep
 
     self.verbose = verbose
+
+    self.steady = steady
 
     self.source_term = source
     self.T0 = T0
@@ -242,6 +248,13 @@ class FiniteDifferenceImplicitThermalProblem:
     self.k = self.material.conductivity(T).reshape(self.fdim)
     self.a = self.material.diffusivity(T).reshape(self.fdim)
 
+    if self.steady:
+      self.c = self.k
+      self.qc = 1.0
+    else:
+      self.c = self.a
+      self.qc = self.a / self.k
+
     # Useful matrix that gives you the actual dofs
     self.act = np.pad(np.ones(tuple(d-2 for d in self.dim)), [(1,1)] * self.ndim, 
         constant_values = [(0,0)] * self.ndim)
@@ -279,7 +292,7 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
     """
     if self.source_term:
-      return (self.act * self.a / self.k * 
+      return (self.act * self.qc * 
           self.source_term(time,*[self.r, self.theta, self.z][:self.ndim])).flatten()
     else:
       return np.zeros((self.ndof,))
@@ -293,7 +306,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
     return (T_n * self.act).flatten()
 
-  def _generate_bc_matrix(self, T_n, time, dt):
+  def _generate_bc_matrix(self, T_n, time):
     """
       Generate the BC matrix terms (fixed)
     """
@@ -307,7 +320,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return M
 
-  def _generate_fixed_bc_RHS(self, T_n, time, dt):
+  def _generate_fixed_bc_RHS(self, T_n, time):
     """
       Generate the constant (i.e. axial) contributions to the RHS
 
@@ -348,13 +361,17 @@ class FiniteDifferenceImplicitThermalProblem:
     Tn = self._generate_prev_temp(T_n)
     
     # System without BCs
-    M = (ID-A*dt)
-    R = S*dt + Tn
+    if self.steady:
+      M = -A
+      R = S
+    else:
+      M = (ID-A*dt)
+      R = S*dt + Tn
     
     # Matrix and fixed RHS boundary contributions
-    B = self._generate_bc_matrix(T_n, time, dt)
+    B = self._generate_bc_matrix(T_n, time)
     M += B    
-    BRF = self._generate_fixed_bc_RHS(T_n, time, dt)
+    BRF = self._generate_fixed_bc_RHS(T_n, time)
     R += BRF
     
     # Dummy dofs
@@ -849,7 +866,7 @@ class FiniteDifferenceImplicitThermalProblem:
       Insert the radial FD contribution into a sparse matrix
     """
     rh = (self.r[:-1] + self.r[1:]) / 2.0
-    ah = (self.a[:-1] + self.a[1:]) / 2.0
+    ah = (self.c[:-1] + self.c[1:]) / 2.0
     rhah = np.pad(rh * ah, ((1,1),(0,0),(0,0)), mode = 'edge')
    
     D1 = (self.act * rhah[:-1] / (self.r * self.dr**2.0)).flatten()[self.nt*self.nz:]
@@ -863,7 +880,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Insert the circumferential FD contribution into a coo matrix
     """
-    ah = np.pad((self.a[:,:-1] + self.a[:,1:]) / 2.0,
+    ah = np.pad((self.c[:,:-1] + self.c[:,1:]) / 2.0,
         ((0,0),(1,1),(0,0)), mode = 'edge')
 
     D1 = (self.act * ah[:,:-1] / (self.r**2.0 * self.dt**2.0)).flatten()[self.nz:]
@@ -877,7 +894,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Insert the axial FD contribution into a coo matrix
     """
-    ah = np.pad((self.a[:,:,:-1] + self.a[:,:,1:]) / 2.0, 
+    ah = np.pad((self.c[:,:,:-1] + self.c[:,:,1:]) / 2.0, 
         ((0,0),(0,0),(1,1)), mode = 'edge')
 
     D1 = (self.act * ah[:,:,:-1] / self.dz**2.0).flatten()[1:]

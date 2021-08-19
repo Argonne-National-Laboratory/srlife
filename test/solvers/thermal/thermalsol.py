@@ -10,7 +10,7 @@ class ManufacturedSolution:
   """
     A manufactured heat transport solution
   """
-  def __init__(self, name, dim, solution, source):
+  def __init__(self, name, dim, solution, source, steady = False):
     """
       Parameters:
         name:       descriptive name
@@ -23,6 +23,7 @@ class ManufacturedSolution:
     self.dim = dim
     self.soln = solution
     self.source = source
+    self.steady = steady
 
   def solve(self, solver, thermal, fluid, r = 1.0, t = 0.2, h = 1, time = 1, 
       ntime = 11, nr = 11, nt = 20, nz = 10, T0 = 0.0):
@@ -44,6 +45,8 @@ class ManufacturedSolution:
         nz:             number of axial increments
         T0:             initial temperature
     """
+    solver.steady = self.steady
+
     tube = receiver.Tube(r, t, h, nr, nt, nz, T0)
 
     times = np.linspace(0, time, ntime)
