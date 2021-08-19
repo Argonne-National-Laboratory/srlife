@@ -48,7 +48,7 @@ srlife provides modules to:
 Conventions
 -----------
 
-With user-defined material models the end-user can apply any unit system they ant.  However, the built-in material library uses the following unit conventions:
+With user-defined material models the end-user can apply any unit system they want.  However, the built-in material library uses the following unit conventions:
 
 +------------------+-------------------+
 | Quantity         | Unit              |

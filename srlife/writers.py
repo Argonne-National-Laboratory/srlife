@@ -23,7 +23,7 @@ class VTKWriter:
   def write(self):
     """
       Actually write the tube object to a vtk file using a
-      VTKStructuredGrid
+      VTKUntructuredGrid
     """
     grid = vtk.vtkUnstructuredGrid()
 
