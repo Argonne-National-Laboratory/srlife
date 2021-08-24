@@ -66,7 +66,8 @@ if __name__ == "__main__":
       structural_solver, deformation, damage, system_solver, damage_model, 
       pset = params)
 
-  # Heuristics would go here
+  # Heuristics
+  solver.add_heuristic(managers.CycleResetHeuristic())
 
   # Report the best-estimate life of the receiver 
   life = solver.solve_life()

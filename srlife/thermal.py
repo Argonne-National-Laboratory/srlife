@@ -36,6 +36,34 @@ class ThermalSolver(ABC):
     """
     return
 
+class TemperatureResetter:
+  """
+    Reset the tube temperatures to a fixed value every so often.
+  """
+  def __init__(self, trigger, vals):
+    """
+      Setup the resetter
+
+      Parameters:
+        trigger     function which triggers the reset
+        vals        values to reset to
+    """
+    self.trigger = trigger
+    self.vals = vals
+
+  def apply(self, time, step, temps):
+    """
+      Actually make the modification
+
+      Parameters:
+        time        current time
+        step        current step
+        temps       current temperatures
+    """
+    if self.trigger(time):
+      temps[step] = self.vals
+
+
 class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
   """
     Solves the heat transfer problem using the finite difference method.
@@ -66,7 +94,7 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
 
   def solve(self, tube, material, fluid, source = None, 
       T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
-      miter = 100, substep = 1):
+      miter = 100, substep = 1, resetters = []):
     """
       Solve the thermal problem defined for a single tube
 
@@ -79,15 +107,20 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
                     heat transfer coefficient
 
       Other Parameters:
-        source:     if present, the source term as a function of t and 
+        source      if present, the source term as a function of t and 
                     then the coordinates
-        T0:         if present override the tube IC with a function of
+        T0          if present override the tube IC with a function of
                     the coordinates
-        fix_edge:   an exact solution to fix edge BCs for testing
+        fix_edge    an exact solution to fix edge BCs for testing
+        rtol        solver relative tolerance
+        atol        solver absolute tolerance
+        miter       maximum number of nonlinear iterations
+        substep     subdivide thermal steps into smaller increments
+        resetters   list of reset objects to apply
     """
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, self.rtol, self.atol, 
-        self.miter, self.substep, self.verbose, self.steady).solve()
+        self.miter, self.substep, self.verbose, self.steady).solve(resetters)
 
     tube.add_results("temperature", temperatures)
 
@@ -194,7 +227,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
 
-  def solve(self):
+  def solve(self, resetters = []):
     """
       Actually solve the problem...
     """
@@ -208,6 +241,8 @@ class FiniteDifferenceImplicitThermalProblem:
     # Iterate through steps
     for i,(time,dt) in enumerate(zip(self.tube.times[1:],self.dts)):
       T[i+1] = self.solve_step_substep(T[i], time, dt)
+      for r in resetters:
+        r.apply(time, i+1, T)
     
     # Don't return ghost values
     if self.ndim == 3:
