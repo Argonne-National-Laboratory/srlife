@@ -50,6 +50,9 @@ class SolutionManager:
     self.nthreads = pset.get_default("nthreads", 1)
     self.progress = pset.get_default("progress_bars", False)
 
+    self.page = pset.get_default("page_results", False)
+    self.receiver.set_paging(self.page)
+
     self.heuristics = []
 
   def add_heuristic(self, heuristic):

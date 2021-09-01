@@ -10,6 +10,8 @@ def sample_parameters():
 
   params["nthreads"] = 1
   params["progress_bars"] = True
+  # If true store results on disk (slower, but less memory)
+  params["page_results"] = False
 
   params["thermal"]["rtol"] = 1.0e-6
   params["thermal"]["atol"] = 1.0e-4
