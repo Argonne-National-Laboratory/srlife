@@ -25,6 +25,14 @@ def sample_parameters():
   params["system"]["miter"] = 10
   params["system"]["verbose"] = False
   
+  # How to extrapolate damage forward in time based on the cycles provided
+  # Options:
+  #     "lump" = D_future = sum(D_simulated) / N * days
+  #     "last" = D_future = sum(D_simulated[:-1]) + D_simulated[-1] * days
+  #     "poly" = polynomial extrapolation with order given by the "order" param
+  params["damage"]["extrapolate"] = "lump"
+  params["damage"]["order"] = 2
+  
   return params
 
 if __name__ == "__main__":
@@ -35,7 +43,7 @@ if __name__ == "__main__":
   #     Pressure boundary conditions
   #     Interconnect stiffnesses
   model = receiver.Receiver.load("example-small.hdf5")
-  
+
   # Cut down on run time for now
   for panel in model.panels.values():
     for tube in panel.tubes.values():
@@ -54,7 +62,7 @@ if __name__ == "__main__":
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage()
+  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
 
   # Load the materials
   fluid = library.load_fluid("salt", "base")
