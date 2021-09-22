@@ -166,22 +166,10 @@ class TimeFractionInteractionDamage(DamageCalculator):
       Parameters:
         tube        single tube with full results
         material    damage material model
-        metadata    required metadata
+        receiver    receiver, for metadata
     """
-    # Extract metadata
-    period = metadata['period']
-    days = metadata['days']
-
     # Identify cycle boundaries
-<<<<<<< HEAD
     inds = self.id_cycles(tube, receiver)
-=======
-    tm = np.mod(tube.times, period)
-    inds = list(np.where(tm == 0)[0])
-    if len(inds) != (days + 1):
-      raise ValueError("Tube times not compatible with the receiver"
-          " number of days and cycle period!")
->>>>>>> master
 
     # Run through each cycle and ID max strain range and fatigue damage
     strain_names = ['mechanical_strain_xx', 'mechanical_strain_yy', 'mechanical_strain_zz',
@@ -192,7 +180,6 @@ class TimeFractionInteractionDamage(DamageCalculator):
       inds[i]:inds[i+1]] for 
       en,ef in zip(strain_names, strain_factors)]), 
       tube.quadrature_results['temperature'][inds[i]:inds[i+1]], material)
-<<<<<<< HEAD
       for i in range(receiver.days)])
 
     return cycle_dmg
@@ -212,9 +199,6 @@ class TimeFractionInteractionDamage(DamageCalculator):
           " number of days and cycle period!")
 
     return inds
-=======
-      for i in range(days))
->>>>>>> master
   
   def cycle_fatigue(self, strains, temperatures, material, nu = 0.5):
     """
