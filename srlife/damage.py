@@ -21,14 +21,14 @@ class DamageCalculator:
     self.extrapolate = pset.get_default("extrapolate", "lump")
     self.order = pset.get_default("order", 1)
 
-  def single_cycles(self, tube, material, receiver):
+  def single_cycles(self, tube, material, metadata):
     """
       Calculate damage for a single tube
 
       Parameters:
         tube:       fully-populated tube object
         material:   damage material
-        receiver:   receiver object (for metadata)
+        metadata:   required metadata
     """ 
     raise NotImplementedError("Superclass not implemented")
 
@@ -46,10 +46,14 @@ class DamageCalculator:
         nthreads        number of threads
         decorator       progress bar
     """
+    # Setup the required metadata
+    metadata = {"period": receiver.period, 
+        "days": receiver.days}
+
     # pylint: disable=no-member
     with multiprocess.Pool(nthreads) as p:
       Ns = list(decorator(
-        p.imap(lambda x: self.single_cycles(x, material, receiver), receiver.tubes),
+        p.imap(lambda x: self.single_cycles(x, material, metadata), receiver.tubes),
         receiver.ntubes))
     N = min(Ns)
 
@@ -85,14 +89,14 @@ class TimeFractionInteractionDamage(DamageCalculator):
   """
     Calculate life using the ASME time-fraction type approach
   """
-  def single_cycles(self, tube, material, receiver):
+  def single_cycles(self, tube, material, metadata):
     """
       Calculate the single-tube number of repetitions to failure
 
       Parameters:
         tube        single tube with full results
         material    damage material model
-        receiver    receiver, for metadata
+        metadata    required metadata
     """
     # Material point cycle creep damage
     Dc = self.creep_damage(tube, material, receiver)
@@ -155,17 +159,29 @@ class TimeFractionInteractionDamage(DamageCalculator):
 
     return cycle_dmg
 
-  def fatigue_damage(self, tube, material, receiver):
+  def fatigue_damage(self, tube, material, metadata):
     """
       Calculate fatigue damage at each material point
 
       Parameters:
         tube        single tube with full results
         material    damage material model
-        receiver    receiver, for metadata
+        metadata    required metadata
     """
+    # Extract metadata
+    period = metadata['period']
+    days = metadata['days']
+
     # Identify cycle boundaries
+<<<<<<< HEAD
     inds = self.id_cycles(tube, receiver)
+=======
+    tm = np.mod(tube.times, period)
+    inds = list(np.where(tm == 0)[0])
+    if len(inds) != (days + 1):
+      raise ValueError("Tube times not compatible with the receiver"
+          " number of days and cycle period!")
+>>>>>>> master
 
     # Run through each cycle and ID max strain range and fatigue damage
     strain_names = ['mechanical_strain_xx', 'mechanical_strain_yy', 'mechanical_strain_zz',
@@ -176,6 +192,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
       inds[i]:inds[i+1]] for 
       en,ef in zip(strain_names, strain_factors)]), 
       tube.quadrature_results['temperature'][inds[i]:inds[i+1]], material)
+<<<<<<< HEAD
       for i in range(receiver.days)])
 
     return cycle_dmg
@@ -195,6 +212,9 @@ class TimeFractionInteractionDamage(DamageCalculator):
           " number of days and cycle period!")
 
     return inds
+=======
+      for i in range(days))
+>>>>>>> master
   
   def cycle_fatigue(self, strains, temperatures, material, nu = 0.5):
     """
