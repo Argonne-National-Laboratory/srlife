@@ -21,14 +21,14 @@ class DamageCalculator:
     self.extrapolate = pset.get_default("extrapolate", "lump")
     self.order = pset.get_default("order", 1)
 
-  def single_cycles(self, tube, material, metadata):
+  def single_cycles(self, tube, material, receiver):
     """
       Calculate damage for a single tube
 
       Parameters:
         tube:       fully-populated tube object
         material:   damage material
-        metadata:   required metadata
+        receiver:   receiver object (for metadata)
     """ 
     raise NotImplementedError("Superclass not implemented")
 
@@ -46,14 +46,10 @@ class DamageCalculator:
         nthreads        number of threads
         decorator       progress bar
     """
-    # Setup the required metadata
-    metadata = {"period": receiver.period, 
-        "days": receiver.days}
-
     # pylint: disable=no-member
     with multiprocess.Pool(nthreads) as p:
       Ns = list(decorator(
-        p.imap(lambda x: self.single_cycles(x, material, metadata), receiver.tubes),
+        p.imap(lambda x: self.single_cycles(x, material, receiver), receiver.tubes),
         receiver.ntubes))
     N = min(Ns)
 
@@ -89,14 +85,14 @@ class TimeFractionInteractionDamage(DamageCalculator):
   """
     Calculate life using the ASME time-fraction type approach
   """
-  def single_cycles(self, tube, material, metadata):
+  def single_cycles(self, tube, material, receiver):
     """
       Calculate the single-tube number of repetitions to failure
 
       Parameters:
         tube        single tube with full results
         material    damage material model
-        metadata    required metadata
+        receiver    receiver, for metadata
     """
     # Material point cycle creep damage
     Dc = self.creep_damage(tube, material, receiver)
@@ -159,7 +155,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
 
     return cycle_dmg
 
-  def fatigue_damage(self, tube, material, metadata):
+  def fatigue_damage(self, tube, material, receiver):
     """
       Calculate fatigue damage at each material point
 
