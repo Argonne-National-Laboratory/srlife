@@ -134,7 +134,8 @@ class SolutionManager:
       temps = list(
           self.progress_decorator(
           p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material,
-            **merge_dicts(h.args_for_tube_thermal_solver(self.receiver, x) for h in self.heuristics)),
+            **merge_dicts(h.args_for_tube_thermal_solver(self.receiver, x
+              ) for h in self.heuristics)),
         self.tubes), self.ntubes)
           )
     for tube, temps in zip(self.tubes, temps):
@@ -160,9 +161,6 @@ class Heuristic:
     To implement a specific heuristic override the appropriate pure virtual
     methods.
   """
-  def __init__(self):
-    pass
-
   def args_for_tube_thermal_solver(self, receiver, tube):
     """
       Add tube solver args
@@ -173,9 +171,6 @@ class CycleResetHeuristic(Heuristic):
   """
     Reset the tube temperatures each cycle to the initial values
   """
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-
   def args_for_tube_thermal_solver(self, receiver, tube):
     """
       Modify the tube solver before the solve
@@ -185,5 +180,3 @@ class CycleResetHeuristic(Heuristic):
         tube.T0)
 
     return {'resetters': [resetter]}
-
-

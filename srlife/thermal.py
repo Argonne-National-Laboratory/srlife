@@ -94,7 +94,7 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
 
   def solve(self, tube, material, fluid, source = None, 
       T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
-      miter = 100, substep = 1, resetters = []):
+      miter = 100, substep = 1, resetters = None):
     """
       Solve the thermal problem defined for a single tube
 
@@ -118,6 +118,9 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         substep     subdivide thermal steps into smaller increments
         resetters   list of reset objects to apply
     """
+    if resetters is None:
+      resetters = []
+
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, self.rtol, self.atol, 
         self.miter, self.substep, self.verbose, self.steady).solve(resetters)
@@ -227,10 +230,13 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
 
-  def solve(self, resetters = []):
+  def solve(self, resetters = None):
     """
       Actually solve the problem...
     """
+    if resetters is None:
+      resetters = []
+
     # Setup the initial time
     T = np.zeros((self.tube.ntime,) + self.dim)
     if self.T0 is not None:
