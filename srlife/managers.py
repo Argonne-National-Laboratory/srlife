@@ -2,9 +2,17 @@
   Solution managers actually walk a model through all the steps to solve
 """
 import multiprocess
+import numpy as np
+
 import tqdm
 
-from srlife import solverparams
+from srlife import solverparams, thermal
+
+def merge_dicts(idict):
+  """
+    Merge an iterator over dictionaries into a single dict
+  """
+  return {k:v for d in idict for k,v in d.items()}
 
 class SolutionManager:
   """ Solution manager
@@ -41,6 +49,20 @@ class SolutionManager:
     self.pset = pset
     self.nthreads = pset.get_default("nthreads", 1)
     self.progress = pset.get_default("progress_bars", False)
+
+    self.page = pset.get_default("page_results", False)
+    self.receiver.set_paging(self.page)
+
+    self.heuristics = []
+
+  def add_heuristic(self, heuristic):
+    """
+      Add a heuristic to use during the solve
+
+      Args:
+        heuristics: new heuristic to add
+    """
+    self.heuristics.append(heuristic)
 
   @property
   def tubes(self):
@@ -111,7 +133,9 @@ class SolutionManager:
     with multiprocess.Pool(self.nthreads) as p:
       temps = list(
           self.progress_decorator(
-          p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material),
+          p.imap(lambda x: self.thermal_solver.solve(x, self.thermal_material, self.fluid_material,
+            **merge_dicts(h.args_for_tube_thermal_solver(self.receiver, x
+              ) for h in self.heuristics)),
         self.tubes), self.ntubes)
           )
     for tube, temps in zip(self.tubes, temps):
@@ -127,3 +151,32 @@ class SolutionManager:
     self.system_solver.solve(self.receiver, self.deformation_material,
         self.structural_solver, nthreads = self.nthreads, 
         decorator = self.progress_decorator, verbose = self.progress)
+
+
+class Heuristic:
+  """
+    Class that defines a heuristic to modify the basic 3D solve process in some
+    way.
+
+    To implement a specific heuristic override the appropriate pure virtual
+    methods.
+  """
+  def args_for_tube_thermal_solver(self, receiver, tube):
+    """
+      Add tube solver args
+    """
+    return {}
+
+class CycleResetHeuristic(Heuristic):
+  """
+    Reset the tube temperatures each cycle to the initial values
+  """
+  def args_for_tube_thermal_solver(self, receiver, tube):
+    """
+      Modify the tube solver before the solve
+    """
+    resetter = thermal.TemperatureResetter(
+        lambda t: np.isclose(t % receiver.period, 0),
+        tube.T0)
+
+    return {'resetters': [resetter]}

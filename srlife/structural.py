@@ -214,13 +214,13 @@ class PythonTubeSolver(TubeSolver):
 
     for field in fields:
       for suffix in suffixes:
-        tube.add_quadrature_results(field+suffix, np.zeros((tube.ntime,) + self.qshape(tube)))
+        tube.add_blank_quadrature_results(field+suffix, (tube.ntime,) + self.qshape(tube))
 
-    tube.add_quadrature_results("temperature", np.zeros((tube.ntime,) + self.qshape(tube)))
+    tube.add_blank_quadrature_results("temperature", (tube.ntime,) + self.qshape(tube))
 
     suffixes = ["_x", "_y", "_z"]
     for i in range(tube.ndim):
-      tube.add_results("disp"+suffixes[i], np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
+      tube.add_blank_results("disp"+suffixes[i], (tube.ntime,) + tube.dim[:tube.ndim])
 
   def qshape(self, tube):
     """

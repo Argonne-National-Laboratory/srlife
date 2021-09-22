@@ -1,7 +1,7 @@
 Solvers: reusable nonlinear solvers
 ===================================
 
-newton dsecription
+newton description
 ------------------
 
 :py:class:`srlife.solvers.newton` is a reusable Newton-Raphson solver with

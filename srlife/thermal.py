@@ -36,6 +36,34 @@ class ThermalSolver(ABC):
     """
     return
 
+class TemperatureResetter:
+  """
+    Reset the tube temperatures to a fixed value every so often.
+  """
+  def __init__(self, trigger, vals):
+    """
+      Setup the resetter
+
+      Parameters:
+        trigger     function which triggers the reset
+        vals        values to reset to
+    """
+    self.trigger = trigger
+    self.vals = vals
+
+  def apply(self, time, step, temps):
+    """
+      Actually make the modification
+
+      Parameters:
+        time        current time
+        step        current step
+        temps       current temperatures
+    """
+    if self.trigger(time):
+      temps[step] = self.vals
+
+
 class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
   """
     Solves the heat transfer problem using the finite difference method.
@@ -43,7 +71,8 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     Solver handles the *cylindrical* 1D, 2D, or 3D cases.
   """
   def __init__(self, pset = solverparams.ParameterSet(),
-      rtol = 1.0e-6, atol = 1.0e-2, miter = 100, substep = 1, verbose = False):
+      rtol = 1.0e-6, atol = 1.0e-2, miter = 100, substep = 1, 
+      verbose = False, steady = False):
     """
       Setup the solver
 
@@ -54,16 +83,18 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
         miter       maximum iterations
         substep     divide user-provided time increments into smaller values 
         verbose     print a lot of debug info
+        steady      ignore thermal mass and use conduction only
     """
     self.rtol = pset.get_default("rtol", rtol)
     self.atol = pset.get_default("atol", atol)
     self.miter = pset.get_default("miter", miter)
     self.substep = pset.get_default("substep", substep)
     self.verbose = pset.get_default("verbose", verbose)
+    self.steady = pset.get_default('steady', steady)
 
   def solve(self, tube, material, fluid, source = None, 
       T0 = None, fix_edge = None, rtol = 1e-6, atol = 1e-2, 
-      miter = 100, substep = 1):
+      miter = 100, substep = 1, resetters = None):
     """
       Solve the thermal problem defined for a single tube
 
@@ -76,15 +107,23 @@ class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
                     heat transfer coefficient
 
       Other Parameters:
-        source:     if present, the source term as a function of t and 
+        source      if present, the source term as a function of t and 
                     then the coordinates
-        T0:         if present override the tube IC with a function of
+        T0          if present override the tube IC with a function of
                     the coordinates
-        fix_edge:   an exact solution to fix edge BCs for testing
+        fix_edge    an exact solution to fix edge BCs for testing
+        rtol        solver relative tolerance
+        atol        solver absolute tolerance
+        miter       maximum number of nonlinear iterations
+        substep     subdivide thermal steps into smaller increments
+        resetters   list of reset objects to apply
     """
+    if resetters is None:
+      resetters = []
+
     temperatures = FiniteDifferenceImplicitThermalProblem(tube, 
         material, fluid, source, T0, fix_edge, self.rtol, self.atol, 
-        self.miter, self.substep, self.verbose).solve()
+        self.miter, self.substep, self.verbose, self.steady).solve(resetters)
 
     tube.add_results("temperature", temperatures)
 
@@ -97,7 +136,7 @@ class FiniteDifferenceImplicitThermalProblem:
   """
   def __init__(self, tube, material, fluid, source = None, T0 = None,
       fix_edge = None, rtol = 1.0e-6, atol = 1e-8, miter= 50, substep = 1,
-      verbose = False):
+      verbose = False, steady = False):
     """
       Parameters:
         tube        Tube object to solve
@@ -113,6 +152,7 @@ class FiniteDifferenceImplicitThermalProblem:
         miter       maximum iterations
         substep     divide user provided time increments into smaller steps
         verbose     print a lot of debug info
+        steady      use steady state (conduction) theory
     """
     self.tube = tube
     self.material = material
@@ -125,6 +165,8 @@ class FiniteDifferenceImplicitThermalProblem:
     self.substep = substep
 
     self.verbose = verbose
+
+    self.steady = steady
 
     self.source_term = source
     self.T0 = T0
@@ -188,10 +230,13 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return np.meshgrid(*geom[:self.ndim], indexing = 'ij', copy = True)
 
-  def solve(self):
+  def solve(self, resetters = None):
     """
       Actually solve the problem...
     """
+    if resetters is None:
+      resetters = []
+
     # Setup the initial time
     T = np.zeros((self.tube.ntime,) + self.dim)
     if self.T0 is not None:
@@ -202,6 +247,8 @@ class FiniteDifferenceImplicitThermalProblem:
     # Iterate through steps
     for i,(time,dt) in enumerate(zip(self.tube.times[1:],self.dts)):
       T[i+1] = self.solve_step_substep(T[i], time, dt)
+      for r in resetters:
+        r.apply(time, i+1, T)
     
     # Don't return ghost values
     if self.ndim == 3:
@@ -242,6 +289,13 @@ class FiniteDifferenceImplicitThermalProblem:
     self.k = self.material.conductivity(T).reshape(self.fdim)
     self.a = self.material.diffusivity(T).reshape(self.fdim)
 
+    if self.steady:
+      self.c = self.k
+      self.qc = 1.0
+    else:
+      self.c = self.a
+      self.qc = self.a / self.k
+
     # Useful matrix that gives you the actual dofs
     self.act = np.pad(np.ones(tuple(d-2 for d in self.dim)), [(1,1)] * self.ndim, 
         constant_values = [(0,0)] * self.ndim)
@@ -279,7 +333,7 @@ class FiniteDifferenceImplicitThermalProblem:
         time        current time
     """
     if self.source_term:
-      return (self.act * self.a / self.k * 
+      return (self.act * self.qc * 
           self.source_term(time,*[self.r, self.theta, self.z][:self.ndim])).flatten()
     else:
       return np.zeros((self.ndof,))
@@ -293,7 +347,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
     return (T_n * self.act).flatten()
 
-  def _generate_bc_matrix(self, T_n, time, dt):
+  def _generate_bc_matrix(self, T_n, time):
     """
       Generate the BC matrix terms (fixed)
     """
@@ -307,7 +361,7 @@ class FiniteDifferenceImplicitThermalProblem:
 
     return M
 
-  def _generate_fixed_bc_RHS(self, T_n, time, dt):
+  def _generate_fixed_bc_RHS(self, T_n, time):
     """
       Generate the constant (i.e. axial) contributions to the RHS
 
@@ -348,13 +402,17 @@ class FiniteDifferenceImplicitThermalProblem:
     Tn = self._generate_prev_temp(T_n)
     
     # System without BCs
-    M = (ID-A*dt)
-    R = S*dt + Tn
+    if self.steady:
+      M = -A
+      R = S
+    else:
+      M = (ID-A*dt)
+      R = S*dt + Tn
     
     # Matrix and fixed RHS boundary contributions
-    B = self._generate_bc_matrix(T_n, time, dt)
+    B = self._generate_bc_matrix(T_n, time)
     M += B    
-    BRF = self._generate_fixed_bc_RHS(T_n, time, dt)
+    BRF = self._generate_fixed_bc_RHS(T_n, time)
     R += BRF
     
     # Dummy dofs
@@ -849,7 +907,7 @@ class FiniteDifferenceImplicitThermalProblem:
       Insert the radial FD contribution into a sparse matrix
     """
     rh = (self.r[:-1] + self.r[1:]) / 2.0
-    ah = (self.a[:-1] + self.a[1:]) / 2.0
+    ah = (self.c[:-1] + self.c[1:]) / 2.0
     rhah = np.pad(rh * ah, ((1,1),(0,0),(0,0)), mode = 'edge')
    
     D1 = (self.act * rhah[:-1] / (self.r * self.dr**2.0)).flatten()[self.nt*self.nz:]
@@ -863,7 +921,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Insert the circumferential FD contribution into a coo matrix
     """
-    ah = np.pad((self.a[:,:-1] + self.a[:,1:]) / 2.0,
+    ah = np.pad((self.c[:,:-1] + self.c[:,1:]) / 2.0,
         ((0,0),(1,1),(0,0)), mode = 'edge')
 
     D1 = (self.act * ah[:,:-1] / (self.r**2.0 * self.dt**2.0)).flatten()[self.nz:]
@@ -877,7 +935,7 @@ class FiniteDifferenceImplicitThermalProblem:
     """
       Insert the axial FD contribution into a coo matrix
     """
-    ah = np.pad((self.a[:,:,:-1] + self.a[:,:,1:]) / 2.0, 
+    ah = np.pad((self.c[:,:,:-1] + self.c[:,:,1:]) / 2.0, 
         ((0,0),(0,0),(1,1)), mode = 'edge')
 
     D1 = (self.act * ah[:,:,:-1] / self.dz**2.0).flatten()[1:]
