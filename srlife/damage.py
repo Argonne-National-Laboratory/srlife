@@ -217,7 +217,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
         de = strains[:,j] - strains[:,i]
         eq = np.sqrt(2) / (2*(1+nu)) * np.sqrt(
             (de[0] - de[1])**2 + (de[1]-de[2])**2 + (de[2]-de[0])**2.0
-            + 3.0/2.0 * (de[3]**2.0 + de[4]**2.0 + de[5]**6.0)
+            + 3.0/2.0 * (de[3]**2.0 + de[4]**2.0 + de[5]**2.0)
             )
         pt_eranges = np.maximum(pt_eranges, eq)
     
