@@ -17,6 +17,7 @@ import numpy as np
 from skfem import *
 from skfem import mesh, element
 from skfem import helpers, utils
+from skfem.element.discrete_field import DiscreteField
 
 from neml import block
 
@@ -402,7 +403,7 @@ class PythonTubeSolver(TubeSolver):
     """
     Md = asm(BilinearForm(lambda u,v,w: v*u), state.sbasis)
     fd = asm(LinearForm(lambda v,w: v*w['values']),
-      state.sbasis, values = f)
+      state.sbasis, values = DiscreteField(f))
 
     return spla.spsolve(Md,fd)
 
@@ -486,14 +487,14 @@ class PythonTubeSolver(TubeSolver):
       """
       atol = tol * tube.t
       if self.ndim == 1:
-        self.mesh.define_boundary("pressure", 
+        self.mesh = self.mesh.with_boundaries({"pressure": 
             lambda x: np.logical_and(x > tube.r - tube.t - atol, 
-              x < tube.r - tube.t + atol))
+              x < tube.r - tube.t + atol)})
       else:
-        self.mesh.define_boundary("pressure",
+        self.mesh = self.mesh.with_boundaries({"pressure":
             lambda x: np.logical_and(
               np.sqrt(x[0]**2.0+x[1]**2.0) > tube.r - tube.t - atol,
-              np.sqrt(x[0]**2.0+x[1]**2.0) < tube.r - tube.t + atol))
+              np.sqrt(x[0]**2.0+x[1]**2.0) < tube.r - tube.t + atol)})
 
     def define_scalar_basis(self):
       """
@@ -892,7 +893,8 @@ class PythonSolver:
         p       Pressure, for the BC
     """
     F_int = self._internal_force(self.state_np1.stress)
-    F_ext = asm(self.external, self.state_np1.pbasis, pressure = p)
+    F_ext = asm(self.external, self.state_np1.pbasis, 
+        pressure = DiscreteField(p))
     
     return F_int - F_ext
 
@@ -917,7 +919,7 @@ class PythonSolver:
         hoop        hoop stress
     """
     return asm(self.internal, self.state_np1.basis,
-          radial = radial, hoop = hoop) 
+          radial = DiscreteField(radial), hoop = DiscreteField(hoop)) 
 
   def _internal_nd(self, stress):
     """
@@ -927,7 +929,7 @@ class PythonSolver:
         stress      stresses to use
     """
     return asm(self.internal, self.state_np1.basis,
-        stress = stress)
+        stress = DiscreteField(stress))
 
   def jacobian(self):
     """
@@ -935,14 +937,14 @@ class PythonSolver:
     """
     if self.ndim == 1:
       return asm(self.jac, self.state_np1.basis,
-          Crr = self.state_np1.tangent[0,0,0,0],
-          Crt = self.state_np1.tangent[0,0,1,1],
-          Ctt = self.state_np1.tangent[1,1,1,1],
-          Ctr = self.state_np1.tangent[1,1,0,0])
+          Crr = DiscreteField(self.state_np1.tangent[0,0,0,0]),
+          Crt = DiscreteField(self.state_np1.tangent[0,0,1,1]),
+          Ctt = DiscreteField(self.state_np1.tangent[1,1,1,1]),
+          Ctr = DiscreteField(self.state_np1.tangent[1,1,0,0]))
     else:
       return asm(self.jac, self.state_np1.basis,
-          C = self.state_np1.tangent[:self.ndim,:self.ndim,
-            :self.ndim,:self.ndim])
+          C = DiscreteField(self.state_np1.tangent[:self.ndim,:self.ndim,
+            :self.ndim,:self.ndim]))
 
   def add_dirichlet_bc(self, dofs, value):
     """
