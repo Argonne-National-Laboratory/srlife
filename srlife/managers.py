@@ -56,11 +56,10 @@ class SolutionManager:
     self.heuristics = []
 
   def add_heuristic(self, heuristic):
-    """
-      Add a heuristic to use during the solve
+    """ Add a heuristic to use during the solve
 
       Args:
-        heuristics: new heuristic to add
+        heuristics (list): new heuristic to add
     """
     self.heuristics.append(heuristic)
 
@@ -152,9 +151,9 @@ class SolutionManager:
         self.structural_solver, nthreads = self.nthreads, 
         decorator = self.progress_decorator, verbose = self.progress)
 
-
 class Heuristic:
-  """
+  """ Solution heuristic superclass
+
     Class that defines a heuristic to modify the basic 3D solve process in some
     way.
 
@@ -162,8 +161,12 @@ class Heuristic:
     methods.
   """
   def args_for_tube_thermal_solver(self, receiver, tube):
-    """
-      Add tube solver args
+    """ Add tube solver args
+
+      Args:
+        receiver (receiver.receiver):       receiver object affected
+        tube (receiver.tube):               tube object affected
+        
     """
     return {}
 
@@ -172,8 +175,11 @@ class CycleResetHeuristic(Heuristic):
     Reset the tube temperatures each cycle to the initial values
   """
   def args_for_tube_thermal_solver(self, receiver, tube):
-    """
-      Modify the tube solver before the solve
+    """ Modify the tube solver before the solve
+
+      Args:
+        receiver (receiver.receiver):       receiver object affected
+        tube (receiver.tube):               tube object affected
     """
     resetter = thermal.TemperatureResetter(
         lambda t: np.isclose(t % receiver.period, 0),

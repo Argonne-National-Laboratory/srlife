@@ -408,7 +408,7 @@ solves the thermal and structural subproblems:
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage()
+  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
 
 The user might consider changing the `params['nthreads']` parameter to match
 the number of cores on their machine, to speed up the analysis.
@@ -437,7 +437,7 @@ will print a status bar representing its progress along each individual step
 
 .. code:: console
 
-   Best estimate life: 9062.849350 daily cycles
+   Best estimate life: 9062.849331 daily cycles
 
 indicating that the module predicts this receiver to have a structural life of
 9062 repetitions of the daily cycle, or about 25 years. 
@@ -455,7 +455,7 @@ to a VTK file for additional postprocessing:
     for ti, tube in panel.tubes.items():
       tube.write_vtk("tube-%s-%s" % (pi, ti))
 
-This command produces a series of `VTK <https://vtk.org/>`_ files (one per tube) containing the full
+This command produces a series of `VTK <https://vtk.org/>`_ files (one per tube per time step) containing the full
 thermal, structural, and damage results.  These files can be visualized
 with a program like `ParaView <https://www.paraview.org/>`_.
 
@@ -623,7 +623,7 @@ Complete example scripts
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage()
+  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
 
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat,
