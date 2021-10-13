@@ -18,7 +18,8 @@ def newton(RJ, x0, rel_tol = 1.0-6, abs_tol = 1.0e-8, miters = 20,
       rel_tol (Optional[1.0e-6]):   relative convergence tolerance
       abs_tol (Optional[1.0e-8]):   absolute convergence tolerance
       miters (Optional[20]):        maximum number of iterations
-      linear_solver (Optional[numpy.linalg.solve]):    function that solves the linear system A x = b
+      linear_solver (Optional[numpy.linalg.solve]): function that solves 
+                                                    the linear system A x = b
       verbose (Optional[True]):     if true, print debug info,
       return_extra (Optional[False]):     if true also return the final residual vector and Jacobian
       linesearch (Optional[True]):  if true do backtracking linesearch
