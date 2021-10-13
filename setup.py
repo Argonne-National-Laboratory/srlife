@@ -17,7 +17,7 @@ setup (
     # Name of the project
     name = 'srlife',
     # Version
-    version = '1.2.0',
+    version = '1.2.1',
     # One line-description
     description = "Evaluate the structural life of a solar receiver",
     # README
@@ -54,7 +54,7 @@ setup (
       'matplotlib',
       'pylint', 
       'neml', 
-      'scikit-fem', 
+      'scikit-fem == 3.2.0', 
       'meshio', 
       'networkx', 
       'tqdm', 
