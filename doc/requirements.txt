@@ -1,6 +1,7 @@
 #
 ##### pip requirements ######
 #
+sphinx
 sphinxcontrib-napoleon
 numpy==1.18
 scipy
