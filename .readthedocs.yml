@@ -3,10 +3,10 @@ formats: all
 
 python:
       version: 3.7
-      setup_py_install: true
       install:
             - requirements: doc/requirements.txt
 
 sphinx:
       builder: html
       configuration: doc/sphinx/source/conf.py
+      fail_on_warning: true
