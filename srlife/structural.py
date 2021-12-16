@@ -893,8 +893,9 @@ class PythonSolver:
         p       Pressure, for the BC
     """
     F_int = self._internal_force(self.state_np1.stress)
+    pv = self.state_np1.pbasis.interpolate(self.state_np1.pbasis.zeros() + p)
     F_ext = asm(self.external, self.state_np1.pbasis, 
-        pressure = DiscreteField(p))
+        pressure = pv)
     
     return F_int - F_ext
 
