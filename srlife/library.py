@@ -3,6 +3,8 @@
 """
 import os.path
 
+import xml.etree.ElementTree as ET
+
 from srlife import materials
 
 LIBRARY_DIR = os.path.abspath(
@@ -95,4 +97,19 @@ def load_damage(name, model):
   """
   fdir = os.path.join(LIBRARY_DIR, "damage")
   filename = get_file(fdir, name)
-  return materials.StructuralMaterial.load(filename, model)
+
+  mat_type = get_type(filename)
+  
+  if mat_type == "metallic":
+    return materials.StructuralMaterial.load(filename, model)
+  elif mat_type == "ceramic":
+    return materials.CeramicMaterial.load(filename, model)
+  else:
+    raise ValueError("Unknown material type %s in XML damage file." % mat_type)
+
+def get_type(filename):
+  """
+    Report if this is a metallic or ceramic material
+  """
+  return ET.parse(filename).getroot().attrib["type"]
+

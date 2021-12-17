@@ -413,6 +413,68 @@ class Tube:
 
     return np.meshgrid(*[r,t,z], indexing = 'ij')
 
+  def element_volumes(self):
+    """ Calculate the element volumes
+
+    Returns:
+      np.array with each element volume
+    """
+    if self.ndim == 1:
+      return self._volume1d()
+    elif self.ndim == 2:
+      return self._volume2d()
+    elif self.ndim == 3:
+      return self._volume3d()
+    else:
+      raise ValueError("Internal error: tube dimension is %i" % self.ndim)
+
+  def _volume1d(self):
+    """
+      1D volume calculator
+    """
+    r = np.linspace(self.r-self.t, self.r, self.nr)
+    return np.pi * (r[1:]**2.0 - r[:-1]**2.0) * self.h
+
+  def _volume2d(self):
+    """
+      1D volume calculator
+    """
+    r = np.linspace(self.r-self.t, self.r, self.nr)
+    t = np.linspace(0, 2*np.pi, self.nt+1)
+    z = np.linspace(0, self.h, self.nz)
+    theta = np.diff(t)
+    
+    a = np.outer(2*r[:-1], np.sin(theta/2))
+    b = np.outer(2*r[1:], np.sin(theta/2))
+    edge = r[1:] - r[:-1]
+
+    h = np.sqrt(edge[:,None]**2.0 - ((b-a)/2)**2.0)
+
+    base = 0.5*(a+b)*h
+
+    return (base * self.h).flatten()
+
+  def _volume3d(self):
+    """
+      3D volume calculator
+    """
+    r = np.linspace(self.r-self.t, self.r, self.nr)
+    t = np.linspace(0, 2*np.pi, self.nt+1)
+    z = np.linspace(0, self.h, self.nz)
+    theta = np.diff(t)
+    
+    a = np.outer(2*r[:-1], np.sin(theta/2))
+    b = np.outer(2*r[1:], np.sin(theta/2))
+    edge = r[1:] - r[:-1]
+
+    h = np.sqrt(edge[:,None]**2.0 - ((b-a)/2)**2.0)
+
+    base = 0.5*(a+b)*h
+
+    heights = np.diff(z)
+
+    return np.einsum('k,ij', heights, base).flatten()
+
   def write_vtk(self, fname):
     """ Write to a VTK file
 

@@ -1,0 +1,18 @@
+<!-- Units: stress in MPa, strain in mm/mm, time in hours, temperature in K -->
+<materials>
+  <elastic_model type="SmallStrainElasticity">
+    <elastic type="IsotropicLinearElasticModel">
+      <m1 type="PiecewiseLinearInterpolate">
+        <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15 1273.15 1373.15 1473.15 1573.15 1673.15</points>
+        <values>414540 412700 410400 408100 405800 403500 401200 398900 396600 394300 392000 389700 387400 385100 382800</values>
+      </m1>
+      <m1_type>youngs</m1_type>
+      <m2>0.16</m2>
+      <m2_type>poissons</m2_type>
+    </elastic>
+    <alpha type="PiecewiseLinearInterpolate">
+      <points>293.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1073.15 1173.15 1273.15 1373.15 1473.15 1573.15 1673.15</points>
+      <values>4.619e-06 4.619e-06 4.619e-06 5.139e-06 5.359e-06 5.465e-06 5.541e-06 5.622e-06 5.719e-06 5.834e-06 5.963e-06 6.104e-06 6.253e-06 6.408e-06 6.566e-06</values>
+    </alpha>
+  </elastic_model>
+</materials>
