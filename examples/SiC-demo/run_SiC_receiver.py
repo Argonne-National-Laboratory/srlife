@@ -9,7 +9,7 @@ import math
 def sample_parameters():
   params = solverparams.ParameterSet()
 
-  params["nthreads"] = 1
+  params["nthreads"] = 2
   params["progress_bars"] = True
 
   params["thermal"]["rtol"] = 1.0e-6
@@ -42,9 +42,9 @@ if __name__ == "__main__":
   lengthlocs = 1000*np.array([16,5,16,5,16,5]) #max temp loc#np.array([16,5,16,5,16,5])
   # lengthlocs = 1000*np.array([5,16,16,16,16,16]) #max flux loc #np.array([5,16,16,16,16,16])
   # Cut down on run time for now
-  for (panel,lengthloc) in zip(model.panels.values(),lengthlocs):
-    for tube in panel.tubes.values():
-      tube.make_2D(lengthloc)
+  #for (panel,lengthloc) in zip(model.panels.values(),lengthlocs):
+    #for tube in panel.tubes.values():
+      #tube.make_2D(lengthloc)
       #tube.make_1D(lengthloc, 0.0)
 
   # Load some customized solution parameters
