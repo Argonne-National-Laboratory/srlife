@@ -41,7 +41,7 @@ if __name__ == "__main__":
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage()
+  damage_model = damage.TimeFractionInteractionDamage(params['damage'])
 
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat,

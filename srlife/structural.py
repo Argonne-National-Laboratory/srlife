@@ -17,6 +17,7 @@ import numpy as np
 from skfem import *
 from skfem import mesh, element
 from skfem import helpers, utils
+from skfem.element.discrete_field import DiscreteField
 
 from neml import block
 
@@ -170,19 +171,24 @@ class PythonTubeSolver(TubeSolver):
     Tube solver class coded up with scikit.fem and the scipy sparse solvers
   """
   def __init__(self, pset = solverparams.ParameterSet(), rtol = 1.0e-6,
-      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False):
+      atol = 1.0e-8, qorder = 1, dof_tol = 1.0e-6, miter = 10, verbose = False,
+      max_divide = 4, force_divide = False, max_linesearch = 10):
     """
       Setup the solver with common parameters
 
       Additional Parameters:
-        pset        parameter set with solver parameters
-        rtol        relative tolerance for NR iterations
-        atol        absolute tolerance for NR iterations
-        qorder      quadrature order
-        dof_tol     geometric tolerance on finding boundary
-                    degrees of freedom
-        miter       maximum newton-raphson iterations
-        verbose     verbose solve
+        pset:            parameter set with solver parameters
+        rtol:            relative tolerance for NR iterations
+        atol:            absolute tolerance for NR iterations
+        qorder:          quadrature order
+        dof_to:l         geometric tolerance on finding boundary
+                         degrees of freedom
+        miter:           maximum newton-raphson iterations
+        verbose:         verbose solve
+        max_divide:      maximum adaptive integration subdivisions
+        force_divide:    force adaptive substeps, for tests or
+                         accuracy checks
+        max_linesearch   maximum line search cutbacks
     """
     self.qorder = qorder
     self.rtol = pset.get_default("rtol", rtol)
@@ -190,8 +196,12 @@ class PythonTubeSolver(TubeSolver):
     self.dof_tol = pset.get_default("dof_tol", dof_tol)
     self.miter = pset.get_default("miter", miter)
     self.verbose = pset.get_default("verbose", verbose)
+    self.max_divide = pset.get_default("max_divide", max_divide)
+    self.force_divide = pset.get_default("force_divide", force_divide)
+    self.max_search = pset.get_default("max_linesearch", max_linesearch)
     self.solver_options = {'rtol': self.rtol, 'atol': self.atol,
-        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose}
+        'dof_tol': self.dof_tol, 'miter': self.miter, 'verbose': self.verbose,
+        'max_linesearch': self.max_search}
 
   def setup_tube(self, tube):
     """
@@ -205,13 +215,13 @@ class PythonTubeSolver(TubeSolver):
 
     for field in fields:
       for suffix in suffixes:
-        tube.add_quadrature_results(field+suffix, np.zeros((tube.ntime,) + self.qshape(tube)))
+        tube.add_blank_quadrature_results(field+suffix, (tube.ntime,) + self.qshape(tube))
 
-    tube.add_quadrature_results("temperature", np.zeros((tube.ntime,) + self.qshape(tube)))
+    tube.add_blank_quadrature_results("temperature", (tube.ntime,) + self.qshape(tube))
 
     suffixes = ["_x", "_y", "_z"]
     for i in range(tube.ndim):
-      tube.add_results("disp"+suffixes[i], np.zeros((tube.ntime,) + tube.dim[:tube.ndim]))
+      tube.add_blank_results("disp"+suffixes[i], (tube.ntime,) + tube.dim[:tube.ndim])
 
   def qshape(self, tube):
     """
@@ -224,50 +234,107 @@ class PythonTubeSolver(TubeSolver):
     nelem = (tube.dim[0] - 1) * (tube.dim[1]) * nz
     return (nelem, (self.qorder+1)**tube.ndim)
 
+  def _setup_state(self, sf, tube, i, state_n):
+    """
+      Setup all the information needed to solve the problem for 
+      some step fraction of a whole step
+
+      Parameters:
+        sf:         step fraction
+        tube:       tube object with all the BC information
+        i:          time index for state n+1
+        state_n:    state at time n
+    """
+    state_next = state_n.copy()
+
+    t = tube.times[i-1] + (tube.times[i] - tube.times[i-1]) * sf
+    
+    if 'temperature' in tube.results:
+      T_np1 = self._res2quad(state_next,
+          self._tube2fea(tube, tube.results['temperature'][i]))
+      T_n = self._res2quad(state_n,
+          self._tube2fea(tube, tube.results['temperature'][i-1])) 
+      T = T_n + (T_np1 - T_n) * sf
+      state_next.temperature = T
+    else:
+      state_next.temperature = np.zeros(state_next.temperature.shape)
+
+    if tube.pressure_bc:
+      p = tube.pressure_bc.pressure(t)
+    else:
+      p = 0
+
+    return state_next, p, t
+  
+  # pylint: disable=too-many-branches
   def solve(self, tube, i, state_n, dtop):
     """
       Solve the structural tube problem for a single time step
+      using adaptive integration
 
       Parameters:
         tube:       tube object with all bcs
         i:          time index to reference in tube results
         state:      state object
-        dtop:       top disoplacement
+        dtop:       top displacement
     """
-    state_np1 = state_n.copy()
-
-    t_np1 = tube.times[i]
-    t_n = tube.times[i-1]
-
+    # Setup initial state_n
     if 'temperature' in tube.results:
-      state_np1.temperature = self._res2quad(state_np1,
-          self._tube2fea(tube, tube.results['temperature'][i]))
       state_n.temperature = self._res2quad(state_n,
           self._tube2fea(tube, tube.results['temperature'][i-1]))
     else:
-      state_np1.temperature = np.zeros(state_np1.temperature.shape)
       state_n.temperature = np.zeros(state_n.temperature.shape)
-
-    if tube.pressure_bc:
-      p_np1 = tube.pressure_bc.pressure(t_np1)
-      p_n = tube.pressure_bc.pressure(t_n)
-    else:
-      p_np1 = 0.0
-      p_n = 0.0
-
-    if tube.ndim == 1:
-      solve_python_1d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
-          self.solver_options)
-    elif tube.ndim == 2:
-      solve_python_2d(state_n, t_n, p_n, state_np1, t_np1, p_np1, dtop,
-          self.solver_options)
-    elif tube.ndim == 3:
-      solve_python_3d(state_n, t_n, p_n, state_np1, t_np1, p_np1, 
-          dtop, self.solver_options)
-    else:
-      raise ValueError("Unknown dimension %i" % tube.ndim)
+   
+    state_last = state_n.copy()
     
-    return state_np1
+    t_last = tube.times[i-1]
+    if tube.pressure_bc:
+      p_last = tube.pressure_bc.pressure(t_last)
+    else:
+      p_last = 0.0
+
+    # Adaptively integrate
+    tprog = 2**self.max_divide
+    cprog = 0
+    if self.force_divide:
+      inc = 1
+      mdiv = self.max_divide - 1
+    else:
+      inc = tprog
+      mdiv = 0
+
+    while cprog < tprog:
+      sf = float(cprog + inc) / float(tprog)
+
+      state_next, p_next, t_next = self._setup_state(sf, tube, i, state_n) 
+      
+      try:
+        if tube.ndim == 1:
+          solve_python_1d(state_last, t_last, p_last, state_next, t_next, p_next, dtop*sf,
+              self.solver_options)
+        elif tube.ndim == 2:
+          solve_python_2d(state_last, t_last, p_last, state_next, t_next, p_next, dtop*sf,
+              self.solver_options)
+        elif tube.ndim == 3:
+          solve_python_3d(state_last, t_last, p_last, state_next, t_next, p_next, 
+              dtop*sf, self.solver_options)
+        else:
+          raise ValueError("Unknown dimension %i" % tube.ndim)
+      except RuntimeError:
+        inc /= 2
+        mdiv += 1
+        if mdiv >= self.max_divide:
+          break
+      
+      state_last = state_next
+      t_last = t_next
+      p_last = p_next
+      cprog += inc
+    
+    if mdiv >= self.max_divide:
+      raise RuntimeError("Adaptive integration failed")
+
+    return state_next
 
   def init_state(self, tube, mat, i = None):
     """
@@ -336,7 +403,7 @@ class PythonTubeSolver(TubeSolver):
     """
     Md = asm(BilinearForm(lambda u,v,w: v*u), state.sbasis)
     fd = asm(LinearForm(lambda v,w: v*w['values']),
-      state.sbasis, values = f)
+      state.sbasis, values = DiscreteField(f))
 
     return spla.spsolve(Md,fd)
 
@@ -413,21 +480,21 @@ class PythonTubeSolver(TubeSolver):
         Define the pressure boundary
 
         Parameters:
-          tube      tube object for geometry
+          tube:     tube object for geometry
 
         Additional parameters:
-          tol       thickness tolerance for finding faces
+          tol:      thickness tolerance for finding faces
       """
       atol = tol * tube.t
       if self.ndim == 1:
-        self.mesh.define_boundary("pressure", 
+        self.mesh = self.mesh.with_boundaries({"pressure": 
             lambda x: np.logical_and(x > tube.r - tube.t - atol, 
-              x < tube.r - tube.t + atol))
+              x < tube.r - tube.t + atol)})
       else:
-        self.mesh.define_boundary("pressure",
+        self.mesh = self.mesh.with_boundaries({"pressure":
             lambda x: np.logical_and(
               np.sqrt(x[0]**2.0+x[1]**2.0) > tube.r - tube.t - atol,
-              np.sqrt(x[0]**2.0+x[1]**2.0) < tube.r - tube.t + atol))
+              np.sqrt(x[0]**2.0+x[1]**2.0) < tube.r - tube.t + atol)})
 
     def define_scalar_basis(self):
       """
@@ -694,11 +761,12 @@ class PythonSolver:
     # Calculate the initial residual and jacobian
     R = self.residual(p)
     nR0 = la.norm(R[self.kdofs])
+    nR = nR0
     
     # Printing, if you want
     if self.options['verbose']:
-      print("Iter\tnR\t\tnR/nR0")
-      print("%i\t%3.2e" % (0, nR0))
+      print("Iter\tnR\t\tnR/nR0\t\talpha")
+      print("%i\t%3.2e\t" % (0, nR0))
     
     # Newton-Raphson iteration
     for i in range(self.options['miter']):
@@ -710,16 +778,29 @@ class PythonSolver:
         break
       # Get the actual sparse jacobian
       J = self.jacobian()
-      # Update the displacements
-      self.state_np1.displacements -= self.linear_solve(J,R)
-      # Recalculate the state
-      self.update_state()
-      # Calculate the residual
-      R = self.residual(p)
-      # Do the convergence check and print update
-      nR = la.norm(R[self.kdofs])
+      # Direction
+      dx = self.linear_solve(J,R)
+      # Linesearch
+      alpha = 1.0
+      x0 = np.copy(self.state_np1.displacements)
+      nR_start = nR
+      for _ in range(self.options['max_linesearch']):
+        # Trial
+        self.state_np1.displacements = x0 - alpha * dx
+        # Recalculate the state
+        self.update_state()
+        # Calculate the residual
+        R = self.residual(p)
+        # Norm of residual
+        nR = la.norm(R[self.kdofs])
+        # Check linesearch criteria
+        if nR < nR_start:
+          break
+        alpha /= 2.0
+
+      # Check convergence
       if self.options['verbose']:
-        print("%i\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0))
+        print("%i\t%3.2e\t%3.2e\t%3.2e" % (i+1, nR, nR/nR0,alpha))
       if nR < self.options['atol'] or nR / nR0 < self.options['rtol']:
         if self.options['verbose']:
           print("")
@@ -812,7 +893,9 @@ class PythonSolver:
         p       Pressure, for the BC
     """
     F_int = self._internal_force(self.state_np1.stress)
-    F_ext = asm(self.external, self.state_np1.pbasis, pressure = p)
+    pv = self.state_np1.pbasis.interpolate(self.state_np1.pbasis.zeros() + p)
+    F_ext = asm(self.external, self.state_np1.pbasis, 
+        pressure = pv)
     
     return F_int - F_ext
 
@@ -837,7 +920,7 @@ class PythonSolver:
         hoop        hoop stress
     """
     return asm(self.internal, self.state_np1.basis,
-          radial = radial, hoop = hoop) 
+          radial = DiscreteField(radial), hoop = DiscreteField(hoop)) 
 
   def _internal_nd(self, stress):
     """
@@ -847,7 +930,7 @@ class PythonSolver:
         stress      stresses to use
     """
     return asm(self.internal, self.state_np1.basis,
-        stress = stress)
+        stress = DiscreteField(stress))
 
   def jacobian(self):
     """
@@ -855,14 +938,14 @@ class PythonSolver:
     """
     if self.ndim == 1:
       return asm(self.jac, self.state_np1.basis,
-          Crr = self.state_np1.tangent[0,0,0,0],
-          Crt = self.state_np1.tangent[0,0,1,1],
-          Ctt = self.state_np1.tangent[1,1,1,1],
-          Ctr = self.state_np1.tangent[1,1,0,0])
+          Crr = DiscreteField(self.state_np1.tangent[0,0,0,0]),
+          Crt = DiscreteField(self.state_np1.tangent[0,0,1,1]),
+          Ctt = DiscreteField(self.state_np1.tangent[1,1,1,1]),
+          Ctr = DiscreteField(self.state_np1.tangent[1,1,0,0]))
     else:
       return asm(self.jac, self.state_np1.basis,
-          C = self.state_np1.tangent[:self.ndim,:self.ndim,
-            :self.ndim,:self.ndim])
+          C = DiscreteField(self.state_np1.tangent[:self.ndim,:self.ndim,
+            :self.ndim,:self.ndim]))
 
   def add_dirichlet_bc(self, dofs, value):
     """

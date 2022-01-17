@@ -23,34 +23,32 @@ class VTKWriter:
   def write(self):
     """
       Actually write the tube object to a vtk file using a
-      VTKStructuredGrid
+      VTKUntructuredGrid
     """
-    grid = vtk.vtkUnstructuredGrid()
-
     R, T, Z = self.tube.mesh
-    points = vtk.vtkPoints()
 
     X = R * np.cos(T)
     Y = R * np.sin(T)
 
-    for x,y,z in zip(X.flatten(), Y.flatten(), Z.flatten()):
-      points.InsertNextPoint(x,y,z)
-
-    grid.SetPoints(points)
-    
-    self._set_grid(grid)
-    
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(self.fname + ".vtu")
-    writer.SetInputData(grid)  
-    writer.SetNumberOfTimeSteps(self.tube.ntime)
-
-    writer.Start()
     for i in range(self.tube.ntime):
+      grid = vtk.vtkUnstructuredGrid()
+      points = vtk.vtkPoints()
+
+      for x,y,z in zip(X.flatten(), Y.flatten(), Z.flatten()):
+        points.InsertNextPoint(x,y,z)
+
+      grid.SetPoints(points)
+
+      self._set_grid(grid)
+
+      writer = vtk.vtkXMLUnstructuredGridWriter()
+      writer.SetFileName(self.fname + ("-%i" % i) + ".vtu")
+      writer.SetInputData(grid)  
+
       self._dump_point_data(grid, i)
       self._dump_element_data(grid, i)
-      writer.WriteNextTime(self.tube.times[i])
-    writer.Stop()
+
+      writer.Write()
   
   def _dump_point_data(self, grid, i):
     """

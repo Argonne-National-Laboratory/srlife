@@ -9,7 +9,7 @@ taking the basic input information:
    3. The thermal, structural, and system solvers.
    4. Optionally, a :py:class:`srlife.solverparams.ParameterSet` class
       defining solution parameters, including the number of parallel
-      threads to use in the analysi
+      threads to use in the analysis
 
 and providing the estimated life of the receiver as a number of 
 repetitions of the daily cycle.
@@ -41,6 +41,33 @@ internal srlife subclasses.  Specifically, the manager handles the process of:
    4. Finding the worst-case tube and calculating the estimated life.
 
 .. autoclass:: srlife.managers.SolutionManager
+   :members:
+
+Heuristics
+----------
+
+The base assumption in srlife is that the thermal, structural, and damage analyses will use
+full 3D theories, consider every tube in every receiver, and follow the user provided input
+(thermal history, structural/spring boundary conditions, etc.) exactly.
+Solver heuristics modify these base assumptions, with the goal of reducing the time required
+to complete the analysis at the expense of some accuracy.  Heuristics can trigger some action
+at any point throughout the analysis, in the setup, thermal, structural, or damage phases.
+
+All heuristics inherit from a common base class, :py:class:`srlife.managers.Heuristic`.
+
+.. autoclass:: srlife.managers.Heuristic
+   :members:
+
+Cycle reset heuristic
+^^^^^^^^^^^^^^^^^^^^^
+
+The cycle reset heuristic returns each tube to its initial temperature at the end of every 
+thermal cycle.  This heuristic represents the effects of a long hold at lower temperature, 
+often omitted in the analysis.  When using transient heat transfer not including this
+heuristic may mean the tube begin to accumulate a small amount of residual stress, related to
+any unrelaxed thermal gradient still present at the end of each day.
+
+.. autoclass:: srlife.managers.CycleResetHeuristic
    :members:
 
 ParameterSet description
@@ -94,6 +121,8 @@ Thermal solver options
 +---------+-----------+---------+--------------------------------------------------------------+
 | verbose | bool      | False   | Print debug information to the terminal                      |
 +---------+-----------+---------+--------------------------------------------------------------+
+| steady  | bool      | False   | Use steady state heat transfer, i.e. conduction only         |
++---------+-----------+---------+--------------------------------------------------------------+
 
 Tube solver options
 ^^^^^^^^^^^^^^^^^^^
@@ -128,6 +157,17 @@ Structural solver options
 +---------+-----------+---------+-----------------------------------------+
 | verbose | bool      | False   | Print debug information to the terminal |
 +---------+-----------+---------+-----------------------------------------+
+
+Damage model options
+^^^^^^^^^^^^^^^^^^^^
+
++-------------+-----------+---------+-------------------------------------------------------------------+
+| Option      | Data type | Default | Explanation                                                       |
++=============+===========+=========+===================================================================+
+| extrapolate | string    | "lump"  | How to extrapolate damage, options are "lump", "last", and "poly" |
++-------------+-----------+---------+-------------------------------------------------------------------+
+| order       | int       | 1       | Polynomial order to use in conjunction with the "poly" option     |
++-------------+-----------+---------+-------------------------------------------------------------------+
 
 Class description
 ^^^^^^^^^^^^^^^^^

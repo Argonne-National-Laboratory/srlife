@@ -10,3 +10,4 @@ examples/small-experiments
 build/
 srlife.egg-info/
 dist/
+*.dat

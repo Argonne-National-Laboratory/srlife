@@ -8,7 +8,7 @@ from srlife import receiver, solverparams, spring, structural, thermal, system, 
 def sample_parameters():
   params = solverparams.ParameterSet()
 
-  params["nthreads"] = 4
+  params["nthreads"] = 3
   params["progress_bars"] = True
 
   params["thermal"]["rtol"] = 1.0e-6
@@ -23,6 +23,9 @@ def sample_parameters():
   params["system"]["atol"] = 1.0e-6
   params["system"]["miter"] = 20
   params["system"]["verbose"] = False
+  
+  # Extrapolate damage based on the last cycle
+  params["damage"]["extrapolate"] = "last"
   
   return params
 
@@ -48,7 +51,7 @@ if __name__ == "__main__":
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage()
+  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
 
   # Load the materials
   fluid = library.load_fluid("salt", "base")
@@ -60,7 +63,8 @@ if __name__ == "__main__":
       structural_solver, deformation, damage, system_solver, damage_model, 
       pset = params)
 
-  # Heuristics would go here
+  # Reset the temperatures each night
+  solver.add_heuristic(managers.CycleResetHeuristic())
 
   # Report the best-estimate life of the receiver 
   life = solver.solve_life()

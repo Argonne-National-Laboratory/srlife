@@ -85,6 +85,7 @@ class TestVTKWriter(unittest.TestCase):
     self.npanel = 2
     self.ntube = 3
     self.days = 1
+    self.ntime = 10
     self.panel_stiffness = 100.0
     self.manifold_stiffness = 100.0
 
@@ -99,7 +100,7 @@ class TestVTKWriter(unittest.TestCase):
 
     nfile = len(os.listdir(tdir))
 
-    self.assertEqual(nfile, self.npanel * self.ntube)
+    self.assertEqual(nfile, self.npanel * self.ntube * self.ntime)
 
   def test_2D(self):
     r = make_receiver(2, self.npanel, self.ntube, period = self.period,
@@ -112,7 +113,7 @@ class TestVTKWriter(unittest.TestCase):
 
     nfile = len(os.listdir(tdir))
 
-    self.assertEqual(nfile, self.npanel * self.ntube)
+    self.assertEqual(nfile, self.npanel * self.ntube * self.ntime)
 
   def test_3D(self):
     r = make_receiver(2, self.npanel, self.ntube, period = self.period,
@@ -125,5 +126,5 @@ class TestVTKWriter(unittest.TestCase):
 
     nfile = len(os.listdir(tdir))
 
-    self.assertEqual(nfile, self.npanel * self.ntube)
+    self.assertEqual(nfile, self.npanel * self.ntube * self.ntime)
 

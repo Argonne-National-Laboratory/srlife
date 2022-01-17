@@ -12,3 +12,4 @@ networkx
 tqdm
 multiprocess
 dill
+parameterized

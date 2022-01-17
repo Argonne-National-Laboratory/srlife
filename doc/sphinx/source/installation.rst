@@ -3,27 +3,28 @@ Installing srlife
 
 srlife is available in the `pypi <https://pypi.org/>`_ package repository
 and can be installed with `pip`.  srlife uses python3 and requires several
-additional python packages, all of which are available pypi.  The only
-additional requirement are cmake, the python development headers, and
-development version of BLAS and LAPACK.  All of these additional requirements
-are needed to compile `neml <https://github.com/Argonne-National-Laboratory/neml>`_, which provides the nonlinear constitutive model response required for
-the srlife analysis modules.  
+additional python packages, all of which are available pypi.
+
+srlife is compatible with python3 only, specifically python versions 3.6, 3.7,
+3.8, and 3.9
 
 Install using the pip package manager
 -------------------------------------
 
-The easiest way to install the package is to use the `pip` package manager, installing srlife from pypi automatically.  However, the neml source package requires compiling the module from source, which still has a few system-level dependencies.
+The easiest way to install the package is to use the `pip` package manager, installing srlife from pypi automatically.
 
 Ubuntu Linux 18.04
 """"""""""""""""""
 
 .. code-block:: console
 
-   sudo apt install build-essential cmake libblas-dev liblapack-dev python3-dev python3-setuptools python3-pip python3-wheel 
-   sudo pip3 install srlife
+   pip install srlife
 
 MacOS Sierra 10.14 Mojave
 """""""""""""""""""""""""
+
+It is easiest to install srlife using a homebrew version of python, not the
+default system python.
 
 Go to `brew.sh <https://brew.sh/>`_ and follow the directions to install homebrew.
 
@@ -31,8 +32,8 @@ Open up a terminal and run:
 
 .. code-block:: console
 
-   brew install cmake openblas superlu python vtk hdf5 pkg-config
-   sudo pip3 install srlife
+   brew install python
+   pip3 install srlife
 
 `srlife` will then be available as a package through the homebrew version of python (often available as `python3` instead of `python`).
 

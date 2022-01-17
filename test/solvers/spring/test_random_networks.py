@@ -288,6 +288,7 @@ class TestNetworksWithDisconnects(unittest.TestCase):
         disp2 = np.sort(p2.displacements)
         
         self.assertEqual(len(disp1), len(disp2))
+        print(disp1,disp2)
         self.assertTrue(np.allclose(disp1,disp2))
 
       ran += 1
@@ -361,7 +362,8 @@ class TestNetworksNoDisconnects(unittest.TestCase):
         disp2 = np.sort(p2.displacements)
         
         self.assertEqual(len(disp1), len(disp2))
-        self.assertTrue(np.allclose(disp1,disp2))
+        print(disp1, disp2)
+        self.assertTrue(np.allclose(disp1,disp2, rtol=1e-4))
 
       ran += 1
 

@@ -87,6 +87,15 @@ class Receiver:
     return itertools.chain(*(panel.tubes.values() 
       for panel in self.panels.values()))
 
+  def set_paging(self, page):
+    """ Tell tubes to store results on or off disk
+
+      Args:
+        page (bool):    if true, page results to disk
+    """
+    for tube in self.tubes:
+      tube.set_paging(page)
+
   @property
   def ntubes(self):
     """ Shortcut for total number of tubes
@@ -309,9 +318,10 @@ class Tube:
       nt (int): number of circumferential increments
       nz (int): number of axial increments
       T0 (Optional[float]): initial temperature
+      page (Optional[bool]): store results on disk if True
   """
   def __init__(self, outer_radius, thickness, height, nr, nt, nz, 
-      T0 = 0.0):
+      T0 = 0.0, page = False):
     """ Initialize the tube
     """
     self.r = outer_radius
@@ -333,6 +343,7 @@ class Tube:
     self.pressure_bc = None
 
     self.T0 = T0
+    self.page = page
 
   def copy_results(self, other):
     """ Copy the results fields from one tube to another
@@ -342,6 +353,14 @@ class Tube:
     """
     self.results = other.results
     self.quadrature_results = other.quadrature_results
+
+  def set_paging(self, page):
+    """ Set the value of the page parameter
+      
+      Parameters:
+        page:       if true store results on disk
+    """
+    self.page = page
 
   @property
   def ndim(self):
@@ -519,8 +538,19 @@ class Tube:
         name (str): parameter set name
         data (np.array): actual results data
     """
-    self._check_rdim(data)
-    self.results[name] = data
+    self._check_rdim(data.shape)
+    self.results[name] = self._setup_memmap(name + "_node", data.shape)
+    self.results[name][:] = data[:]
+
+  def add_blank_results(self, name, shape):
+    """ Add a blank node point result field
+
+      Args:
+        name (str): parameter set name
+        shape (tuple): required shape
+    """
+    self._check_rdim(shape)
+    self.results[name] = self._setup_memmap(name + "_node", shape)
 
   def add_quadrature_results(self, name, data):
     """ Add a result at the quadrature points
@@ -531,28 +561,52 @@ class Tube:
     """
     if data.shape[0] != self.ntime:
       raise ValueError("Quadrature data must have time axis first!")
-    self.quadrature_results[name] = data
+    self.quadrature_results[name] = self._setup_memmap(name + "_quad", data.shape)
+    self.quadrature_results[name][:] = data[:]
 
-  def _check_rdim(self, data):
+  def add_blank_quadrature_results(self, name, shape):
+    """ Add a blank quadrature point result field
+
+      Args:
+        name (str): parameter set name
+        shape (tuple): required shape
+    """
+    if shape[0] != self.ntime:
+      raise ValueError("Quadrature data must have time axis first!")
+    self.quadrature_results[name] = self._setup_memmap(name + "_quad", shape)
+
+  def _setup_memmap(self, name, shape):
+    """ Map array to disk if required
+      
+      Args:
+        name:   field name
+        shape:  required shape
+    """
+    if self.page:
+      return np.memmap(name + ".dat", dtype = np.float64, mode = 'w+', shape = shape)
+    else:
+      return np.zeros(shape)
+
+  def _check_rdim(self, shape):
     """ Verify the dimensions of a results array
 
       Make sure the results array aligns with the correct dimension for the
       abstraction
 
       Args:
-        data (np.array): data array
+        shape (tuple): input shape
 
       Raises:
         ValueError: If the data array shape is not correct for the problem dimensions
     """
     if self.abstraction == "3D":
-      if data.shape != (self.ntime, self.nr, self.nt, self.nz):
+      if shape != (self.ntime, self.nr, self.nt, self.nz):
         raise ValueError("Data array shape must equal ntime x nr x nt x nz!")
     elif self.abstraction == "2D":
-      if data.shape != (self.ntime, self.nr, self.nt):
+      if shape != (self.ntime, self.nr, self.nt):
         raise ValueError("Data array shape must equal ntime x nr x nt!")
     elif self.abstraction == "1D":
-      if data.shape != (self.ntime, self.nr):
+      if shape != (self.ntime, self.nr):
         raise ValueError("Data array shape must equal ntime x nr!")
     else:
       raise ValueError("Internal error: unknown abstraction type %s" % 
