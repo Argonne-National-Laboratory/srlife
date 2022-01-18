@@ -712,11 +712,13 @@ class PythonSolver:
     if self.ndim == 1:
       # 1D axisymmetric is different than 2D/3D cartesian
       self.internal = LinearForm(lambda v, w: 
-          v[1][0][0] * w['radial'] - v[0][0] * w['radial'] / w.x[0] + v[0][0] * w['hoop'] / w.x[0])
+          (v.grad[0][0] * w['radial']
+           - v.value[0] * w['radial'] / w.x[0]
+           + v.value[0] * w['hoop'] / w.x[0]))
       self.jac = BilinearForm(lambda u, v, w:
-        v[1][0][0] * w['Crr'] * u[1][0][0] + v[1][0][0] * w['Crt'] * u[0][0] / w.x[0]
-        - v[0][0] * (w['Crr'] * u[1][0][0] + w['Crt'] * u[0][0] / w.x[0]) / w.x[0]
-        + v[0][0] * (w['Ctr'] * u[1][0][0] + w['Ctt'] * u[0][0] / w.x[0]) / w.x[0])
+        v.grad[0][0] * w['Crr'] * u.grad[0][0] + v.grad[0][0] * w['Crt'] * u.value[0] / w.x[0]
+        - v.value[0] * (w['Crr'] * u.grad[0][0] + w['Crt'] * u.value[0] / w.x[0]) / w.x[0]
+        + v.value[0] * (w['Ctr'] * u.grad[0][0] + w['Ctt'] * u.value[0] / w.x[0]) / w.x[0])
     else:
       self.internal = LinearForm(lambda v, w: 
           helpers.ddot(helpers.sym_grad(v),w['stress']))
@@ -826,7 +828,7 @@ class PythonSolver:
     #pylint: disable=no-value-for-parameter, invalid-unary-operand-type
     if self.state_np1.ndim == 1:
       dx = self.state_np1.basis.interpolate(self.state_np1.mesh.p[0]
-          )[0][0] * self.state_np1.basis.dx * 2.0 * np.pi
+          ).value[0] * self.state_np1.basis.dx * 2.0 * np.pi
     else:
       dx = self.state_np1.basis.dx
 
@@ -1005,7 +1007,7 @@ class PythonSolver:
     """
     U = self.state_np1.basis.interpolate(D)
 
-    E = np.zeros((3,3) + U[0][0].shape)
+    E = np.zeros((3,3) + U.value[0].shape)
 
     E[:self.ndim,:self.ndim] = helpers.sym_grad(U)
     if self.ndim == 1:
