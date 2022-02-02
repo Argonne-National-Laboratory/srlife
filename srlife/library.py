@@ -112,4 +112,3 @@ def get_type(filename):
     Report if this is a metallic or ceramic material
   """
   return ET.parse(filename).getroot().attrib["type"]
-

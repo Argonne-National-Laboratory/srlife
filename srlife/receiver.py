@@ -1,3 +1,4 @@
+#pylint: disable=too-many-lines
 """
   This module define the data structures used as input and output to the analysis module.
 
@@ -441,7 +442,6 @@ class Tube:
     """
     r = np.linspace(self.r-self.t, self.r, self.nr)
     t = np.linspace(0, 2*np.pi, self.nt+1)
-    z = np.linspace(0, self.h, self.nz)
     theta = np.diff(t)
     
     a = np.outer(2*r[:-1], np.sin(theta/2))

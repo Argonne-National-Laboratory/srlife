@@ -629,6 +629,7 @@ class CeramicMaterial:
   Supply
     1) Weibull strength as a function of temperature
     2) Weibull modulus as a function of temperature
+    3) c_bar mode mixity parameter
     ... expand later for time-dependent properties
   """
   def __init__(self, *args, **kwargs):
@@ -657,14 +658,16 @@ class StandardCeramicMaterial:
 
     1) Weibull strength depends on temperature
     2) Weibull modulus is constant
+    3) Constant c_bar parameter
   """
-  def __init__(self, temperatures, strengths, modulus, *args, **kwargs):
+  def __init__(self, temperatures, strengths, modulus, c_bar, *args, **kwargs):
     super().__init__(*args, **kwargs)
 
     self.s0 = inter.interp1d(temperatures, strengths)
     self.temperatures = temperatures
     self.strengths = strengths
     self.m = modulus
+    self.C = c_bar
 
   def strength(self, T):
     """
@@ -681,6 +684,15 @@ class StandardCeramicMaterial:
     else:
       return self.m * np.ones(T.shape)
 
+  def c_bar(self, T):
+    """
+      Mode mixity parameter as a function of temperature
+    """
+    if np.isscalar(T):
+      return self.C
+    else:
+      return self.C * np.ones(T.shape)
+
   @classmethod
   def load(cls, node):
     """
@@ -690,14 +702,16 @@ class StandardCeramicMaterial:
         node:    node with model 
     """
     strength = node.find("strength")
+    c_bar = node.find("c_bar")
     temps = strength.find("temperatures")
     svals = strength.find("strengths")
     m = node.find("modulus")
-   
+
     return StandardCeramicMaterial(
         np.array(list(map(float, temps.text.strip().split()))),
         np.array(list(map(float, svals.text.strip().split()))),
-        float(m.text))
+        float(m.text),
+        float(c_bar.text))
 
   def save(self, fname, modelname):
     """
@@ -714,6 +728,9 @@ class StandardCeramicMaterial:
 
     m = ET.SubElement(base, "modulus")
     m.text = str(self.m)
-   
+
+    c_bar = ET.SubElement(base, "c_bar")
+    c_bar.text = str(self.C)
+
     tree = ET.ElementTree(element = root)
     tree.write(fname)

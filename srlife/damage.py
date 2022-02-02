@@ -1,3 +1,4 @@
+#pylint: disable=no-member
 """
   Module with methods for calculating creep-fatigue damage given 
   completely-solved tube results and damage material properties
@@ -73,13 +74,22 @@ class WeibullFailureModel:
     # Return the sums as a function of time
     return np.sum(inc_prob, axis = 1)
 
+  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
+    """
+      Calculate the element log reliability
+
+      Parameters:
+        mandel_stress:  element stresses in Mandel convention
+        temperatures:   element temperatures
+        volumes:        element volumes
+        material:       material model  object with required data
+    """
+    raise NotImplementedError("Method is pure virtual in base class")
+
 class PIAModel(WeibullFailureModel):
   """
     Principal of independent action failure model
   """
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-
   def calculate_principal_stress(self, stress):
     """
       Calculate the principal stresses given the Mandel vector
@@ -102,6 +112,7 @@ class PIAModel(WeibullFailureModel):
         mandel_stress:  element stresses in Mandel convention
         temperatures:   element temperatures
         volumes:        element volumes
+        material:       material model  object with required data
     """
     pstress = self.calculate_principal_stress(mandel_stress)
 
