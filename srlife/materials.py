@@ -424,7 +424,7 @@ class PiecewiseLinearFluidMaterial(FluidMaterial):
 
 class StructuralMaterial:
   """
-  Properties for structural material
+  Properties for structural metallic material
 
   Supply
     1) cycles to failure as a function of temperature and strain range
@@ -620,3 +620,117 @@ def destring_array(string):
     Make an array from a space separated string
   """
   return np.array(list(map(float, string.split(" "))))
+
+
+class CeramicMaterial:
+  """
+  Properties for structural ceramic material
+
+  Supply
+    1) Weibull strength as a function of temperature
+    2) Weibull modulus as a function of temperature
+    3) c_bar mode mixity parameter
+    ... expand later for time-dependent properties
+  """
+  def __init__(self, *args, **kwargs):
+    pass
+
+  @classmethod
+  def load(cls, fname, model):
+    """
+      Load a Ceramic material from a file 
+
+      Parameters:
+        fname:       file name to load from
+        material:    model name
+    """
+    tag, typ = find_name(fname, model)
+
+    if typ == "StandardModel":
+      return StandardCeramicMaterial.load(tag)
+    else:
+      raise ValueError("Unknown ceramic model type %s in damage data!" 
+          % typ)
+
+class StandardCeramicMaterial:
+  """
+    Ceramic material where:
+
+    1) Weibull strength depends on temperature
+    2) Weibull modulus is constant
+    3) Constant c_bar parameter
+  """
+  def __init__(self, temperatures, strengths, modulus, c_bar, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+
+    self.s0 = inter.interp1d(temperatures, strengths)
+    self.temperatures = temperatures
+    self.strengths = strengths
+    self.m = modulus
+    self.C = c_bar
+
+  def strength(self, T):
+    """
+      Weibull strength as a function of temperature
+    """
+    return self.s0(T)
+
+  def modulus(self, T):
+    """
+      Weibull modulus as a function of temperature
+    """
+    if np.isscalar(T):
+      return self.m
+    else:
+      return self.m * np.ones(T.shape)
+
+  def c_bar(self, T):
+    """
+      Mode mixity parameter as a function of temperature
+    """
+    if np.isscalar(T):
+      return self.C
+    else:
+      return self.C * np.ones(T.shape)
+
+  @classmethod
+  def load(cls, node):
+    """
+      Load a Ceramic material from a file 
+
+      Parameters:
+        node:    node with model 
+    """
+    strength = node.find("strength")
+    c_bar = node.find("c_bar")
+    temps = strength.find("temperatures")
+    svals = strength.find("strengths")
+    m = node.find("modulus")
+
+    return StandardCeramicMaterial(
+        np.array(list(map(float, temps.text.strip().split()))),
+        np.array(list(map(float, svals.text.strip().split()))),
+        float(m.text),
+        float(c_bar.text))
+
+  def save(self, fname, modelname):
+    """
+      Save to a particular file under a particular model name
+    """
+    root = ET.Element('models')
+    
+    base = ET.SubElement(root, modelname, {"type": "StandardModel"})
+    strength = ET.SubElement(base, "strength")
+    temps = ET.SubElement(strength, "temperatures")
+    temps.text = " ".join(map(str, self.temperatures))
+    svals = ET.SubElement(strength, "strengths")
+    svals.text = " ".join(map(str, self.strengths))
+
+    m = ET.SubElement(base, "modulus")
+    m.text = str(self.m)
+
+    c_bar = ET.SubElement(base, "c_bar")
+    c_bar.text = str(self.C)
+
+    tree = ET.ElementTree(element = root)
+    tree.write(fname)

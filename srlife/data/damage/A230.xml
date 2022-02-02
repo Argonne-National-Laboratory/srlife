@@ -1,6 +1,6 @@
 <!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
 <!-- A230 creep-fatigue data are not available and therefore A617 damage envelope is used-->
-<models>
+<models type="metallic">
   <base>
     <averageRupture>
       <C>11.280485218827486</C>

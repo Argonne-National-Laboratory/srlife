@@ -1,12 +1,130 @@
+#pylint: disable=no-member
 """
   Module with methods for calculating creep-fatigue damage given 
   completely-solved tube results and damage material properties
 """
 
 import numpy as np
+import numpy.linalg as la
 import scipy.optimize as opt
 
 import multiprocess
+
+class WeibullFailureModel:
+  """
+    Parent class for time independent Weibull models
+  """
+  def __init__(self, pset, *args, **kwargs):
+    pass
+
+  def determine_life(self, receiver, material, nthreads = 1, 
+      decorator = lambda x, n: x):
+    """
+      Determine the life of the receiver by calculating individual 
+      material point damage and finding the minimum of all points.
+
+      Parameters:
+        receiver        fully-solved receiver object
+        material        material model ot use
+
+      Additional Parameters:
+        nthreads        number of threads
+        decorator       progress bar
+    """
+    with multiprocess.Pool(nthreads) as p:
+      p_tube = list(decorator(
+        p.imap(lambda x: self.tube_log_reliability(x, material, receiver), receiver.tubes),
+        receiver.ntubes))
+    
+    p_tube = np.array(p_tube)
+
+    # Tube reliability is the minimum of all the time steps
+    tube = np.min(p_tube, axis = 1)
+
+    # Overall reliability is the minimum of the sum
+    overall = np.min(np.sum(p_tube, axis = 0))
+    
+    # Convert back from log-prob as we go
+    return {"tube_reliability": np.exp(tube), "overall_reliability": np.exp(overall)}
+
+  
+  def tube_log_reliability(self, tube, material, receiver):
+    """
+      Calculate the log reliability of a single tube
+    """
+    volumes = tube.element_volumes()
+
+    stresses = np.transpose(np.mean(np.stack((
+      tube.quadrature_results['stress_xx'],
+      tube.quadrature_results['stress_yy'],
+      tube.quadrature_results['stress_zz'],
+      tube.quadrature_results['stress_yz'],
+      tube.quadrature_results['stress_xz'],
+      tube.quadrature_results['stress_xy'])), axis = -1), axes = (1,2,0))
+
+    temperatures = np.mean(tube.quadrature_results['temperature'], axis = -1)
+
+    # Do it this way so we can vectorize
+    inc_prob = self.calculate_element_log_reliability(stresses, temperatures, volumes, material)
+
+    # Add as an element field
+    tube.add_quadrature_results("log_reliability", 
+        np.transpose(np.stack((inc_prob,inc_prob)), axes = (1,2,0)))
+
+    # Return the sums as a function of time
+    return np.sum(inc_prob, axis = 1)
+
+  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
+    """
+      Calculate the element log reliability
+
+      Parameters:
+        mandel_stress:  element stresses in Mandel convention
+        temperatures:   element temperatures
+        volumes:        element volumes
+        material:       material model  object with required data
+    """
+    raise NotImplementedError("Method is pure virtual in base class")
+
+class PIAModel(WeibullFailureModel):
+  """
+    Principal of independent action failure model
+  """
+  def calculate_principal_stress(self, stress):
+    """
+      Calculate the principal stresses given the Mandel vector
+    """
+    tensor = np.zeros(stress.shape[:2] + (3,3))
+    inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]
+    mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]
+
+    for i,(grp, m) in enumerate(zip(inds, mults)):
+      for a,b in grp:
+        tensor[...,a,b] = stress[...,i] / m
+
+    return la.eigvalsh(tensor)
+
+  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
+    """
+      Calculate the element log reliability
+
+      Parameters:
+        mandel_stress:  element stresses in Mandel convention
+        temperatures:   element temperatures
+        volumes:        element volumes
+        material:       material model  object with required data
+    """
+    pstress = self.calculate_principal_stress(mandel_stress)
+
+    # Only tension
+    pstress[pstress<0] = 0
+
+    svals = material.strength(temperatures)
+    mvals = material.modulus(temperatures)
+    
+    kvals = svals**(-mvals)
+    
+    return -kvals * np.sum(pstress**mvals[...,None], axis = -1) * volumes
 
 class DamageCalculator:
   """

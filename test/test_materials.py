@@ -168,3 +168,49 @@ class TestStructuralMaterial(unittest.TestCase):
       self.assertFalse(self.structmat.inside_envelope(self.cfinteraction_pname,self.false_inside_envelope[0],self.false_inside_envelope[1]))
       with self.assertRaises(ValueError):
           self.structmat.inside_envelope(self.cfinteraction_pname,self.error_inside_envelope[0],self.error_inside_envelope[1])
+
+class TestStandardCeramicMaterial(unittest.TestCase):
+  def setUp(self):
+    self.Ts = np.array([25.0,800.0,1000.0,1200.0,1400.0,1500.0])
+    self.s0s = np.array([507.0,467.0,528.0,570.0,746.0,461.0])
+    self.m = 10.7
+    self.c_bar = 1.5
+
+    self.mat = materials.StandardCeramicMaterial(self.Ts, self.s0s, self.m,
+        self.c_bar)
+
+  def test_strength(self):
+    ifn = inter.interp1d(self.Ts, self.s0s)
+    T = 1099.1
+
+    a = self.mat.strength(T)
+    b = ifn(T)
+
+    self.assertAlmostEqual(a,b)
+
+  def test_m(self):
+    T = 1099.1
+
+    a = self.mat.modulus(T)
+    b = self.m
+
+    self.assertAlmostEqual(a,b)
+
+  def test_c_bar(self):
+    T = 1099.1
+
+    a = self.mat.c_bar(T)
+    b = self.c_bar
+
+    self.assertAlmostEqual(a, b)
+
+  def test_store_receover(self):
+    tfile = tempfile.mktemp()
+    self.mat.save(tfile, "blah")
+    test = materials.CeramicMaterial.load(tfile, "blah")
+
+    self.assertTrue(np.allclose(test.temperatures, self.Ts))
+    self.assertTrue(np.allclose(test.strengths, self.s0s))
+
+    self.assertTrue(np.isclose(test.m, self.m))
+    self.assertTrue(np.isclose(test.C, self.c_bar))

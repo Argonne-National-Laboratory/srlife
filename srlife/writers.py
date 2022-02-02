@@ -20,6 +20,27 @@ class VTKWriter:
     self.tube = tube
     self.fname = fname
 
+  def make_vtk_object(self):
+    """
+      Actually make the vtk object without the results
+    """
+    R, T, Z = self.tube.mesh
+
+    X = R * np.cos(T)
+    Y = R * np.sin(T)
+
+    grid = vtk.vtkUnstructuredGrid()
+    points = vtk.vtkPoints()
+
+    for x,y,z in zip(X.flatten(), Y.flatten(), Z.flatten()):
+      points.InsertNextPoint(x,y,z)
+
+    grid.SetPoints(points)
+
+    self._set_grid(grid)
+
+    return grid
+
   def write(self):
     """
       Actually write the tube object to a vtk file using a

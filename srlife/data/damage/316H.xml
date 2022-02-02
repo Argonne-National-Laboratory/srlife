@@ -1,5 +1,5 @@
 <!-- Units are MPa (stress), mm/mm (strain range), Kelvin (T), hr (rupturetime) -->
-<models>
+<models type="metallic">
   <base>
     <averageRupture>
       <C>17.1605307989459</C>
