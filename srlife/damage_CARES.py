@@ -21,7 +21,7 @@ class WeibullFailureModel:
     """
       Calculate the principal stresses given the Mandel vector
     """
-    tensor = np.zeros(stress.shape[:2] + (3,3)) #[:1] when no time steps involved
+    tensor = np.zeros(stress.shape[:1] + (3,3))      #[:2] when Time steps involved                             #stress.shape[:1] when no time steps involved stress.shape[:2] when times steps involved
     inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]  # indices where (0,0) => (1,1)
     mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]                 # multiplicative factors
 
@@ -135,7 +135,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
   """
   def __init__(self, pset, *args, **kwargs):
     super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
+    # defining limits and number of segments for angles
     self.alphai = pset.get_default("alphai",0)
     self.alphaf = pset.get_default("alphaf",np.pi)
     self.betai = pset.get_default("betai",0)
@@ -162,14 +162,14 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     # Principal stresses
     pstress = self.calculate_principal_stress(mandel_stress)
 
-    # Normal stress
+    # Normal stresses
     sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + pstress[...,2,None,None]*(n**2)
 
     # Area integral
     integral = (((sigma_n**mvals[...,None,None]).real)*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
-    flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
+    flat = integral.reshape(integral.shape[:1] + (-1,))  #[:2] when Time steps involved
 
     # Average stress
     return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
@@ -193,7 +193,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals, self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)    #setting default values for nalpha and nbeta here overides its previous values
     kvals = svals**(-mvals)
     kpvals = (2*mvals + 1)*kvals
-    
+
     return -kpvals*(avg_nstress)*volumes
 
 class DamageCalculator:
