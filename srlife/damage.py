@@ -133,6 +133,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
   """
     Assigning default values for nalpha and nbeta
   """
+
   def __init__(self, pset, *args, **kwargs):
     super().__init__(pset, *args, **kwargs)
     # limits and number of segments for angles
@@ -166,7 +167,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + pstress[...,2,None,None]*(n**2)
 
     # Area integral
-    integral = (((sigma_n**mvals[...,None,None]).real)*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+    with np.errstate(invalid='ignore'):
+        integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
@@ -193,7 +195,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals, self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)    #setting default values for nalpha and nbeta here overides its previous values
     kvals = svals**(-mvals)
     kpvals = (2*mvals + 1)*kvals
-    
+
     return -kpvals*(avg_nstress)*volumes
 
 class DamageCalculator:

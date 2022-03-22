@@ -166,7 +166,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + pstress[...,2,None,None]*(n**2)
 
     # Area integral
-    integral = (((sigma_n**mvals[...,None,None]).real)*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+    with np.errstate(invalid='ignore'):
+        integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:1] + (-1,))  #[:2] when Time steps involved
