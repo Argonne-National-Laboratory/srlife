@@ -10,7 +10,7 @@ from srlife import materials, damage_CARES, solverparams
 class TestPIAModel(unittest.TestCase):
   def setUp(self):
 
-    with open('ptsupport_p_1pt241_wo_block2.csv',newline='') as csvfile:
+    with open('/home/pchaugule/packages/srlife/test/basesupport_p_1pt241.csv',newline='') as csvfile:
         sigma_xx = []
         sigma_yy = []
         sigma_zz = []
@@ -74,8 +74,6 @@ class TestPIAModel(unittest.TestCase):
     k = self.s0**(-self.m)
 
     mod_stress = self.stress
-    print(self.stress.shape)
-    print(self.volumes.shape)
     mod_stress[mod_stress<0] = 0
 
     # should = -k  * np.sum(mod_stress**self.m, axis = -1) * self.volumes
@@ -100,7 +98,7 @@ class TestPIAModel(unittest.TestCase):
 class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
   def setUp(self):
 
-    with open('ptsupport_p_1pt241_wo_block2.csv',newline='') as csvfile:
+    with open('/home/pchaugule/packages/srlife/test/basesupport_p_1pt241.csv',newline='') as csvfile:
         sigma_xx = []
         sigma_yy = []
         sigma_zz = []
