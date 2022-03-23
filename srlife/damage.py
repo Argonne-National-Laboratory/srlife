@@ -154,8 +154,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     np.linspace(betai,betaf,self.nbeta,endpoint=False),indexing='ij')
 
     # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1);
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1);
+    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
+    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
 
     # Direction cosines
     l = np.cos(A)
@@ -166,11 +166,12 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     pstress = self.calculate_principal_stress(mandel_stress)
 
     # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + pstress[...,2,None,None]*(n**2)
+    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
+    pstress[...,2,None,None]*(n**2)
 
     # Area integral
     with np.errstate(invalid='ignore'):
-         integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+        integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
