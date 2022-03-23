@@ -149,7 +149,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
         Calculate the average normal tensile stresses given the pricipal stresses
     """
     # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(alphai,alphaf,self.nalpha), np.linspace(betai,betaf,self.nbeta,endpoint=False),indexing='ij')
+    A,B = np.meshgrid(np.linspace(alphai,alphaf,self.nalpha),
+    np.linspace(betai,betaf,self.nbeta,endpoint=False),indexing='ij')
 
     # Increment of angles to be used in evaluating integral
     dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1);
@@ -192,7 +193,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     mvals = material.modulus(temperatures)
 
     # Average normal tensile stress raied to exponent mv
-    avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals, self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)    #setting default values for nalpha and nbeta here overides its previous values
+    avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals,
+    self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)    #setting default values for nalpha and nbeta here overides its previous values
     kvals = svals**(-mvals)
     kpvals = (2*mvals + 1)*kvals
 
