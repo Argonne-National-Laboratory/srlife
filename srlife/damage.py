@@ -137,21 +137,16 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
   def __init__(self, pset, *args, **kwargs):
     super().__init__(pset, *args, **kwargs)
     # limits and number of segments for angles
-    self.alphai = pset.get_default("alphai",0)
-    self.alphaf = pset.get_default("alphaf",np.pi)
-    self.betai = pset.get_default("betai",0)
-    self.betaf = pset.get_default("betaf",2*np.pi)
     self.nalpha = pset.get_default("nalpha",21)
     self.nbeta = pset.get_default("nbeta", 31)
 
-  def calculate_avg_normal_stress(self, mandel_stress, mvals, alphai, alphaf,
-  betai, betaf, nalpha, nbeta):
+  def calculate_avg_normal_stress(self, mandel_stress, mvals, nalpha, nbeta):
     """
         Calculate the average normal tensile stresses given the pricipal stresses
     """
     # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(alphai,alphaf,self.nalpha),
-    np.linspace(betai,betaf,self.nbeta,endpoint=False),indexing='ij')
+    A,B = np.meshgrid(np.linspace(0,np.pi,self.nalpha),
+    np.linspace(0,2*np.pi,self.nbeta,endpoint=False),indexing='ij')
 
     # Increment of angles to be used in evaluating integral
     dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
@@ -171,7 +166,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
 
     # Area integral
     with np.errstate(invalid='ignore'):
-        integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+     integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
@@ -195,9 +190,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     mvals = material.modulus(temperatures)
 
     # Average normal tensile stress raied to exponent mv
-    avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals,
-    #setting default values for nalpha and nbeta here overides its previous values
-    self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)
+    avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals, self.nalpha, self.nbeta)
+
     kvals = svals**(-mvals)
     kpvals = (2*mvals + 1)*kvals
 
