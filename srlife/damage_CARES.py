@@ -7,7 +7,6 @@
 import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
-import warnings
 import multiprocess
 
 class WeibullFailureModel:
@@ -152,8 +151,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     np.linspace(betai,betaf,self.nbeta,endpoint=False),indexing='ij')
 
     # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1);
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1);
+    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
+    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
 
     # Direction cosines
     l = np.cos(A)

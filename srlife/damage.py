@@ -7,7 +7,6 @@
 import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
-import warnings
 import multiprocess
 
 class WeibullFailureModel:
@@ -22,8 +21,10 @@ class WeibullFailureModel:
       Calculate the principal stresses given the Mandel vector
     """
     tensor = np.zeros(stress.shape[:2] + (3,3)) #[:1] when no time steps involved
-    inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]  # indices where (0,0) => (1,1)
-    mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]                 # multiplicative factors
+    # indices where (0,0) => (1,1)
+    inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]
+    # multiplicative factors
+    mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]
 
     for i,(grp, m) in enumerate(zip(inds, mults)):
       for a,b in grp:
@@ -129,8 +130,7 @@ class PIAModel(WeibullFailureModel):
 class WeibullNormalTensileAveragingModel(WeibullFailureModel):
   """
     Weibull normal tensile average failure model
-  """
-  """
+
     Assigning default values for nalpha and nbeta
   """
 
@@ -144,7 +144,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
     self.nalpha = pset.get_default("nalpha",21)
     self.nbeta = pset.get_default("nbeta", 31)
 
-  def calculate_avg_normal_stress(self, mandel_stress, mvals, alphai, alphaf, betai, betaf, nalpha, nbeta):
+  def calculate_avg_normal_stress(self, mandel_stress, mvals, alphai, alphaf,
+  betai, betaf, nalpha, nbeta):
     """
         Calculate the average normal tensile stresses given the pricipal stresses
     """
@@ -169,7 +170,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
 
     # Area integral
     with np.errstate(invalid='ignore'):
-        integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+         integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
@@ -194,7 +195,8 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
 
     # Average normal tensile stress raied to exponent mv
     avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals,
-    self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)    #setting default values for nalpha and nbeta here overides its previous values
+    #setting default values for nalpha and nbeta here overides its previous values
+    self.alphai, self.alphaf, self.betai, self.betaf, self.nalpha, self.nbeta)
     kvals = svals**(-mvals)
     kpvals = (2*mvals + 1)*kvals
 
