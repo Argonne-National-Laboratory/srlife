@@ -12,11 +12,11 @@ if __name__ == "__main__":
   model = receiver.Receiver.load("model.hdf5")
 
   # Choose the material models
-  fluid_mat = library.load_fluid("salt_SiC", "base") # Generic chloride salt  model
-  # Base 316H thermal and damage models, a simplified deformation model to
+  fluid_mat = library.load_fluid("salt", "base") # Generic chloride salt  model
+  # Base 316H thermal and damage models, a simplified deformation model to 
   # cut down on the run time of the 3D analysis
-  thermal_mat, deformation_mat, damage_mat = library.load_material("SiC", "base",
-      "elastic_model", "base")
+  thermal_mat, deformation_mat, damage_mat = library.load_material("316H", "base", 
+      "base", "base")
 
   # Cut down on run time for now by making the tube analyses 1D
   # This is not recommended for actual design evaluation
@@ -41,7 +41,7 @@ if __name__ == "__main__":
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  damage_model = damage.WeibullNormalTensileAveragingModel(params['damage'])
+  damage_model = damage.TimeFractionInteractionDamage(params['damage'])
 
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat,
@@ -49,15 +49,9 @@ if __name__ == "__main__":
       system_solver, damage_model, pset = params)
 
   # Actually solve for life
-  #life = solver.solve_life()
-  reliability = solver.solve_life()
-  print("Individual tube reliabilities:")
-  print(reliability["tube_reliability"])
-
-  print("Overall structure reliability:")
-  print(reliability["overall_reliability"])
-  #print("Best estimate life: %f daily cycles" % life)
-
+  life = solver.solve_life()
+  print("Best estimate life: %f daily cycles" % life)
+  
   # Save the tube data out for additional visualization
   for pi, panel in model.panels.items():
     for ti, tube in panel.tubes.items():
