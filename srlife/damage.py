@@ -171,8 +171,10 @@ class WNTSAModel(WeibullFailureModel):
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
 
+    # Ignoring Nan values
+    with np.errstate(invalid='ignore'):
     # Average stress
-    return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
+      return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
 
 
   def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
