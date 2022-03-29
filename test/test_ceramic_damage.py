@@ -42,7 +42,7 @@ class TestPIAModel(unittest.TestCase):
 
     self.assertTrue(np.allclose(should, actual))
 
-class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
+class TestWNTSAModel(unittest.TestCase):
   def setUp(self):
 
     # self.stress = np.array([[-15,6,-20,0,0,0]])
@@ -69,7 +69,7 @@ class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
         np.array([0,1000.0]), np.array([self.s0,self.s0]),
         self.m, self.c_bar)
 
-    self.model = damage.WeibullNormalTensileAveragingModel(solverparams.ParameterSet())
+    self.model = damage.WNTSAModel(solverparams.ParameterSet())
 
   def test_definition(self):
     k = self.s0**(-self.m)
