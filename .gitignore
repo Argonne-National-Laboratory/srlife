@@ -11,3 +11,4 @@ build/
 srlife.egg-info/
 dist/
 *.dat
+srlife/damage_CARES.py
