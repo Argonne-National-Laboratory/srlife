@@ -10,25 +10,43 @@ from srlife import materials, damage_CARES, solverparams
 class TestPIAModel(unittest.TestCase):
   def setUp(self):
 
-    data = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"basesupport_p_1pt241.csv"),
-    delimiter = ',', skiprows = 1, usecols=list(range(1,13)))
+    data1 = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"base_support_379.csv"),
+    delimiter = ',', skiprows = 1, usecols=list(range(1,9)))
 
-    sigma_xx = data[:,1]
-    sigma_yy = data[:,2]
-    sigma_zz = data[:,3]
-    sigma_yz = data[:,4]
-    sigma_xz = data[:,5]
-    sigma_xy = data[:,6]
-    self.cell_n = data[:,0]
-    self.volumes = data[:,-1]
+    p1 = 1.379;
+    p2 = 1.517;
+    pressure_factor = p2/p1;
 
+    sigma_xx = data1[:,4]*pressure_factor
+    sigma_yy = data1[:,6]*pressure_factor
+    sigma_zz = data1[:,7]*pressure_factor
+    #sigma_yz = data1[:,4]
+    sigma_xz = data1[:,5]*pressure_factor
+    #sigma_xy = data1[:,6]
+    self.cell_n = data1[:,0]
+
+    data2 = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"vol2.csv"),
+    delimiter = ',', skiprows = 1, usecols=list(range(1,5)))
+
+    angle = 45;
+    vol_factor = angle/360.0;
+
+    self.volumes = data2[:,-1]*vol_factor
     row_count = len(sigma_xx)
 
-    self.stress = np.array([[sigma_xx[0],sigma_yy[0],sigma_zz[0],np.sqrt(2)*sigma_yz[0],
-        np.sqrt(2)*sigma_xz[0],np.sqrt(2)*sigma_xy[0]]])
+    self.stress = np.array([[sigma_xx[0],sigma_yy[0],sigma_zz[0],0.0,
+        np.sqrt(2)*sigma_xz[0],0.0]])
+
     for i in range(1,row_count):
         self.stress = np.append(self.stress,np.array([[sigma_xx[i],sigma_yy[i],sigma_zz[i],
-        np.sqrt(2)*sigma_yz[i],np.sqrt(2)*sigma_xz[i],np.sqrt(2)*sigma_xy[i]]]),axis=0)
+        0.0,np.sqrt(2)*sigma_xz[i],0.0]]),axis=0)
+
+    # self.stress = np.array([[sigma_xx[0],sigma_yy[0],sigma_zz[0],np.sqrt(2)*sigma_yz[0],
+    #     np.sqrt(2)*sigma_xz[0],np.sqrt(2)*sigma_xy[0]]])
+    # for i in range(1,row_count):
+    #     self.stress = np.append(self.stress,np.array([[sigma_xx[i],sigma_yy[i],sigma_zz[i],
+    #     np.sqrt(2)*sigma_yz[i],np.sqrt(2)*sigma_xz[i],np.sqrt(2)*sigma_xy[i]]]),axis=0)
+
 
     self.temperatures = np.ones(row_count)
 
@@ -58,10 +76,10 @@ class TestPIAModel(unittest.TestCase):
     Pf_PIA = 1 - np.exp(actual)
     Pf_PIA_max = np.max(Pf_PIA)
 
-    plt.plot(R_PIA,label = 'Reliabilities')
-    plt.plot(Pf_PIA, label = 'Probabilities')
-    plt.legend()
-    plt.show()
+    # plt.plot(R_PIA,label = 'Reliabilities')
+    # plt.plot(Pf_PIA, label = 'Probabilities')
+    # plt.legend()
+    # plt.show()
 
     print("Pf_PIA_max = ",Pf_PIA_max)
 
@@ -73,28 +91,40 @@ class TestPIAModel(unittest.TestCase):
 
     #self.assertTrue(np.allclose(should, actual))
 
-class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
+class TestWNTSAModel(unittest.TestCase):
   def setUp(self):
 
-    data = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"basesupport_p_1pt241.csv"),
-    delimiter = ',', skiprows = 1, usecols=list(range(1,13)))
+    data1 = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"base_support_379.csv"),
+    delimiter = ',', skiprows = 1, usecols=list(range(1,9)))
 
-    sigma_xx = data[:,1]
-    sigma_yy = data[:,2]
-    sigma_zz = data[:,3]
-    sigma_yz = data[:,4]
-    sigma_xz = data[:,5]
-    sigma_xy = data[:,6]
-    self.cell_n = data[:,0]
-    self.volumes = data[:,-1]
+    p1 = 1.379;
+    p2 = 1.517;
+    pressure_factor = p2/p1;
 
+    sigma_xx = data1[:,4]*pressure_factor
+    sigma_yy = data1[:,6]*pressure_factor
+    sigma_zz = data1[:,7]*pressure_factor
+    #sigma_yz = data1[:,4]
+    sigma_xz = data1[:,5]*pressure_factor
+    #sigma_xy = data1[:,6]
+    self.cell_n = data1[:,0]
+
+    data2 = np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)),"vol2.csv"),
+    delimiter = ',', skiprows = 1, usecols=list(range(1,5)))
+
+    angle = 45;
+    vol_factor = angle/360.0;
+
+    self.volumes = data2[:,-1]*vol_factor
     row_count = len(sigma_xx)
 
-    self.stress = np.array([[sigma_xx[0],sigma_yy[0],sigma_zz[0],np.sqrt(2)*sigma_yz[0],
-        np.sqrt(2)*sigma_xz[0],np.sqrt(2)*sigma_xy[0]]])
+    self.stress = np.array([[sigma_xx[0],sigma_yy[0],sigma_zz[0],0.0,
+        np.sqrt(2)*sigma_xz[0],0.0]])
+
     for i in range(1,row_count):
         self.stress = np.append(self.stress,np.array([[sigma_xx[i],sigma_yy[i],sigma_zz[i],
-        np.sqrt(2)*sigma_yz[i],np.sqrt(2)*sigma_xz[i],np.sqrt(2)*sigma_xy[i]]]),axis=0)
+        0.0,np.sqrt(2)*sigma_xz[i],0.0]]),axis=0)
+
 
     self.temperatures = np.ones(row_count)
 
@@ -106,7 +136,7 @@ class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
         np.array([0,1000.0]), np.array([self.s0,self.s0]),
         self.m, self.c_bar)
 
-    self.model = damage_CARES.WeibullNormalTensileAveragingModel(solverparams.ParameterSet())
+    self.model = damage_CARES.WNTSAModel(solverparams.ParameterSet())
 
   def test_definition(self):
     k = self.s0**(-self.m)
@@ -123,10 +153,11 @@ class TestWeibullNormalTensileAveragingModel(unittest.TestCase):
     R_weibull = np.exp(actual)
     Pf_weibull = 1 - np.exp(actual)
     Pf_weibull_max = np.max(Pf_weibull)
-    plt.plot(R_weibull,label = 'Reliabilities')
-    plt.plot(Pf_weibull, label = 'Probabilities')
-    plt.legend()
-    plt.show()
+
+    # plt.plot(R_weibull,label = 'Reliabilities')
+    # plt.plot(Pf_weibull, label = 'Probabilities')
+    # plt.legend()
+    # plt.show()
 
     print("Pf_weibull_max = ",Pf_weibull_max)
 

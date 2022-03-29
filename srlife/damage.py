@@ -127,7 +127,7 @@ class PIAModel(WeibullFailureModel):
 
     return -kvals * np.sum(pstress**mvals[...,None], axis = -1) * volumes
 
-class WeibullNormalTensileAveragingModel(WeibullFailureModel):
+class WNTSAModel(WeibullFailureModel):
   """
     Weibull normal tensile average failure model
 
@@ -166,7 +166,7 @@ class WeibullNormalTensileAveragingModel(WeibullFailureModel):
 
     # Area integral
     with np.errstate(invalid='ignore'):
-     integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+      integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
