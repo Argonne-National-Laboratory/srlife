@@ -45,16 +45,14 @@ class TestPIAModel(unittest.TestCase):
 class TestWNTSAModel(unittest.TestCase):
   def setUp(self):
 
-    # self.stress = np.array([[-15,6,-20,0,0,0]])
-    # self.temperatures = np.array([10.0])
-    # self.volumes = np.array([0.1])
-
+    # Case 1: Testing for a stress tensor with only principal components, over two time steps
     self.stress = np.array([[
      [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
      [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
     self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
     self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
+    # Case 2: Testing for an entirely random stress tensor over two time steps
     # self.stress = np.array([[
     #   [14.0,-17.0,4.3,105,2,15.5],[105.0,205.0,5.0,0,0,0],[-1.5,-25.0,-5.6,17.1,-6.6,-301]],
     #   [[54.0,-7.0,0.3,10,200,15.5],[-100.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-3000]]])
@@ -76,8 +74,10 @@ class TestWNTSAModel(unittest.TestCase):
     kp = (2*self.m + 1)*k
 
     # Hand - calculated
-    #self.avg_stress = np.array([2.18744]) # calculated from mathematica
+    # Case 1
     self.avg_stress = np.array([[65.9504,0],[14.7457,2.18744]]) # calculated from mathematica
+
+    # Case 2
     #self.avg_stress = np.array([[ 29.96868454,72.5,87.11816342], [ 69.25896754,  47.5,        885.60234269]]) # calculated from mathematica
 
     should = -kp * (self.avg_stress**self.m) * self.volumes

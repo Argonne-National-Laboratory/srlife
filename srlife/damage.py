@@ -164,14 +164,14 @@ class WNTSAModel(WeibullFailureModel):
     sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
     pstress[...,2,None,None]*(n**2)
 
-    # Area integral
+    # Area integral; suppressing warning given when negative numbers are raised to rational numbers
     with np.errstate(invalid='ignore'):
       integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
 
-    # Ignoring Nan values
+    # Suppressing warning to ignoring initial NaN values
     with np.errstate(invalid='ignore'):
     # Average stress
       return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
