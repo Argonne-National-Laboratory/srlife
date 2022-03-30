@@ -28,6 +28,8 @@ def sample_parameters():
   params["system"]["atol"] = 1.0e-8
   params["system"]["miter"] = 50
   params["system"]["verbose"] = False
+  # If true store results on disk (slower, but less memory)
+  params["page_results"] = True
 
   return params
 
@@ -42,10 +44,10 @@ if __name__ == "__main__":
   lengthlocs = 1000*np.array([16,5,16,5,16,5]) #max temp loc#np.array([16,5,16,5,16,5])
   # lengthlocs = 1000*np.array([5,16,16,16,16,16]) #max flux loc #np.array([5,16,16,16,16,16])
   # Cut down on run time for now
-  #for (panel,lengthloc) in zip(model.panels.values(),lengthlocs):
-    #for tube in panel.tubes.values():
-      #tube.make_2D(lengthloc)
-      #tube.make_1D(lengthloc, 0.0)
+  #for (panel,lengthloc) in zip(model.panels.values(),lengthlocs):   # uncomment for 1D analyses
+    #for tube in panel.tubes.values():                               # uncomment for 1D analyses
+    #    tube.make_2D(lengthloc)                                       # uncomment for 2D analyses
+    #    tube.make_1D(lengthloc, 0.0)                                  # uncomment for 1D analyses
 
   # Load some customized solution parameters
   # These are all optional, all the solvers have default values
@@ -53,19 +55,18 @@ if __name__ == "__main__":
   params = sample_parameters()
 
   # Define the thermal solver to use in solving the heat transfer problem
-  thermal_solver = thermal.FiniteDifferenceImplicitThermalSolver(
-      params["thermal"])
+  thermal_solver = thermal.FiniteDifferenceImplicitThermalSolver(params["thermal"])
   # Define the structural solver to use in solving the individual tube problems
   structural_solver = structural.PythonTubeSolver(params["structural"])
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
   damage_model = damage.PIAModel(params["damage"])
+  #damage_model = damage.WeibullNormalTensileAveragingModel(params["damage"])
 
   # Load the materials
   fluid = library.load_fluid("salt_SiC", "base")
-  thermal, deformation, damage = library.load_material("SiC", "base",
-      "elastic_model", "base")
+  thermal, deformation, damage = library.load_material("SiC", "base","elastic_model", "base")
 
   # The solution manager
   solver = managers.SolutionManager(model, thermal_solver, thermal, fluid,
@@ -84,3 +85,6 @@ if __name__ == "__main__":
   print("Overall structure reliability:")
   print(reliability["overall_reliability"])
 
+  for pi, panel in model.panels.items():
+    for ti, tube in panel.tubes.items():
+      tube.write_vtk("tube-%s-%s" % (pi, ti))

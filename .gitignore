@@ -11,3 +11,5 @@ build/
 srlife.egg-info/
 dist/
 *.dat
+srlife/damage_CARES.py
+examples/CARES-manual/test_ceramic_damage_CARES.py

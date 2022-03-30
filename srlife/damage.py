@@ -1,13 +1,12 @@
 #pylint: disable=no-member
 """
-  Module with methods for calculating creep-fatigue damage given 
+  Module with methods for calculating creep-fatigue damage given
   completely-solved tube results and damage material properties
 """
 
 import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
-
 import multiprocess
 
 class WeibullFailureModel:
@@ -17,10 +16,26 @@ class WeibullFailureModel:
   def __init__(self, pset, *args, **kwargs):
     pass
 
-  def determine_life(self, receiver, material, nthreads = 1, 
+  def calculate_principal_stress(self, stress):
+    """
+      Calculate the principal stresses given the Mandel vector
+    """
+    tensor = np.zeros(stress.shape[:2] + (3,3)) #[:1] when no time steps involved
+    # indices where (0,0) => (1,1)
+    inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]
+    # multiplicative factors
+    mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]
+
+    for i,(grp, m) in enumerate(zip(inds, mults)):
+      for a,b in grp:
+        tensor[...,a,b] = stress[...,i] / m
+
+    return la.eigvalsh(tensor)
+
+  def determine_life(self, receiver, material, nthreads = 1,
       decorator = lambda x, n: x):
     """
-      Determine the life of the receiver by calculating individual 
+      Determine the life of the receiver by calculating individual
       material point damage and finding the minimum of all points.
 
       Parameters:
@@ -35,7 +50,7 @@ class WeibullFailureModel:
       p_tube = list(decorator(
         p.imap(lambda x: self.tube_log_reliability(x, material, receiver), receiver.tubes),
         receiver.ntubes))
-    
+
     p_tube = np.array(p_tube)
 
     # Tube reliability is the minimum of all the time steps
@@ -43,11 +58,11 @@ class WeibullFailureModel:
 
     # Overall reliability is the minimum of the sum
     overall = np.min(np.sum(p_tube, axis = 0))
-    
+
     # Convert back from log-prob as we go
     return {"tube_reliability": np.exp(tube), "overall_reliability": np.exp(overall)}
 
-  
+
   def tube_log_reliability(self, tube, material, receiver):
     """
       Calculate the log reliability of a single tube
@@ -68,7 +83,7 @@ class WeibullFailureModel:
     inc_prob = self.calculate_element_log_reliability(stresses, temperatures, volumes, material)
 
     # Add as an element field
-    tube.add_quadrature_results("log_reliability", 
+    tube.add_quadrature_results("log_reliability",
         np.transpose(np.stack((inc_prob,inc_prob)), axes = (1,2,0)))
 
     # Return the sums as a function of time
@@ -90,19 +105,6 @@ class PIAModel(WeibullFailureModel):
   """
     Principal of independent action failure model
   """
-  def calculate_principal_stress(self, stress):
-    """
-      Calculate the principal stresses given the Mandel vector
-    """
-    tensor = np.zeros(stress.shape[:2] + (3,3))
-    inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]
-    mults = [1.0, 1.0, 1.0, np.sqrt(2), np.sqrt(2), np.sqrt(2)]
-
-    for i,(grp, m) in enumerate(zip(inds, mults)):
-      for a,b in grp:
-        tensor[...,a,b] = stress[...,i] / m
-
-    return la.eigvalsh(tensor)
 
   def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
     """
@@ -121,10 +123,81 @@ class PIAModel(WeibullFailureModel):
 
     svals = material.strength(temperatures)
     mvals = material.modulus(temperatures)
-    
     kvals = svals**(-mvals)
-    
+
     return -kvals * np.sum(pstress**mvals[...,None], axis = -1) * volumes
+
+class WNTSAModel(WeibullFailureModel):
+  """
+    Weibull normal tensile average failure model
+
+    Assigning default values for nalpha and nbeta
+  """
+
+  def __init__(self, pset, *args, **kwargs):
+    super().__init__(pset, *args, **kwargs)
+    # limits and number of segments for angles
+    self.nalpha = pset.get_default("nalpha",21)
+    self.nbeta = pset.get_default("nbeta", 31)
+
+  def calculate_avg_normal_stress(self, mandel_stress, mvals, nalpha, nbeta):
+    """
+        Calculate the average normal tensile stresses given the pricipal stresses
+    """
+    # Mesh grid of the vectorized angle values
+    A,B = np.meshgrid(np.linspace(0,np.pi,self.nalpha),
+    np.linspace(0,2*np.pi,self.nbeta,endpoint=False),indexing='ij')
+
+    # Increment of angles to be used in evaluating integral
+    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
+    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
+
+    # Direction cosines
+    l = np.cos(A)
+    m = np.sin(A)*np.cos(B)
+    n = np.sin(A)*np.sin(B)
+
+    # Principal stresses
+    pstress = self.calculate_principal_stress(mandel_stress)
+
+    # Normal stress
+    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
+    pstress[...,2,None,None]*(n**2)
+
+    # Area integral; suppressing warning given when negative numbers are raised to rational numbers
+    with np.errstate(invalid='ignore'):
+      integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+
+    # Flatten the last axis and calculate the mean of the positive values along that axis
+    flat = integral.reshape(integral.shape[:2] + (-1,))  #[:1] when no time steps involved
+
+    # Suppressing warning to ignoring initial NaN values
+    with np.errstate(invalid='ignore'):
+    # Average stress
+      return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
+
+
+  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
+    """
+      Calculate the element log reliability
+
+      Parameters:
+        mandel_stress:  element stresses in Mandel convention
+        temperatures:   element temperatures
+        volumes:        element volumes
+        material:       material model  object with required data
+    """
+
+    svals = material.strength(temperatures)
+    mvals = material.modulus(temperatures)
+
+    # Average normal tensile stress raied to exponent mv
+    avg_nstress = self.calculate_avg_normal_stress(mandel_stress, mvals, self.nalpha, self.nbeta)
+
+    kvals = svals**(-mvals)
+    kpvals = (2*mvals + 1)*kvals
+
+    return -kpvals*(avg_nstress)*volumes
 
 class DamageCalculator:
   """
@@ -147,13 +220,13 @@ class DamageCalculator:
         tube:       fully-populated tube object
         material:   damage material
         receiver:   receiver object (for metadata)
-    """ 
+    """
     raise NotImplementedError("Superclass not implemented")
 
-  def determine_life(self, receiver, material, nthreads = 1, 
+  def determine_life(self, receiver, material, nthreads = 1,
       decorator = lambda x, n: x):
     """
-      Determine the life of the receiver by calculating individual 
+      Determine the life of the receiver by calculating individual
       material point damage and finding the minimum of all points.
 
       Parameters:
@@ -217,14 +290,14 @@ class TimeFractionInteractionDamage(DamageCalculator):
 
     # Material point cycle fatigue damage
     Df = self.fatigue_damage(tube, material, receiver)
-    
+
     nc = receiver.days
 
     # This is going to be expensive, but I don't see much way around it
-    return min(self.calculate_max_cycles(self.make_extrapolate(c), 
-      self.make_extrapolate(f), material) for c,f in 
+    return min(self.calculate_max_cycles(self.make_extrapolate(c),
+      self.make_extrapolate(f), material) for c,f in
         zip(Dc.reshape(nc,-1).T, Df.reshape(nc,-1).T))
-  
+
   def calculate_max_cycles(self, Dc, Df, material, rep_min = 1, rep_max = 1e6):
     """
       Actually calculate the maximum number of repetitions for a single point
@@ -254,17 +327,17 @@ class TimeFractionInteractionDamage(DamageCalculator):
     """
     # For now just use the von Mises effective stress
     vm = np.sqrt((
-        (tube.quadrature_results['stress_xx'] - tube.quadrature_results['stress_yy'])**2.0 + 
-        (tube.quadrature_results['stress_yy'] - tube.quadrature_results['stress_zz'])**2.0 + 
-        (tube.quadrature_results['stress_zz'] - tube.quadrature_results['stress_xx'])**2.0 + 
-        6.0 * (tube.quadrature_results['stress_xy']**2.0 + 
-          tube.quadrature_results['stress_yz']**2.0 + 
+        (tube.quadrature_results['stress_xx'] - tube.quadrature_results['stress_yy'])**2.0 +
+        (tube.quadrature_results['stress_yy'] - tube.quadrature_results['stress_zz'])**2.0 +
+        (tube.quadrature_results['stress_zz'] - tube.quadrature_results['stress_xx'])**2.0 +
+        6.0 * (tube.quadrature_results['stress_xy']**2.0 +
+          tube.quadrature_results['stress_yz']**2.0 +
           tube.quadrature_results['stress_xz']**2.0))/2.0)
 
     tR = material.time_to_rupture("averageRupture", tube.quadrature_results['temperature'], vm)
     dts = np.diff(tube.times)
     time_dmg = dts[:,np.newaxis,np.newaxis]/tR[1:]
-    
+
     # Break out to cycle damage
     inds = self.id_cycles(tube, receiver)
 
@@ -289,10 +362,10 @@ class TimeFractionInteractionDamage(DamageCalculator):
     strain_names = ['mechanical_strain_xx', 'mechanical_strain_yy', 'mechanical_strain_zz',
         'mechanical_strain_yz', 'mechanical_strain_xz', 'mechanical_strain_xy']
     strain_factors = [1.0,1.0,1.0,2.0, 2.0, 2.0]
-    
+
     cycle_dmg =  np.array([self.cycle_fatigue(np.array([ef*tube.quadrature_results[en][
-      inds[i]:inds[i+1]] for 
-      en,ef in zip(strain_names, strain_factors)]), 
+      inds[i]:inds[i+1]] for
+      en,ef in zip(strain_names, strain_factors)]),
       tube.quadrature_results['temperature'][inds[i]:inds[i+1]], material)
       for i in range(receiver.days)])
 
@@ -313,7 +386,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
           " number of days and cycle period!")
 
     return inds
-  
+
   def cycle_fatigue(self, strains, temperatures, material, nu = 0.5):
     """
       Calculate fatigue damage for a single cycle
@@ -329,7 +402,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
     pt_temps = np.max(temperatures, axis = 0)
 
     pt_eranges = np.zeros(pt_temps.shape)
-    
+
     nt = strains.shape[1]
     for i in range(nt):
       for j in range(nt):
@@ -339,7 +412,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
             + 3.0/2.0 * (de[3]**2.0 + de[4]**2.0 + de[5]**2.0)
             )
         pt_eranges = np.maximum(pt_eranges, eq)
-    
+
     dmg = np.zeros(pt_eranges.shape)
     # pylint: disable=not-an-iterable
     for ind in np.ndindex(*dmg.shape):
