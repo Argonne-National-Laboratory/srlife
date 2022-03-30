@@ -30,9 +30,7 @@ class TestPIAModel(unittest.TestCase):
     mod_stress[mod_stress<0] = 0
 
     should = -k  * np.sum(mod_stress**self.m, axis = -1) * self.volumes
-    Pf = 1-np.exp(np.sum(should))
-
-
+    
     actual = self.model.calculate_element_log_reliability(self.stress,
         self.temperatures, self.volumes, self.material)
 
