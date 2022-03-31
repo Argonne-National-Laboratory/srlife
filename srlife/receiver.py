@@ -94,8 +94,8 @@ class Receiver:
       Args:
         page (bool):    if true, page results to disk
     """
-    for tube in self.tubes:
-      tube.set_paging(page)
+    for i,tube in enumerate(self.tubes):
+      tube.set_paging(page, i)
 
   @property
   def ntubes(self):
@@ -345,6 +345,7 @@ class Tube:
 
     self.T0 = T0
     self.page = page
+    self.page_prefix = ""
 
   def copy_results(self, other):
     """ Copy the results fields from one tube to another
@@ -355,13 +356,15 @@ class Tube:
     self.results = other.results
     self.quadrature_results = other.quadrature_results
 
-  def set_paging(self, page):
+  def set_paging(self, page, i):
     """ Set the value of the page parameter
       
       Parameters:
         page:       if true store results on disk
+        i:          tube number to use
     """
     self.page = page
+    self.page_prefix = str(i) + "_"
 
   @property
   def ndim(self):
@@ -645,7 +648,8 @@ class Tube:
         shape:  required shape
     """
     if self.page:
-      return np.memmap(name + ".dat", dtype = np.float64, mode = 'w+', shape = shape)
+      return np.memmap(self.page_prefix + name + ".dat", dtype = np.float64, 
+              mode = 'w+', shape = shape)
     else:
       return np.zeros(shape)
 
