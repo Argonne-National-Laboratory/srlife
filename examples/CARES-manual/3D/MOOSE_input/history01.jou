@@ -1,2 +1,0 @@
-#!python
-cubit.cmd('open "/home/pchaugule/packages/srlife/examples/CARES-manual/3D/MOOSE_input/model.cub5"')

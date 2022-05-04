@@ -46,8 +46,8 @@ if __name__ == "__main__":
   # Cut down on run time for now
   for (panel,lengthloc) in zip(model.panels.values(),lengthlocs):   # uncomment for 1D analyses
     for tube in panel.tubes.values():                               # uncomment for 1D analyses
-       tube.make_2D(lengthloc)                                       # uncomment for 2D analyses
-    #   tube.make_1D(lengthloc, 0.0)                                  # uncomment for 1D analyses
+    #   tube.make_2D(lengthloc)                                       # uncomment for 2D analyses
+       tube.make_1D(lengthloc, 0.0)                                  # uncomment for 1D analyses
 
   # Load some customized solution parameters
   # These are all optional, all the solvers have default values
@@ -61,8 +61,14 @@ if __name__ == "__main__":
   # Define the system solver to use in solving the coupled structural system
   system_solver = system.SpringSystemSolver(params["system"])
   # Damage model to use in calculating life
-  #damage_model = damage.PIAModel(params["damage"])
-  damage_model = damage.WNTSAModel(params["damage"])
+  # damage_model = damage.PIAModel(params["damage"])
+  # damage_model = damage.WNTSAModel(params["damage"])
+  # damage_model = damage.MTSModelGriffithFlaw(params["damage"])
+  # damage_model = damage.MTSModelPennyShapedFlaw(params["damage"])
+  # damage_model = damage.CSEModelGriffithFlaw(params["damage"])
+  # damage_model = damage.CSEModelPennyShapedFlaw(params["damage"])
+  # damage_model = damage.SMMModelGriffithFlaw(params["damage"])
+  damage_model = damage.SMMModelPennyShapedFlaw(params["damage"])
 
   # Load the materials
   fluid = library.load_fluid("salt_SiC", "base")

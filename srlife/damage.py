@@ -20,16 +20,10 @@ class WeibullFailureModel:
     """
       Calculate the principal stresses given the Mandel vector
     """
-    print("stress.ndim = ",stress.ndim)
-    print("stress.shape (initial) = ",stress.shape)
     if stress.ndim == 2:
-        tensor = np.zeros(stress.shape[:1] + (3,3)) #[:1] when no time steps involved
-        print("stress.shape = ",stress.shape)
-        print("tensor.shape = ",tensor.shape)
+      tensor = np.zeros(stress.shape[:1] + (3,3)) #[:1] when no time steps involved
     elif stress.ndim == 3:
-        tensor = np.zeros(stress.shape[:2] + (3,3)) #[:2] when time steps involved
-        print("stress.shape = ",stress.shape)
-        print("tensor.shape = ",tensor.shape)
+      tensor = np.zeros(stress.shape[:2] + (3,3)) #[:2] when time steps involved
     # indices where (0,0) => (1,1)
     inds = [[(0,0)],[(1,1)],[(2,2)],[(1,2),(2,1)],[(0,2),(2,0)],[(0,1),(1,0)]]
     # multiplicative factors
@@ -39,7 +33,6 @@ class WeibullFailureModel:
     for i,(grp, m) in enumerate(zip(inds, mults)):
       for a,b in grp:
         tensor[...,a,b] = stress[...,i] / m
-
 
     return la.eigvalsh(tensor)
 
@@ -100,6 +93,129 @@ class WeibullFailureModel:
     # Return the sums as a function of time
     return np.sum(inc_prob, axis = 1)
 
+class CrackShapeIndependent(WeibullFailureModel):
+  """
+    Parent class for crack shape dependent models
+  """
+  def __init__(self, temperatures, material):
+    """
+      Input the material parameters
+      Create a mesh grid for integration
+      Evaluate direction cosines using the mesh grid
+      only for PIA and WNTSA models which are crack shape independent
+    """
+    WeibullFailureModel.__init__(temperatures, material)
+    self.temperatures = temperatures
+    self.material = material
+    # Material parameters
+    self.svals = self.material.strength(temperatures)
+    self.mvals = self.material.modulus(temperatures)
+    self.kvals = self.svals**(-self.mvals)
+    self.kpvals = (2*self.mvals + 1)*self.kvals
+
+    # limits and number of segments for angles
+    self.nalpha = 21
+    self.nbeta = 31
+
+    # Mesh grid of the vectorized angle values
+    self.A,self.B = np.meshgrid(np.linspace(0,np.pi,self.nalpha),
+    np.linspace(0,2*np.pi,self.nbeta,endpoint=False),indexing='ij')
+
+    # Increment of angles to be used in evaluating integral
+    self.dalpha = (self.A[-1,-1] - self.A[0,0])/(self.nalpha - 1)
+    self.dbeta = (self.B[-1,-1] - self.B[0,0])/(self.nbeta - 1)
+
+    # Direction cosines
+    self.l = np.cos(self.A)
+    self.m = np.sin(self.A)*np.cos(self.B)
+    self.n = np.sin(self.A)*np.sin(self.B)
+
+class CrackShapeDependent(WeibullFailureModel):
+  """
+    Parent class for crack shape dependent models
+  """
+  def __init__(self, temperatures, material, mandel_stress):
+    """
+      Input the material parameters
+      Create a mesh grid for integration
+      Evaluate direction cosines using the mesh grid
+      for fracture based models which are crack shape dependent
+    """
+    WeibullFailureModel.__init__(temperatures, material, mandel_stress)
+    self.temperatures = temperatures
+    self.material = material
+    self.mandel_stress = mandel_stress
+    # Material parameters
+    self.svals = self.material.strength(temperatures)
+    self.mvals = self.material.modulus(temperatures)
+    self.kvals = self.svals**(-self.mvals)
+    self.kpvals = (2*self.mvals + 1)*self.kvals
+
+    # limits and number of segments for angles
+    self.nalpha = 121
+    self.nbeta = 121
+    self.nu = 0.25  # from literature
+    self.cbar = 0.8 # from literature
+
+    # Mesh grid of the vectorized angle values
+    self.A,self.B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
+    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
+
+    # Increment of angles to be used in evaluating integral
+    self.dalpha = (self.A[-1,-1] - self.A[0,0])/(self.nalpha - 1)
+    self.dbeta = (self.B[-1,-1] - self.B[0,0])/(self.nbeta - 1)
+
+    # Direction cosines
+    self.l = np.cos(self.A)
+    self.m = np.sin(self.A)*np.cos(self.B)
+    self.n = np.sin(self.A)*np.sin(self.B)
+
+    # Principal stresses
+    pstress = self.calculate_principal_stress(mandel_stress)
+
+    # Total stress
+    self.sigma = np.sqrt(((pstress[...,0,None,None]*self.l)**2) + \
+    ((pstress[...,1,None,None]*self.m)**2) + ((pstress[...,2,None,None]*self.n)**2))
+
+    # Normal stress
+    self.sigma_n = pstress[...,0,None,None]*(self.l**2) + pstress[...,1,None,None]*(self.m**2) + \
+    pstress[...,2,None,None]*(self.n**2)
+
+    # Shear stress
+    with np.errstate(invalid='ignore'):
+      self.tau = np.sqrt(self.sigma**2 - self.sigma_n**2)
+
+  def calculate_flattened_eq_stress(self,mandel_stress,temperatures,material,A,dalpha,dbeta):
+    """
+        Calculate the integral of equivalent stresses given the material
+        properties and integration limits
+    """
+    self.mvals = self.material.modulus(temperatures)
+
+    # Principal stresses
+    pstress = self.calculate_principal_stress(mandel_stress)
+
+    # Projected equivalent stresses
+    sigma_e = self.calculate_eq_stress(mandel_stress, self.mvals, self.temperatures, self.material)
+
+    # Suppressing warning given when negative numbers are raised to rational numbers
+    with np.errstate(invalid='ignore'):
+    # Defining area integral element wise
+      integral = (sigma_e**self.mvals[...,None,None])*np.sin(self.A)*self.dalpha*self.dbeta
+
+    # Flatten the last axis and calculate the mean of the positive values along that axis
+    if pstress.ndim == 2:
+      flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
+    elif pstress.ndim == 3:
+      flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
+
+    # Suppressing warning to ignoring initial NaN values
+    with np.errstate(invalid='ignore'):
+    # Summing over area integral elements ignoring NaN values
+      flat = np.nansum(flat,axis = -1)
+
+    return flat
+
   def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
     """
       Calculate the element log reliability
@@ -110,9 +226,14 @@ class WeibullFailureModel:
         volumes:        element volumes
         material:       material model  object with required data
     """
-    raise NotImplementedError("Method is pure virtual in base class")
 
-class PIAModel(WeibullFailureModel):
+    # Equivalent stress raied to exponent mv
+    flat = (self.calculate_flattened_eq_stress(mandel_stress, self.temperatures,
+    self.material, self.A, self.dalpha, self.dbeta))**(1/self.mvals)
+
+    return -(2*self.kpvals/np.pi)*(flat**self.mvals)*volumes
+
+class PIAModel(CrackShapeIndependent):
   """
     Principal of independent action failure model
   """
@@ -132,58 +253,37 @@ class PIAModel(WeibullFailureModel):
     # Only tension
     pstress[pstress<0] = 0
 
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-    kvals = svals**(-mvals)
+    return -self.kvals * np.sum(pstress**self.mvals[...,None], axis = -1) * volumes
 
-    return -kvals * np.sum(pstress**mvals[...,None], axis = -1) * volumes
-
-class WNTSAModel(WeibullFailureModel):
+class WNTSAModel(CrackShapeIndependent):
   """
     Weibull normal tensile average failure model
 
     Assigning default values for nalpha and nbeta
   """
 
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 31)
-
-  def calculate_avg_normal_stress(self, mandel_stress, mvals, nalpha, nbeta):
+  def calculate_avg_normal_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the average normal tensile stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi,self.nalpha),
-    np.linspace(0,2*np.pi,self.nbeta,endpoint=False),indexing='ij')
-
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
 
     # Principal stresses
     pstress = self.calculate_principal_stress(mandel_stress)
 
     # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
+    sigma_n = pstress[...,0,None,None]*(self.l**2) + pstress[...,1,None,None]*(self.m**2) + \
+    pstress[...,2,None,None]*(self.n**2)
 
     # Area integral; suppressing warning given when negative numbers are raised to rational numbers
     with np.errstate(invalid='ignore'):
-      integral = ((sigma_n**mvals[...,None,None])*np.sin(A)*dalpha*dbeta)/(4*np.pi)
+      integral = ((sigma_n**self.mvals[...,None,None])*np.sin(self.A)* \
+      self.dalpha*self.dbeta)/(4*np.pi)
 
     # Flatten the last axis and calculate the mean of the positive values along that axis
     if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
+      flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
     elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
+      flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
 
     # Suppressing warning to ignoring initial NaN values
     with np.errstate(invalid='ignore'):
@@ -202,547 +302,106 @@ class WNTSAModel(WeibullFailureModel):
         material:       material model  object with required data
     """
 
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
     # Average normal tensile stress raied to exponent mv
-    avg_nstress = (self.calculate_avg_normal_stress(mandel_stress, mvals, self.nalpha, self.nbeta))**(1/mvals)
+    avg_nstress = (self.calculate_avg_normal_stress(mandel_stress, self.mvals, self.temperatures,
+    self.material))**(1/self.mvals)
 
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
+    return -self.kpvals*(avg_nstress**self.mvals)*volumes
 
-    return -kpvals*(avg_nstress**mvals)*volumes
-
-class MTSModel_GF(WeibullFailureModel):
+class MTSModelGriffithFlaw(CrackShapeDependent):
   """
     Maximum tensile stess failure model with a Griffith flaw
 
     Assigning default values for nalpha and nbeta
   """
-
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the equivalent stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
 
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    # if np.all(sigma > sigma_n):
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-    # else:
-      # tau = 0
-    # print(np.real(np.power(np.complex(-4),0.5)))
-
-    # Griffith flaw
     # Projected equivalent stress
-    sigma_e = 0.5*(sigma_n + np.sqrt((sigma_n**2) + (tau**2)))
+    sigma_e = 0.5*(self.sigma_n + np.sqrt((self.sigma_n**2) + (self.tau**2)))
 
-    # Suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-    # Defining area integral element wise
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
+    return sigma_e
 
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Summing over area integral elements ignoring NaN values
-      return np.nansum(flat,axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Equivalent stress raied to exponent mv
-    eq_stress = (self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta))**(1/mvals)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-
-    return -(2*kpvals/np.pi)*(eq_stress**mvals)*volumes
-
-class MTSModel_PSF(WeibullFailureModel):
+class MTSModelPennyShapedFlaw(CrackShapeDependent):
   """
     Maximum tensile stess failure model with a penny shaped flaw
 
     Assigning default values for nalpha and nbeta
   """
-
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-    self.nu = 0.25       # from litrature
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta, nu):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the average normal tensile stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
+    # Projected equivalent stress
+    sigma_e = 0.5*(self.sigma_n + np.sqrt((self.sigma_n**2) + ((self.tau/(1-(0.5*self.nu)))**2)))
 
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
+    return sigma_e
 
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-
-    # Penny-shaped flaw
-    # equivalent stress
-    sigma_e = 0.5*(sigma_n + np.sqrt((sigma_n**2) + ((tau/(1-(0.5*self.nu)))**2)))
-
-    # Area integral; suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
-
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Average stress
-      return np.nansum(np.where(flat >= 0.0,flat,np.nan),axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Average tensile stress raied to exponent mv
-    eq_stress = (self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta,self.nu))**(1/mvals)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-    return -(2*kpvals/np.pi)*(eq_stress**mvals)*volumes
-
-class CSEModel_GF(WeibullFailureModel):
+class CSEModelGriffithFlaw(CrackShapeDependent):
   """
     Coplanar strain energy failure model with a Griffith flaw
 
     Assigning default values for nalpha and nbeta
   """
-
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the equivalent stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
-
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-
-    # Griffith flaw
     # Projected equivalent stress
-    sigma_e = np.sqrt((sigma_n**2) + (tau**2))
+    sigma_e = np.sqrt((self.sigma_n**2) + (self.tau**2))
 
-    # Suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-    # Defining area integral element wise
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
+    return sigma_e
 
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Summing over area integral elements ignoring NaN values
-      return np.nansum(flat,axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Equivalent stress raied to exponent mv
-    eq_stress = self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-    return -(2*kpvals/np.pi)*(eq_stress)*volumes
-
-class CSEModel_PSF(WeibullFailureModel):
+class CSEModelPennyShapedFlaw(CrackShapeDependent):
   """
     Coplanar strain energy failure model with a penny shaped flaw
 
     Assigning default values for nalpha and nbeta
   """
 
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-    self.nu = 0.25       # from litrature
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta, nu):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the equivalent stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
-
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-
-    # Griffith flaw
     # Projected equivalent stress
-    sigma_e = np.sqrt((sigma_n**2) + (tau/(1-(0.5*self.nu)))**2)
+    sigma_e = np.sqrt((self.sigma_n**2) + (self.tau/(1-(0.5*self.nu)))**2)
 
-    # Suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-    # Defining area integral element wise
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
+    return sigma_e
 
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Summing over area integral elements ignoring NaN values
-      return np.nansum(flat,axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Equivalent stress raied to exponent mv
-    eq_stress = (self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta,self.nu))**(1/mvals)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-    return -(2*kpvals/np.pi)*(eq_stress**mvals)*volumes
-
-class SMMModel_GF(WeibullFailureModel):
+class SMMModelGriffithFlaw(CrackShapeDependent):
   """
     Shetty mixed-mod failure model with a Griffith flaw
 
     Assigning default values for nalpha and nbeta
   """
 
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-    self.cbar = 0.8                    # from literature
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the equivalent stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
-
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-
-    # Griffith flaw
     # Projected equivalent stress
-    sigma_e = 0.5*(sigma_n + np.sqrt((sigma_n**2) + ((2*tau/self.cbar)**2)))
+    sigma_e = 0.5*(self.sigma_n + np.sqrt((self.sigma_n**2) + ((2*self.tau/self.cbar)**2)))
 
-    # Suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-    # Defining area integral element wise
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
+    return sigma_e
 
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Summing over area integral elements ignoring NaN values
-      return np.nansum(flat,axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Equivalent stress raied to exponent mv
-    eq_stress = (self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta))**(1/mvals)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-    return -(2*kpvals/np.pi)*(eq_stress**mvals)*volumes
-
-class SMMModel_PSF(WeibullFailureModel):
+class SMMModelPennyShapedFlaw(CrackShapeDependent):
   """
     Shetty mixed mode failure model with a penny shaped flaw
 
     Assigning default values for nalpha and nbeta
   """
 
-  def __init__(self, pset, *args, **kwargs):
-    super().__init__(pset, *args, **kwargs)
-    # limits and number of segments for angles
-    self.nalpha = pset.get_default("nalpha",21)
-    self.nbeta = pset.get_default("nbeta", 21)
-    self.nu = 0.25       # from litrature
-    self.cbar = 0.8     # from literature
-
-  def calculate_eq_stress(self, mandel_stress, mvals, nalpha, nbeta, nu):
+  def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
     """
         Calculate the equivalent stresses given the pricipal stresses
     """
-    # Mesh grid of the vectorized angle values
-    A,B = np.meshgrid(np.linspace(0,np.pi/2,self.nalpha),
-    np.linspace(0,np.pi/2,self.nbeta),indexing='ij')
-
-    # Increment of angles to be used in evaluating integral
-    dalpha = (A[-1,-1] - A[0,0])/(self.nalpha - 1)
-    dbeta = (B[-1,-1] - B[0,0])/(self.nbeta - 1)
-
-    # Direction cosines
-    l = np.cos(A)
-    m = np.sin(A)*np.cos(B)
-    n = np.sin(A)*np.sin(B)
-
-    # Principal stresses
-    pstress = self.calculate_principal_stress(mandel_stress)
-
-    # Tota stress
-    sigma = np.sqrt(((pstress[...,0,None,None]*l)**2) + ((pstress[...,1,None,None]*m)**2) + \
-    ((pstress[...,2,None,None]*n)**2))
-
-    # Normal stress
-    sigma_n = pstress[...,0,None,None]*(l**2) + pstress[...,1,None,None]*(m**2) + \
-    pstress[...,2,None,None]*(n**2)
-
-    # Shear stress
-    with np.errstate(invalid='ignore'):
-      tau = np.sqrt(sigma**2 - sigma_n**2)
-
-    # Griffith flaw
     # Projected equivalent stress
-    sigma_e = 0.5*(sigma_n + np.sqrt((sigma_n**2) + ((4*tau/(self.cbar*(2-self.nu)))**2)))
+    sigma_e = 0.5*(self.sigma_n + np.sqrt((self.sigma_n**2) + \
+    ((4*self.tau/(self.cbar*(2-self.nu)))**2)))
 
-    # Suppressing warning given when negative numbers are raised to rational numbers
-    with np.errstate(invalid='ignore'):
-    # Defining area integral element wise
-      integral = (sigma_e**mvals[...,None,None])*np.sin(A)*dalpha*dbeta
-
-    # Flatten the last axis and calculate the mean of the positive values along that axis
-    if pstress.ndim == 2:
-        flat = integral.reshape(integral.shape[:1] + (-1,))  # when no time steps involved
-    elif pstress.ndim == 3:
-        flat = integral.reshape(integral.shape[:2] + (-1,))  # when time steps involved
-
-    # Suppressing warning to ignoring initial NaN values
-    with np.errstate(invalid='ignore'):
-    # Summing over area integral elements ignoring NaN values
-      return np.nansum(flat,axis = -1)
-
-
-  def calculate_element_log_reliability(self, mandel_stress, temperatures, volumes, material):
-    """
-      Calculate the element log reliability
-
-      Parameters:
-        mandel_stress:  element stresses in Mandel convention
-        temperatures:   element temperatures
-        volumes:        element volumes
-        material:       material model  object with required data
-    """
-
-    svals = material.strength(temperatures)
-    mvals = material.modulus(temperatures)
-
-    # Equivalent stress raied to exponent mv
-    eq_stress = (self.calculate_eq_stress(mandel_stress, mvals, self.nalpha, self.nbeta, self.nu))**(1/mvals)
-
-    kvals = svals**(-mvals)
-    kpvals = (2*mvals + 1)*kvals
-    return -(2*kpvals/np.pi)*(eq_stress**mvals)*volumes
+    return sigma_e
 
 class DamageCalculator:
   """
