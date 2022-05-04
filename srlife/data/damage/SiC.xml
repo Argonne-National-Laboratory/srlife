@@ -7,5 +7,6 @@
     </strength>
     <modulus>10.7</modulus>
     <c_bar>1.5</c_bar>
+    <nu>0.16</nu>
   </base>
 </models>

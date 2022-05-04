@@ -5,485 +5,506 @@ import numpy as np
 from srlife import materials, damage, solverparams
 
 class TestPIAModel(unittest.TestCase):
-  def setUp(self):
+    def setUp(self):
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        # Case 2: MUltiple stress tensors and 2 time steps
+        self.stress = np.array([[[100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+        [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    # Case 2: MUltiple stress tensors and 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[
+        # [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
+        # [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        self.model = damage.PIAModel(self.temperatures, self.material)
 
-    self.model = damage.PIAModel({})
+    def test_definition(self):
+        k = self.s0**(-self.m)
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
+        # mod_stress = self.stress
+        # mod_stress[mod_stress<0] = 0
 
-    # mod_stress = self.stress
-    # mod_stress[mod_stress<0] = 0
+        # Hand - calculated
+        # Case 1
+        # self.p_stress = np.array([[100,25,50]]) # calculated from mathematica
 
-    # Hand - calculated
-    # Case 1
-    # self.p_stress = np.array([[100,25,50]]) # calculated from mathematica
+        # Case 2
+        self.p_stress = np.array([[[25,50,100],[0,0,0]],
+        [[6,15,20],[0,0,6]]]) # calculated from mathematica
 
-    # Case 2
-    self.p_stress = np.array([[[25,50,100],[0,0,0]],[[6,15,20],[0,0,6]]]) # calculated from mathematica
+        # Case 3
+        # self.p_stress = np.array([[[0,13.3417,69.8812],[5,15,25]],[[0,0,200.577],
+        # [0,0,59.7854]],[[0,25,50],[0,0,1.1857]]]) # calculated from mathematica
 
-    # Case 3
-    # self.p_stress = np.array([[[0,13.3417,69.8812],[5,15,25]],[[0,0,200.577],[0,0,59.7854]],[[0,25,50],[0,0,1.1857]]]) # calculated from mathematica
+        should = -k  * np.sum(self.p_stress**self.m, axis = -1) * self.volumes
 
-    should = -k  * np.sum(self.p_stress**self.m, axis = -1) * self.volumes
+        actual = self.model.calculate_element_log_reliability(self.stress,
+            self.temperatures, self.volumes, self.material)
 
-    actual = self.model.calculate_element_log_reliability(self.stress,
-        self.temperatures, self.volumes, self.material)
+        # Evaluating Reliability
+        R_PIA = np.exp(np.sum(actual))
+        print("Reliability PIA = ",R_PIA)
 
-    # Evaluating Reliability
-    R_PIA = np.exp(np.sum(actual))
-    print("Reliability PIA = ",R_PIA)
+        # Evaluating Probability of Failure
+        Pf_PIA = 1 - np.exp(np.sum(actual))
+        print("Probability of failure PIA = ",Pf_PIA)
 
-    # Evaluating Probability of Failure
-    Pf_PIA = 1 - np.exp(np.sum(actual))
-    print("Probability of failure PIA = ",Pf_PIA)
-
-    self.assertTrue(np.allclose(should, actual))
+        self.assertTrue(np.allclose(should, actual))
 
 class TestWNTSAModel(unittest.TestCase):
-  def setUp(self):
-
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+    def setUp(self):
+
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
+
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[[100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+        [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],
+        # [[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        self.model = damage.WNTSAModel(self.temperatures, self.material)
 
-    self.model = damage.WNTSAModel(solverparams.ParameterSet())
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        # Hand-calculated
+        # Case 1
+        # self.avg_stress = np.array([[65.9504]]) # calculated from mathematica
+
+        # Case 2
+        self.avg_stress = np.array([[65.9504,0],
+        [14.7457,2.18744]]) # calculated from mathematica
+
+        # Case 3
+        # self.avg_stress = np.array([[35.4182, 16.9277], [97.8709, 31.9819],
+        # [30.4218, 0.229781]]) # calculated from mathematica
+
+        should = -kp * (self.avg_stress**self.m) * self.volumes
+
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
+
+        # Evaluating Reliability
+        R_weibull = np.exp(np.sum(actual))
+        print("Reliability weibull = ",R_weibull)
+
+        # Evaluating Probability of Failure
+        Pf_weibull = 1 - np.exp(np.sum(actual))
+        print("Probability of failure weibull = ",Pf_weibull)
+
+        self.assertTrue(np.allclose(should, actual))
+
+class TestMTSModelGriffithFlaw(unittest.TestCase):
+    def setUp(self):
+
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
+
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    # Hand - calculated
-    # Case 1
-    # self.avg_stress = np.array([[65.9504]]) # calculated from mathematica
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-    # Case 2
-    self.avg_stress = np.array([[65.9504,0],[14.7457,2.18744]]) # calculated from mathematica
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    # Case 3
-    # self.avg_stress = np.array([[35.4182, 16.9277], [97.8709, 31.9819], [30.4218, 0.229781]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    should = -kp * (self.avg_stress**self.m) * self.volumes
+        self.model = damage.MTSModelGriffithFlaw(self.temperatures, self.material, self.stress)
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    # Evaluating Reliability
-    R_weibull = np.exp(np.sum(actual))
-    print("Reliability weibull = ",R_weibull)
+        # Hand - calculated
+        # Case 1
+        # self.eq_stress = np.array([[77.7895]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_weibull = 1 - np.exp(np.sum(actual))
-    print("Probability of failure weibull = ",Pf_weibull)
+        # Case 2
+        self.eq_stress = np.array([[77.7895,1.89075],
+        [17.2038,4.2574]]) # calculated from mathematica
 
-    self.assertTrue(np.allclose(should, actual))
+        # Case 3
+        # self.eq_stress = np.array([[47.430277, 19.946982],[132.18159, 40.157049],
+        # [37.012046, 18.300173]]) # calculated from mathematica
 
-class TestMTSModel_GF(unittest.TestCase):
-  def setUp(self):
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
+
+        # Evaluating Reliability
+        R_MTS_GF = np.exp(np.sum(actual))
+        print("Reliability MTS GF = ",R_MTS_GF)
+
+        # Evaluating Probability of Failure
+        Pf_MTS_GF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure MTS GF = ",Pf_MTS_GF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        self.assertTrue(np.allclose(should, actual))
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+class TestMTSModelPennyShapedFlaw(unittest.TestCase):
+    def setUp(self):
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    self.model = damage.MTSModel_GF(solverparams.ParameterSet())
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
+        #self.nu = 0.3
 
-    # Hand - calculated
-    # Case 1
-    # self.eq_stress = np.array([[80.1197]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    # Case 2
-    self.eq_stress = np.array([[80.1197,1.91569],[17.6925,4.40511]]) # calculated from mathematica
+        self.model = damage.MTSModelPennyShapedFlaw(self.temperatures, self.material, self.stress)
 
-    # Case 3
-    # self.eq_stress = np.array([[49.1661, 20.5435],[137.242, 41.6465],[38.2424, 18.5759]]) # calculated from mathematica
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
+        # Hand - calculated
+        # Case 1
+        # self.eq_stress = np.array([[78.4648]]) # calculated from mathematica
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+        # Case 2
+        self.eq_stress = np.array([[78.464821, 2.3585169],
+        [17.301933, 4.7971274]]) # calculated from mathematica
 
-    # Evaluating Reliability
-    R_MTS_GF = np.exp(np.sum(actual))
-    print("Reliability MTS GF = ",R_MTS_GF)
+        # Case 3
+        # self.eq_stress = np.array([[49.595931, 20.115328],[138.39622, 41.172063],
+        #[37.656223, 22.5172]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_MTS_GF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure MTS GF = ",Pf_MTS_GF)
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    self.assertTrue(np.allclose(should, actual))
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
 
-class TestMTSModel_PSF(unittest.TestCase):
-  def setUp(self):
+        # Evaluating Reliability
+        R_MTS_PSF = np.exp(np.sum(actual))
+        print("Reliability MTS PSF = ",R_MTS_PSF)
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        # Evaluating Probability of Failure
+        Pf_MTS_PSF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure MTS PSF = ",Pf_MTS_PSF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        self.assertTrue(np.allclose(should, actual))
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+class TestCSEModelGriffithFlaw(unittest.TestCase):
+    def setUp(self):
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
-    #self.nu = 0.3
+        # Case 1: Single stress tensor over 1 time step
+        self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        self.temperatures = np.array([1.0])
+        self.volumes = np.array([0.1])
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    self.model = damage.MTSModel_PSF(solverparams.ParameterSet())
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    # Hand - calculated
-    # Case 1
-    # self.eq_stress = np.array([[80.7815]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    # Case 2
-    self.eq_stress = np.array([[80.7815,2.38915],[17.7883,4.94117]]) # calculated from mathematica
+        self.model = damage.CSEModelGriffithFlaw(self.temperatures, self.material, self.stress)
 
-    # Case 3
-    # self.eq_stress = np.array([[51.26391928,20.7078933],[143.27373523,42.63638728],[38.86744881,22.84607459]]) # calculated from mathematica
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
+        # Hand - calculated
+        # Case 1
+        # self.eq_stress = np.array([[80.168972]]) # calculated from mathematica
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+        # Case 2
+        self.eq_stress = np.array([[80.168972, 18.764062],
+        [17.54572, 17.504612]]) # calculated from mathematica
 
-    # Evaluating Reliability
-    R_MTS_PSF = np.exp(np.sum(actual))
-    print("Reliability MTS PSF = ",R_MTS_PSF)
+        # Case 3
+        # self.eq_stress = np.array([[74.122529, 20.54913],[207.22137, 44.87708],
+        # [39.892764, 156.49114]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_MTS_PSF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure MTS PSF = ",Pf_MTS_PSF)
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    self.assertTrue(np.allclose(should, actual))
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
 
-class TestCSEModel_GF(unittest.TestCase):
-  def setUp(self):
+        # Evaluating Reliability
+        R_CSE_GF = np.exp(np.sum(actual))
+        print("Reliability MTS GF = ",R_CSE_GF)
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        # Evaluating Probability of Failure
+        Pf_CSE_GF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure CSE GF = ",Pf_CSE_GF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        self.assertTrue(np.allclose(should, actual))
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+class TestCSEModelPennyShapedFlaw(unittest.TestCase):
+    def setUp(self):
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    self.model = damage.CSEModel_GF(solverparams.ParameterSet())
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    # Hand - calculated
-    # Case 1
-    # self.eq_stress = np.array([[82.452]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    # Case 2
-    self.eq_stress = np.array([[82.452,18.9726],[18.0262,17.7775]]) # calculated from mathematica
+        self.model = damage.CSEModelPennyShapedFlaw(self.temperatures, self.material, self.stress)
 
-    # Case 3
-    # self.eq_stress = np.array([[75.3826,21.1317],[210.846,46.2446],[41.0402,158.244]]) # calculated from mathematica
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
+        # Hand - calculated
+        # Case 1
+        #self.eq_stress = np.array([[81.584298]]) # calculated from mathematica
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+        # Case 2
+        self.eq_stress = np.array([[81.584298,19.415373],
+        [17.752073,18.267442]]) # calculated from mathematica
 
-    # Evaluating Reliability
-    R_CSE_GF = np.exp(np.sum(actual))
-    print("Reliability MTS GF = ",R_CSE_GF)
+        # Case 3
+        # self.eq_stress = np.array([[80.502237, 20.908868],[224.87259, 47.426973],
+        # [41.532897, 162.1895]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_CSE_GF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure CSE GF = ",Pf_CSE_GF)
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    self.assertTrue(np.allclose(should, actual))
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
 
-class TestCSEModel_PSF(unittest.TestCase):
-  def setUp(self):
+        # Evaluating Reliability
+        R_CSE_PSF = np.exp(np.sum(actual))
+        print("Reliability MTS GF = ",R_CSE_PSF)
 
-    # Case 1: Single stress tensor over 1 time step
-    self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    self.temperatures = np.array([1.0])
-    self.volumes = np.array([0.1])
+        # Evaluating Probability of Failure
+        Pf_CSE_PSF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure CSE PSF = ",Pf_CSE_PSF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    # self.stress = np.array([[
-    #  [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-    #  [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    # self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        self.assertTrue(np.allclose(should, actual))
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+class TestSMMModelGriffithFlaw(unittest.TestCase):
+    def setUp(self):
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    self.model = damage.CSEModel_PSF(solverparams.ParameterSet())
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    # Hand - calculated
-    # Case 1
-    self.eq_stress = np.array([[83.8427]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    # Case 2
-    # self.eq_stress = np.array([[83.8427,19.6321],[18.2279,18.5428]]) # calculated from mathematica
+        self.model = damage.SMMModelGriffithFlaw(self.temperatures, self.material, self.stress)
 
-    # Case 3
-    # self.eq_stress = np.array([[ 81.7748,21.484],[228.531,48.7533],[42.6446,164.011]]) # calculated from mathematica
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
+        # Hand - calculated
+        # Case 1
+        # self.eq_stress = np.array([[88.366538]]) # calculated from mathematica
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+        # Case 2
+        self.eq_stress = np.array([[88.366538, 7.6976808],
+        [18.79631, 11.020469]]) # calculated from mathematica
 
-    # Evaluating Reliability
-    R_CSE_PSF = np.exp(np.sum(actual))
-    print("Reliability MTS GF = ",R_CSE_PSF)
+        # Case 3
+        # self.eq_stress = np.array([[79.857326, 22.614905],[223.55189, 55.103919],
+        # [47.083578, 69.367347]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_CSE_PSF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure CSE PSF = ",Pf_CSE_PSF)
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    self.assertTrue(np.allclose(should, actual))
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
 
-class TestSMMModel_GF(unittest.TestCase):
-  def setUp(self):
+        # Evaluating Reliability
+        R_SMM_GF = np.exp(np.sum(actual))
+        print("Reliability MTS GF = ",R_SMM_GF)
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        # Evaluating Probability of Failure
+        Pf_SMM_GF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure SMM GF = ",Pf_SMM_GF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
+        self.assertTrue(np.allclose(should, actual))
 
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
+class TestSMMModelPennyShapedFlaw(unittest.TestCase):
+    def setUp(self):
 
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
+        # Case 1: Single stress tensor over 1 time step
+        # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
+        # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
+        self.stress = np.array([[
+         [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
+         [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
+        self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
+        self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
 
-    self.model = damage.SMMModel_GF(solverparams.ParameterSet())
+        # Case 3: Testing for an entirely random stress tensor over 3 time steps
+        # self.stress = np.array([[[14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],
+        # [[-1.5,-25.0,-5.6,17.1,-6.6,-301],[54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],
+        # [-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
+        # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
+        # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
 
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
+        self.s0 = 70
+        self.m = 3.5
+        self.c_bar = 1.5
 
-    # Hand - calculated
-    # Case 1
-    # self.eq_stress = np.array([[90.5452]]) # calculated from mathematica
+        self.material = materials.StandardCeramicMaterial(
+            np.array([0,1000.0]), np.array([self.s0,self.s0]),
+            self.m, self.c_bar)
 
-    # Case 2
-    self.eq_stress = np.array([[90.5452,7.79091],[19.2531,11.218]]) # calculated from mathematica
+        self.model = damage.SMMModelPennyShapedFlaw(self.temperatures, self.material, self.stress)
 
-    # Case 3
-    # self.eq_stress = np.array([[81.269,23.1647],[227.778,56.4233],[48.1351,70.2519]]) # calculated from mathematica
+    def test_definition(self):
+        k = self.s0**(-self.m)
+        kp = (2*self.m + 1)*k
 
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
+        # Hand - calculated
+        # Case 1
+        # self.eq_stress = np.array([[91.801598]]) # calculated from mathematica
 
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
+        # Case 2
+        self.eq_stress = np.array([[91.801598, 9.2479246],
+        [19.335503, 12.793856]]) # calculated from mathematica
 
-    # Evaluating Reliability
-    R_SMM_GF = np.exp(np.sum(actual))
-    print("Reliability MTS GF = ",R_SMM_GF)
+        # Case 3
+        # self.eq_stress = np.array([[89.324462, 23.492053],[249.97531, 59.574085],
+        # [50.276554, 82.8113]]) # calculated from mathematica
 
-    # Evaluating Probability of Failure
-    Pf_SMM_GF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure SMM GF = ",Pf_SMM_GF)
+        should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
 
-    self.assertTrue(np.allclose(should, actual))
+        actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures,
+        self.volumes, self.material)
 
-class TestSMMModel_PSF(unittest.TestCase):
-  def setUp(self):
+        # Evaluating Reliability
+        R_SMM_PSF = np.exp(np.sum(actual))
+        print("Reliability MTS GF = ",R_SMM_PSF)
 
-    # Case 1: Single stress tensor over 1 time step
-    # self.stress = np.array([[100.0,25.0,50.0,0,0,0]])
-    # self.temperatures = np.array([1.0])
-    # self.volumes = np.array([0.1])
+        # Evaluating Probability of Failure
+        Pf_SMM_PSF = 1 - np.exp(np.sum(actual))
+        print("Probability of failure SMM PSF = ",Pf_SMM_PSF)
 
-    # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
-    self.stress = np.array([[
-     [100.0,25.0,50.0,0,0,0],[-1.5,-25.0,-5.6,0,0,0]],
-     [[15.0,6.0,20.0,0,0,0],[-15,6,-20,0,0,0]]])
-    self.temperatures = np.array([[1.0,3.0],[100.0,10.0]])
-    self.volumes = np.array([[0.1,0.1],[0.1,0.1]])
-
-    # Case 3: Testing for an entirely random stress tensor over 3 time steps
-    # self.stress = np.array([[
-    #   [14.0,-17.0,4.3,105,2,15.5],[15.0,25.0,5.0,0,0,0]],[[-1.5,-25.0,-5.6,17.1,-6.6,-301],
-    #   [54.0,-7.0,0.3,10,20,15.5]],[[-10.0,25.0,50.0,0,0,0],[-1.0,-205.0,-56.0,-11.7,-0.6,-30]]])
-    # self.temperatures = np.array([[1.0,3.0],[15.0,100.0],[10.0,11.0]])
-    # self.volumes = np.array([[0.1,0.1],[0.1,0.1],[0.1,0.1]])
-
-    self.s0 = 70
-    self.m = 3.5
-    self.c_bar = 1.5
-
-    self.material = materials.StandardCeramicMaterial(
-        np.array([0,1000.0]), np.array([self.s0,self.s0]),
-        self.m, self.c_bar)
-
-    self.model = damage.SMMModel_PSF(solverparams.ParameterSet())
-
-  def test_definition(self):
-    k = self.s0**(-self.m)
-    kp = (2*self.m + 1)*k
-
-    # Hand - calculated
-    # Case 1
-    # self.eq_stress = np.array([[93.9531]]) # calculated from mathematica
-
-    # Case 2
-    self.eq_stress = np.array([[93.9531,9.35912],[19.7845,13.0138]]) # calculated from mathematica
-
-    # Case 3
-    # self.eq_stress = np.array([[90.7725,24.0325],[254.311,60.8945],[51.3082,83.8516]]) # calculated from mathematica
-
-    should = -(2*kp/np.pi)*(self.eq_stress**self.m)*self.volumes
-
-    actual = self.model.calculate_element_log_reliability(self.stress, self.temperatures, self.volumes, self.material)
-
-    # Evaluating Reliability
-    R_SMM_PSF = np.exp(np.sum(actual))
-    print("Reliability MTS GF = ",R_SMM_PSF)
-
-    # Evaluating Probability of Failure
-    Pf_SMM_PSF = 1 - np.exp(np.sum(actual))
-    print("Probability of failure SMM PSF = ",Pf_SMM_PSF)
-
-    self.assertTrue(np.allclose(should, actual))
+        self.assertTrue(np.allclose(should, actual))
