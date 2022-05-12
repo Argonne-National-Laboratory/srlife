@@ -33,11 +33,11 @@
       </curve3>
       <curve4>
         <T>1144.15</T>
-        <a>-3.141266277995631739e+01 -2.166914265928333521e+02 -5.032069381941175266e+02 -3.896124369066853319e+02</a>
+        <a>--3.822589867e+01 -2.571716772e+02 -5.8007060949e+02 -4.3522534897e+02</a>
         <n>3 2 1 0</n>
         <cutoff>0.002514</cutoff>
       </curve4>
     </nominalFatigue>
-    <cfinteraction>0.05 0.05</cfinteraction>
+    <cfinteraction>0.1 0.1</cfinteraction>
   </base>
 </models>
