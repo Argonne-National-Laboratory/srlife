@@ -4,143 +4,143 @@ import numpy as np
 
 from srlife import spring
 
+
 class TestSimple(unittest.TestCase):
-  """
+    """
     Simple test cases with elastic springs
-  """
-  def test_single(self):
-    network = spring.SpringNetwork()
-    network.add_node(0)
-    network.add_node(1)
-    network.add_edge(0,1, object = spring.LinearSpring(100))
-    
-    network.set_times([0,1])
+    """
 
-    network.validate_setup()
+    def test_single(self):
+        network = spring.SpringNetwork()
+        network.add_node(0)
+        network.add_node(1)
+        network.add_edge(0, 1, object=spring.LinearSpring(100))
 
-    network.displacement_bc(0, lambda t: 0.0)
-    network.force_bc(1, lambda t: 100.0*t)
+        network.set_times([0, 1])
 
-    network.solve_all()
+        network.validate_setup()
 
-    self.assertTrue(np.allclose(network.displacements,
-      [0,1]))
+        network.displacement_bc(0, lambda t: 0.0)
+        network.force_bc(1, lambda t: 100.0 * t)
 
-  def test_system(self):
-    k1 = 100.0
-    k2 = 200.0
-    k3 = 150.0
-    f = 100.0
+        network.solve_all()
 
-    network = spring.SpringNetwork()
-    network.add_node(0)
-    network.add_node(1)
-    network.add_node(2)
-    network.add_edge(0,1, object = spring.LinearSpring(k1))
-    network.add_edge(1,2, object = spring.LinearSpring(k2))
-    network.add_edge(1,2, object = spring.LinearSpring(k3))
-    
-    network.set_times([0,1])
+        self.assertTrue(np.allclose(network.displacements, [0, 1]))
 
-    network.validate_setup()
+    def test_system(self):
+        k1 = 100.0
+        k2 = 200.0
+        k3 = 150.0
+        f = 100.0
 
-    network.displacement_bc(2, lambda t: 0.0)
-    network.force_bc(0, lambda t: t*f)
+        network = spring.SpringNetwork()
+        network.add_node(0)
+        network.add_node(1)
+        network.add_node(2)
+        network.add_edge(0, 1, object=spring.LinearSpring(k1))
+        network.add_edge(1, 2, object=spring.LinearSpring(k2))
+        network.add_edge(1, 2, object=spring.LinearSpring(k3))
 
-    network.solve_all()
+        network.set_times([0, 1])
 
-    kp = k2 + k3
-    dxp = f / kp
-    dx1 = f / k1
-    
-    exact = np.array([dx1+dxp,dxp,0])
+        network.validate_setup()
 
-    self.assertTrue(np.allclose(network.displacements,exact))
+        network.displacement_bc(2, lambda t: 0.0)
+        network.force_bc(0, lambda t: t * f)
 
-  def test_system_thrads(self):
-    k1 = 100.0
-    k2 = 200.0
-    k3 = 150.0
-    f = 100.0
+        network.solve_all()
 
-    network = spring.SpringNetwork()
-    network.add_node(0)
-    network.add_node(1)
-    network.add_node(2)
-    network.add_edge(0,1, object = spring.LinearSpring(k1))
-    network.add_edge(1,2, object = spring.LinearSpring(k2))
-    network.add_edge(1,2, object = spring.LinearSpring(k3))
-    
-    network.set_times([0,1])
+        kp = k2 + k3
+        dxp = f / kp
+        dx1 = f / k1
 
-    network.validate_setup()
+        exact = np.array([dx1 + dxp, dxp, 0])
 
-    network.displacement_bc(2, lambda t: 0.0)
-    network.force_bc(0, lambda t: t*f)
+        self.assertTrue(np.allclose(network.displacements, exact))
 
-    network.solve_all(nthreads=2)
+    def test_system_thrads(self):
+        k1 = 100.0
+        k2 = 200.0
+        k3 = 150.0
+        f = 100.0
 
-    kp = k2 + k3
-    dxp = f / kp
-    dx1 = f / k1
-    
-    exact = np.array([dx1+dxp,dxp,0])
+        network = spring.SpringNetwork()
+        network.add_node(0)
+        network.add_node(1)
+        network.add_node(2)
+        network.add_edge(0, 1, object=spring.LinearSpring(k1))
+        network.add_edge(1, 2, object=spring.LinearSpring(k2))
+        network.add_edge(1, 2, object=spring.LinearSpring(k3))
 
-    self.assertTrue(np.allclose(network.displacements,exact))
+        network.set_times([0, 1])
 
-  def test_remove_rigid(self):
-    network = spring.SpringNetwork()
-    k = 100.0
-    
-    for i in range(6):
-      network.add_node(i)
+        network.validate_setup()
 
-    network.add_edge(0,1, object = "rigid")
-    network.add_edge(1,3, object = spring.LinearSpring(k))
-    network.add_edge(1,3, object = spring.LinearSpring(k))
-    network.add_edge(2,4, object = "rigid")
-    network.add_edge(3,5, object = spring.LinearSpring(k))
-    network.add_edge(4,5, object = spring.LinearSpring(k))
-    
-    network.displacement_bc(0, lambda x: 0)
+        network.displacement_bc(2, lambda t: 0.0)
+        network.force_bc(0, lambda t: t * f)
 
-    network.set_times([0,1])
-    network.validate_setup()
-    
-    network.remove_rigid()
-    network.validate_solve()
-    
-    self.assertEqual(len(network.nodes), 4)
-    self.assertEqual(len(network.edges), 4)
+        network.solve_all(nthreads=2)
 
-  def test_disconnect(self):
-    network = spring.SpringNetwork()
-    k = 100.0
-    
-    for i in range(8):
-      network.add_node(i)
+        kp = k2 + k3
+        dxp = f / kp
+        dx1 = f / k1
 
-    network.add_edge(0, 1, object = spring.LinearSpring(k))
-    network.add_edge(0, 2, object = spring.LinearSpring(k))
+        exact = np.array([dx1 + dxp, dxp, 0])
 
-    network.add_edge(1, 3, object = spring.LinearSpring(k))
-    network.add_edge(1, 3, object = spring.LinearSpring(k))
-    network.add_edge(2, 4, object = "disconnect")
+        self.assertTrue(np.allclose(network.displacements, exact))
 
-    network.add_edge(3, 5, object = spring.LinearSpring(k))
-    network.add_edge(4, 6, object = spring.LinearSpring(k))
-    network.add_edge(4,7, object = spring.LinearSpring(k))
+    def test_remove_rigid(self):
+        network = spring.SpringNetwork()
+        k = 100.0
 
-    
-    network.displacement_bc(0, lambda x: 0)
-    network.displacement_bc(4, lambda x: 0)
+        for i in range(6):
+            network.add_node(i)
 
-    network.set_times([0,1])
-    network.validate_setup()
+        network.add_edge(0, 1, object="rigid")
+        network.add_edge(1, 3, object=spring.LinearSpring(k))
+        network.add_edge(1, 3, object=spring.LinearSpring(k))
+        network.add_edge(2, 4, object="rigid")
+        network.add_edge(3, 5, object=spring.LinearSpring(k))
+        network.add_edge(4, 5, object=spring.LinearSpring(k))
 
-    subs = network.reduce_graph()
+        network.displacement_bc(0, lambda x: 0)
 
-    self.assertEqual(len(subs), 2)
+        network.set_times([0, 1])
+        network.validate_setup()
 
-    for sub in subs:
-      sub.validate_solve()
+        network.remove_rigid()
+        network.validate_solve()
+
+        self.assertEqual(len(network.nodes), 4)
+        self.assertEqual(len(network.edges), 4)
+
+    def test_disconnect(self):
+        network = spring.SpringNetwork()
+        k = 100.0
+
+        for i in range(8):
+            network.add_node(i)
+
+        network.add_edge(0, 1, object=spring.LinearSpring(k))
+        network.add_edge(0, 2, object=spring.LinearSpring(k))
+
+        network.add_edge(1, 3, object=spring.LinearSpring(k))
+        network.add_edge(1, 3, object=spring.LinearSpring(k))
+        network.add_edge(2, 4, object="disconnect")
+
+        network.add_edge(3, 5, object=spring.LinearSpring(k))
+        network.add_edge(4, 6, object=spring.LinearSpring(k))
+        network.add_edge(4, 7, object=spring.LinearSpring(k))
+
+        network.displacement_bc(0, lambda x: 0)
+        network.displacement_bc(4, lambda x: 0)
+
+        network.set_times([0, 1])
+        network.validate_setup()
+
+        subs = network.reduce_graph()
+
+        self.assertEqual(len(subs), 2)
+
+        for sub in subs:
+            sub.validate_solve()

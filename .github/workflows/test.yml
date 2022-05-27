@@ -9,5 +9,4 @@ jobs:
             - run: pip3 install --user wheel
             - run: pip3 install --user -r requirements.txt
             - run: nosetests3
-            - run: pylint srlife
 
