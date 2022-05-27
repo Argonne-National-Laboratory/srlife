@@ -205,7 +205,8 @@ class WNTSAModel(WeibullFailureModel):
             + pstress[..., 2, None, None] * (n**2)
         )
 
-        # Area integral; suppressing warning given when negative numbers are raised to rational numbers
+        # Area integral; suppressing warning given when negative numbers
+        # are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral = (
                 (sigma_n ** mvals[..., None, None]) * np.sin(A) * dalpha * dbeta
