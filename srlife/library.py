@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ET
 
 from srlife import materials
 
-LIBRARY_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), 'data'))
+LIBRARY_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "data"))
+
 
 def get_file(directory, name):
-  """ Return a file path or raise an error
+    """Return a file path or raise an error
 
     Args:
       directory (str): directory the file should be in
@@ -19,15 +19,15 @@ def get_file(directory, name):
 
     Raises:
       RunetimeError: if the file does not exist
-  """
-  attempt = os.path.join(directory, name+".xml")
-  if not os.path.exists(attempt):
-    raise RuntimeError("Material with name %s does not exists in database!" 
-        % name)
-  return attempt
+    """
+    attempt = os.path.join(directory, name + ".xml")
+    if not os.path.exists(attempt):
+        raise RuntimeError("Material with name %s does not exists in database!" % name)
+    return attempt
+
 
 def load_fluid(name, model):
-  """ Load fluid material properties:
+    """Load fluid material properties:
 
     Args:
       name (str): name of the fluid (title of xml file)
@@ -35,13 +35,14 @@ def load_fluid(name, model):
 
     Returns:
       material.FluidMaterial: fluid material model
-  """
-  fdir = os.path.join(LIBRARY_DIR, "fluid")
-  filename = get_file(fdir, name)
-  return materials.FluidMaterial.load(filename, model)
+    """
+    fdir = os.path.join(LIBRARY_DIR, "fluid")
+    filename = get_file(fdir, name)
+    return materials.FluidMaterial.load(filename, model)
+
 
 def load_material(name, thermal_model, deformation_model, damage_model):
-  """ Load solid material properties
+    """Load solid material properties
 
     Args:
       name (str): name of the material (title of xml file)
@@ -53,12 +54,16 @@ def load_material(name, thermal_model, deformation_model, damage_model):
       materials.ThermalMaterial: thermal material model
       materials.DeformationMaterial: deformation material model
       materials.StructuralMaterial: damage material model
-  """
-  return load_thermal(name, thermal_model), load_deformation(
-      name, deformation_model), load_damage(name, damage_model)
+    """
+    return (
+        load_thermal(name, thermal_model),
+        load_deformation(name, deformation_model),
+        load_damage(name, damage_model),
+    )
+
 
 def load_thermal(name, model):
-  """ Load thermal material data
+    """Load thermal material data
 
     Args:
       name: name of the material
@@ -66,13 +71,14 @@ def load_thermal(name, model):
 
     Returns:
       materials.ThermalMaterial: thermal material model
-  """
-  fdir = os.path.join(LIBRARY_DIR, "thermal")
-  filename = get_file(fdir, name)
-  return materials.ThermalMaterial.load(filename, model)
+    """
+    fdir = os.path.join(LIBRARY_DIR, "thermal")
+    filename = get_file(fdir, name)
+    return materials.ThermalMaterial.load(filename, model)
+
 
 def load_deformation(name, model):
-  """ Load a deformation model from file
+    """Load a deformation model from file
 
     Args:
       name: name of the material
@@ -80,13 +86,14 @@ def load_deformation(name, model):
 
     Returns:
       materials.DeformationMaterial: deformation material model
-  """
-  fdir = os.path.join(LIBRARY_DIR, "deformation")
-  filename = get_file(fdir, name)
-  return materials.DeformationMaterial(filename, model)
+    """
+    fdir = os.path.join(LIBRARY_DIR, "deformation")
+    filename = get_file(fdir, name)
+    return materials.DeformationMaterial(filename, model)
+
 
 def load_damage(name, model):
-  """ Load a damage model from file
+    """Load a damage model from file
 
     Args:
       name: name of the material
@@ -94,21 +101,22 @@ def load_damage(name, model):
 
     Returns:
       materials.StructuralMaterial: damage material model
-  """
-  fdir = os.path.join(LIBRARY_DIR, "damage")
-  filename = get_file(fdir, name)
+    """
+    fdir = os.path.join(LIBRARY_DIR, "damage")
+    filename = get_file(fdir, name)
 
-  mat_type = get_type(filename)
-  
-  if mat_type == "metallic":
-    return materials.StructuralMaterial.load(filename, model)
-  elif mat_type == "ceramic":
-    return materials.CeramicMaterial.load(filename, model)
-  else:
-    raise ValueError("Unknown material type %s in XML damage file." % mat_type)
+    mat_type = get_type(filename)
+
+    if mat_type == "metallic":
+        return materials.StructuralMaterial.load(filename, model)
+    elif mat_type == "ceramic":
+        return materials.CeramicMaterial.load(filename, model)
+    else:
+        raise ValueError("Unknown material type %s in XML damage file." % mat_type)
+
 
 def get_type(filename):
-  """
+    """
     Report if this is a metallic or ceramic material
-  """
-  return ET.parse(filename).getroot().attrib["type"]
+    """
+    return ET.parse(filename).getroot().attrib["type"]
