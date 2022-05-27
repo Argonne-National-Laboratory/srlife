@@ -13,3 +13,4 @@ tqdm
 multiprocess
 dill
 parameterized
+black
