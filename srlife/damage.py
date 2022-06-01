@@ -139,7 +139,7 @@ class CrackShapeIndependent(WeibullFailureModel):
         Evaluate direction cosines using the mesh grid
         only for PIA and WNTSA models which are crack shape independent
         """
-        WeibullFailureModel.__init__(temperatures, material)
+        super().__init__(temperatures, material)
         self.temperatures = temperatures
         self.material = material
         # Material parameters
@@ -181,21 +181,21 @@ class CrackShapeDependent(WeibullFailureModel):
         Evaluate direction cosines using the mesh grid
         for fracture based models which are crack shape dependent
         """
-        WeibullFailureModel.__init__(temperatures, material, mandel_stress)
+        super().__init__(temperatures, material, mandel_stress)
         self.temperatures = temperatures
         self.material = material
         self.mandel_stress = mandel_stress
         # Material parameters
         self.svals = self.material.strength(temperatures)
         self.mvals = self.material.modulus(temperatures)
+        self.cbar = self.material.c_bar(temperatures)[0, 0]
+        self.nu = self.material.nu(temperatures)[0, 0]
         self.kvals = self.svals ** (-self.mvals)
         self.kpvals = (2 * self.mvals + 1) * self.kvals
 
         # limits and number of segments for angles
         self.nalpha = 121
         self.nbeta = 121
-        self.nu = 0.25  # from literature
-        self.cbar = 0.8  # from literature
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -353,7 +353,8 @@ class WNTSAModel(CrackShapeIndependent):
             + pstress[..., 2, None, None] * (self.n**2)
         )
 
-        # Area integral; suppressing warning given when negative numbers are raised to rational numbers
+        # Area integral; suppressing warning given when negative numbers are raised
+        # to rational numbers
         with np.errstate(invalid="ignore"):
             integral = (
                 (sigma_n ** self.mvals[..., None, None])
@@ -413,9 +414,7 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         """
 
         # Projected equivalent stress
-        sigma_e = 0.5 * (self.sigma_n + np.sqrt((self.sigma_n**2) + (self.tau**2)))
-
-        return sigma_e
+        return 0.5 * (self.sigma_n + np.sqrt((self.sigma_n**2) + (self.tau**2)))
 
 
 class MTSModelPennyShapedFlaw(CrackShapeDependent):
@@ -430,12 +429,10 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         Calculate the average normal tensile stresses given the pricipal stresses
         """
         # Projected equivalent stress
-        sigma_e = 0.5 * (
+        return 0.5 * (
             self.sigma_n
             + np.sqrt((self.sigma_n**2) + ((self.tau / (1 - (0.5 * self.nu))) ** 2))
         )
-
-        return sigma_e
 
 
 class CSEModelGriffithFlaw(CrackShapeDependent):
@@ -450,9 +447,7 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         Calculate the equivalent stresses given the pricipal stresses
         """
         # Projected equivalent stress
-        sigma_e = np.sqrt((self.sigma_n**2) + (self.tau**2))
-
-        return sigma_e
+        return np.sqrt((self.sigma_n**2) + (self.tau**2))
 
 
 class CSEModelPennyShapedFlaw(CrackShapeDependent):
@@ -467,9 +462,7 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         Calculate the equivalent stresses given the pricipal stresses
         """
         # Projected equivalent stress
-        sigma_e = np.sqrt((self.sigma_n**2) + (self.tau / (1 - (0.5 * self.nu))) ** 2)
-
-        return sigma_e
+        return np.sqrt((self.sigma_n**2) + (self.tau / (1 - (0.5 * self.nu))) ** 2)
 
 
 class SMMModelGriffithFlaw(CrackShapeDependent):
@@ -484,12 +477,10 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         Calculate the equivalent stresses given the pricipal stresses
         """
         # Projected equivalent stress
-        sigma_e = 0.5 * (
+        return 0.5 * (
             self.sigma_n
             + np.sqrt((self.sigma_n**2) + ((2 * self.tau / self.cbar) ** 2))
         )
-
-        return sigma_e
 
 
 class SMMModelPennyShapedFlaw(CrackShapeDependent):
@@ -504,16 +495,13 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         Calculate the equivalent stresses given the pricipal stresses
         """
         # Projected equivalent stress
-        sigma_e = 0.5 * (
+        return 0.5 * (
             self.sigma_n
             + np.sqrt(
                 (self.sigma_n**2)
                 + ((4 * self.tau / (self.cbar * (2 - self.nu))) ** 2)
             )
         )
-
-        return sigma_e
-
 
 class DamageCalculator:
     """
