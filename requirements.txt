@@ -14,3 +14,4 @@ multiprocess
 dill
 parameterized
 black
+jax[cpu]
