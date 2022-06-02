@@ -577,14 +577,13 @@ class FiniteDifferenceImplicitThermalProblem:
                     )
                 # Convection
                 elif isinstance(self.tube.inner_bc, receiver.ConvectiveBC):
+                    fluid_T = self.tube.inner_bc.fluid_temperature(time, self.z[1,j,k])[0]
                     R[self.dof(i, j, k)] = (
                         self.dr
-                        * self.fluid.coefficient(self.material.name, T_n[1, j, k])
+                        * self.fluid.coefficient(self.material.name, fluid_T)
                         * (
                             T[1, j, k]
-                            - self.tube.inner_bc.fluid_temperature(
-                                time, self.z[1, j, k]
-                            )
+                            - fluid_T
                         )
                         / self.k[1, j, k]
                     )
@@ -610,9 +609,10 @@ class FiniteDifferenceImplicitThermalProblem:
                 for k in self.loop_z():
                     I.append(self.dof(i, j, k))
                     J.append(self.dof(1, j, k))
+                    fluid_T = self.tube.inner_bc.fluid_temperature(time, self.z[1,j,k])[0]
                     D.append(
                         self.dr
-                        * self.fluid.coefficient(self.material.name, T_n[1, j, k])
+                        * self.fluid.coefficient(self.material.name, fluid_T)
                         / self.k[1, j, k]
                     )
 
@@ -659,16 +659,16 @@ class FiniteDifferenceImplicitThermalProblem:
                     )
                 # Convection
                 elif isinstance(self.tube.outer_bc, receiver.ConvectiveBC):
+                    fluid_T = self.tube.outer_bc.fluid_temperature(
+                            time, self.z[self.nr - 2, j, k])[0]
                     R[self.dof(i, j, k)] = (
                         self.dr
                         * self.fluid.coefficient(
-                            self.material.name, T_n[self.nr - 2, j, k]
+                            self.material.name, fluid_T
                         )
                         * (
                             T[self.nr - 2, j, k]
-                            - self.tube.outer_bc.fluid_temperature(
-                                time, self.z[self.nr - 2, j, k]
-                            )
+                            - fluid_T
                         )
                         / self.k[self.nr - 2, j, k]
                     )
@@ -694,10 +694,12 @@ class FiniteDifferenceImplicitThermalProblem:
                 for k in self.loop_z():
                     I.append(self.dof(i, j, k))
                     J.append(self.dof(self.nr - 2, j, k))
+                    fluid_T = self.tube.outer_bc.fluid_temperature(
+                            time, self.z[self.nr - 2, j, k])[0]
                     D.append(
                         self.dr
                         * self.fluid.coefficient(
-                            self.material.name, T_n[self.nr - 2, j, k]
+                            self.material.name, fluid_T
                         )
                         / self.k[self.nr - 2, j, k]
                     )
