@@ -3,20 +3,8 @@ import tempfile
 
 import numpy as np
 from srlife.thermohydraulics import thermalfluid
-from helpers import differentiate
 
-
-class CommonThermalFluidMaterial:
-    def test_derivative(self):
-        numer = differentiate(
-            lambda T: self.model.film_coefficient(T, self.u, self.r), self.T
-        ).diagonal()
-        val, grad = self.model.film_coefficient_and_grad(self.T, self.u, self.r)
-
-        self.assertTrue(np.allclose(grad, numer))
-
-
-class TestPolynomialThermalFluidMaterial(CommonThermalFluidMaterial, unittest.TestCase):
+class TestPolynomialThermalFluidMaterial(unittest.TestCase):
     def setUp(self):
         self.cp = np.array([0.1046, 944.622])
         self.rho = np.array([-0.522, 1903.7])
