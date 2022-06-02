@@ -8,7 +8,6 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import jax.numpy as jnp
-from jax import jacfwd, jacrev
 
 from srlife import materials
 
@@ -73,24 +72,6 @@ class ThermalFluidMaterial:
         nu = self.nusselt(T, u, r)
 
         return nu * self.k(T) / (2.0 * r / 1000.0) * 1.0e-6
-
-    def film_coefficient_and_grad(self, T, u, r):
-        """Film coefficient + gradient with respect to temperature
-
-        Parameters:
-            T:      temperature, in K
-            u:      flow velocity, in m/s
-            r:      tube inner radius, in mm
-        """
-        # Make sure we have jax arrays
-        T = jnp.asarray(T)
-        u = jnp.asarray(u)
-        r = jnp.asarray(r)
-
-        val = self.film_coefficient(T, u, r)
-        J = jacfwd(self.film_coefficient)(T, u, r)
-
-        return np.asarray(val), np.asarray(J).diagonal()
 
     def reynolds(self, T, u, r):
         """Reynolds number
