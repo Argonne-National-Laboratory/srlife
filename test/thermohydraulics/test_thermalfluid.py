@@ -4,12 +4,13 @@ import tempfile
 import numpy as np
 from srlife.thermohydraulics import thermalfluid
 
+
 class TestPolynomialThermalFluidMaterial(unittest.TestCase):
     def setUp(self):
-        self.cp = np.array([0.1046, 944.622])
-        self.rho = np.array([-0.522, 1903.7])
-        self.mu = np.array([1.784e-8, -2.91e-5, 1.4965e-2])
-        self.k = np.array([-0.0001, 0.5047])
+        self.cp = np.array([0.0000290556, 0.254458])
+        self.rho = np.array([-5.52e-10, 2.0544788e-6])
+        self.mu = np.array([6.4224e-8, -0.000139846, 0.087281])
+        self.k = np.array([-1e-7, 0.000532015])
 
         self.model = thermalfluid.PolynomialThermalFluidMaterial(
             self.cp, self.rho, self.mu, self.k
@@ -19,18 +20,12 @@ class TestPolynomialThermalFluidMaterial(unittest.TestCase):
         self.r = np.array([5.0, 10.0, 15.0])
 
     def test_definitions(self):
+        self.assertTrue(np.allclose(self.model.cp(self.T), np.polyval(self.cp, self.T)))
         self.assertTrue(
-            np.allclose(self.model.cp(self.T), np.polyval(self.cp, self.T - 273.15))
+            np.allclose(self.model.rho(self.T), np.polyval(self.rho, self.T))
         )
-        self.assertTrue(
-            np.allclose(self.model.rho(self.T), np.polyval(self.rho, self.T - 273.15))
-        )
-        self.assertTrue(
-            np.allclose(self.model.mu(self.T), np.polyval(self.mu, self.T - 273.15))
-        )
-        self.assertTrue(
-            np.allclose(self.model.k(self.T), np.polyval(self.k, self.T - 273.15))
-        )
+        self.assertTrue(np.allclose(self.model.mu(self.T), np.polyval(self.mu, self.T)))
+        self.assertTrue(np.allclose(self.model.k(self.T), np.polyval(self.k, self.T)))
 
     def test_recover(self):
         tfile = tempfile.mktemp()
