@@ -36,8 +36,12 @@ class TestPIAModel(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.PIAModel(self.temperatures, self.material)
 
@@ -108,8 +112,12 @@ class TestWNTSAModel(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.WNTSAModel(self.temperatures, self.material)
 
@@ -178,8 +186,12 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.MTSModelGriffithFlaw(
             self.temperatures, self.material, self.stress
@@ -250,8 +262,12 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.MTSModelPennyShapedFlaw(
             self.temperatures, self.material, self.stress
@@ -322,8 +338,12 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.CSEModelGriffithFlaw(
             self.temperatures, self.material, self.stress
@@ -394,8 +414,12 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.CSEModelPennyShapedFlaw(
             self.temperatures, self.material, self.stress
@@ -466,8 +490,12 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.SMMModelGriffithFlaw(
             self.temperatures, self.material, self.stress
@@ -538,8 +566,12 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         self.nu = 0.25
 
         self.material = materials.StandardCeramicMaterial(
-            np.array([0, 1000.0]), np.array([self.s0, self.s0]), self.m, self.c_bar,
-            self.nu)
+            np.array([0, 1000.0]),
+            np.array([self.s0, self.s0]),
+            self.m,
+            self.c_bar,
+            self.nu,
+        )
 
         self.model = damage.SMMModelPennyShapedFlaw(
             self.temperatures, self.material, self.stress
