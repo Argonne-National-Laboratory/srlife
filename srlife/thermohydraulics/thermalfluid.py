@@ -71,7 +71,7 @@ class ThermalFluidMaterial:
         """
         nu = self.nusselt(T, u, r)
 
-        return nu * self.k(T) / (2.0 * r / 1000.0) * 1.0e-6
+        return nu * self.k(T) / (2.0 * r)
 
     def reynolds(self, T, u, r):
         """Reynolds number
@@ -81,7 +81,7 @@ class ThermalFluidMaterial:
             u:      flow velocity, in m/s
             r:      tube inner radius, in mm
         """
-        return self.rho(T) * u * 2.0 * r / 1000.0 / self.mu(T)
+        return self.rho(T) * u * 2.0 * r / self.mu(T)
 
     def prandtl(self, T):
         """Prandtl number
@@ -106,9 +106,9 @@ class ThermalFluidMaterial:
         """
         re = self.reynolds(T, u, r)
         pr = self.prandtl(T)
-        f = (0.7 * jnp.log(re) - 1.64) ** -2.0
+        f = (0.79 * jnp.log(re) - 1.64) ** -2.0
 
-        return ((f / 8.0) * re - 1000.0 * pr) / (
+        return ((f / 8.0) * (re - 1000.0) * pr) / (
             1.0 + 12.7 * (f / 8.0) ** 0.5 * (pr ** (2.0 / 3.0) - 1.0)
         )
 
@@ -165,7 +165,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.cp_poly, T - 273.15)
+        return jnp.polyval(self.cp_poly, T)
 
     def rho(self, T):
         """Density as a function of temperature in K
@@ -173,7 +173,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.rho_poly, T - 273.15)
+        return jnp.polyval(self.rho_poly, T)
 
     def mu(self, T):
         """Dynamic viscosity, as a function of temperature in K
@@ -181,7 +181,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.mu_poly, T - 273.15)
+        return jnp.polyval(self.mu_poly, T)
 
     def k(self, T):
         """Conductivity, as a function of temperature in K
@@ -189,4 +189,4 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.k_poly, T - 273.15)
+        return jnp.polyval(self.k_poly, T)
