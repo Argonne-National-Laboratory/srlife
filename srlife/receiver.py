@@ -44,6 +44,29 @@ class Receiver:
         self.panels = {}
         self.stiffness = panel_stiffness
 
+        self.flowpaths = {}
+
+    def add_flowpath(self, panels_in_path, times, mass_rate, inlet_temp,
+            name = None):
+        """Add a flow path to the receiver model
+
+        Args:
+            panels_in_path (list):  list of panel names in the path
+            times (np.array):       time data
+            mass_rate (np.array):   mass flow rate data
+            inlet_temp (np.array):  inlet temperature data
+            name (Optional[str]):   optional flowpath name
+        """
+        if not name:
+            name = next_name(self.flowpaths.keys())
+
+        for n in panels_in_path:
+            if n not in self.panels.keys():
+                raise ValueError("Panel %s does not exist in the receiver!" % n)
+
+        self.flowpaths[name] = {"panels": panels_in_path, "times": times,
+                "mass_flow": mass_rate, "inlet_temp": inlet_temp}
+
     def write_vtk(self, basename):
         """Write out the receiver as individual panels with names basename_panelname
 
@@ -186,10 +209,10 @@ class Panel:
     names are sequential numbers.
 
     Args:
-      stiffness:       manifold spring stiffness
+      stiffness:                        manifold spring stiffness
     """
 
-    def __init__(self, stiffness):
+    def __init__(self, stiffness, ntubes_actual = None):
         """Initialize the panel"""
         self.tubes = {}
         self.stiffness = stiffness
@@ -230,6 +253,20 @@ class Panel:
           int:  number of tubes in the panel
         """
         return len(self.tubes)
+
+    @property
+    def ntubes_actual(self):
+        """Number of actual tubes in the panel
+
+        Returns:
+            int:    number of tubes in the full panel
+        """
+        total = 0
+        for t in self.tubes.values():
+            total += t.multiplier
+        
+        return total
+
 
     def add_tube(self, tube, name=None):
         """Add a tube object to the panel
@@ -325,9 +362,11 @@ class Tube:
       nz (int): number of axial increments
       T0 (Optional[float]): initial temperature
       page (Optional[bool]): store results on disk if True
+      multiplier (Optional[int]): number of tubes represented by this actual model, defaults to 1
     """
 
-    def __init__(self, outer_radius, thickness, height, nr, nt, nz, T0=0.0, page=False):
+    def __init__(self, outer_radius, thickness, height, nr, nt, nz, T0=0.0, page=False,
+            multiplier = None):
         """Initialize the tube"""
         self.r = outer_radius
         self.t = thickness
@@ -342,6 +381,7 @@ class Tube:
         self.times = []
         self.results = {}
         self.quadrature_results = {}
+        self.axial_results = {}
 
         self.outer_bc = None
         self.inner_bc = None
@@ -350,6 +390,21 @@ class Tube:
         self.T0 = T0
         self.page = page
         self.page_prefix = ""
+
+        self.multiplier_val = multiplier
+
+    @property
+    def multiplier(self):
+        """
+            Number of actual tubes represented by this model
+
+            Returns:
+                int:    tube multiplier
+        """
+        if not self.multiplier_val:
+            return 1
+        else:
+            return self.multiplier_val
 
     def copy_results(self, other):
         """Copy the results fields from one tube to another
@@ -646,6 +701,26 @@ class Tube:
         if shape[0] != self.ntime:
             raise ValueError("Quadrature data must have time axis first!")
         self.quadrature_results[name] = self._setup_memmap(name + "_quad", shape)
+
+    def add_axial_results(self, name, data):
+        """Add a result distributed over the tube height at nz points
+
+        Args:
+            name (str): results name
+            data (np.array): data to store
+        """
+        if data.shape != (self.ntime, self.nz):
+            raise ValueError("Axial result field must have shape (ntime, nz)!")
+        self.axial_results[name] = self._setup_memmap(name + " _axial", data.shape)
+        self.axial_results[name][:] = data[:]
+
+    def add_blank_axial_results(self, name):
+        """Add a blank axial results field
+        
+        Args:
+            name (str): name of field
+        """
+        self.axial_results[name] = self._setup_memmap(name + "_axial", (self.ntime, self.nz))
 
     def _setup_memmap(self, name, shape):
         """Map array to disk if required
@@ -1209,6 +1284,84 @@ class FixedTempBC(ThermalBC):
             and np.allclose(self.data, other.data)
         )
 
+class FilmCoefficientConvectiveBC(ThermalBC):
+    """A convective BC on the ID of a tube, this version provides the film coefficient directly
+
+    Args:
+        radius (float):     radius of application
+        height (float):     height of tube
+        nz (int):           number of divisions along height
+        data (np.array):    film coefficient data
+    """
+    def __init__(self, radius, height, nz, data):
+        self.r = radius
+        self.h = height
+
+        self.nz = nz
+
+        if data.shape != (nz,):
+            raise ValueError("Film coefficient data must have size (nz,)")
+            
+        zs = np.linspace(0, self.h, self.nz)
+        self.ifn = inter.interp1d(zs, data)
+
+    def film_coefficient(self, t, z):
+        """Return the film coefficient at a given time and position
+
+        Args:
+          t (float): time
+          z (float): height
+
+        Return:
+          float: film coefficient at this location and time
+        """
+        return self.ifn(z)
+
+    def save(self, fobj):
+        """Save to an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to save to
+        """
+        fobj.attrs["type"] = "FilmCoefficientConvective"
+        fobj.attrs["r"] = self.r
+        fobj.attrs["h"] = self.h
+
+        fobj.attrs["nz"] = self.nz
+
+        fobj.create_dataset("data", data=self.data)
+
+    @classmethod
+    def load(cls, fobj):
+        """Load from an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to load from
+        """
+        return cls(
+            fobj.attrs["r"],
+            fobj.attrs["h"],
+            fobj.attrs["nz"],
+            np.copy(fobj["data"]),
+        )
+
+    def close(self, other):
+        """Check to see if two objects are nearly equal.
+
+        Primarily used for testing
+
+        Args:
+          other (ConvectiveBC): the object to compare against
+
+        Returns:
+          bool: true if sufficiently similar
+        """
+        return (
+            np.isclose(self.r, other.r)
+            and np.isclose(self.h, other.h)
+            and (self.nz == other.nz)
+            and np.allclose(self.data, other.data)
+        )
 
 class ConvectiveBC(ThermalBC):
     """A convective BC on the surface of a tube defined by a radius and height.

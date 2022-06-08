@@ -22,21 +22,7 @@ class ThermalSolver(ABC):
     The solver must read the Tube abstraction parameter and
     return a 3D, 2D, or 1D analysis, as appropriate
     """
-
-    @abstractmethod
-    def solve(self, tube, material, fluid):
-        """
-        Solve the thermal problem defined for a single tube
-
-        Parameters:
-          tube        the Tube object defining the geometry, loading,
-                      and analysis abstraction
-          material    the thermal material object describing the material
-                      conductivity and diffusivity
-          fluid       the fluid material object describing the convective
-                      heat transfer coefficient
-        """
-        return
+    pass
 
 
 class TemperatureResetter:
@@ -67,6 +53,72 @@ class TemperatureResetter:
         if self.trigger(time):
             temps[step] = self.vals
 
+class ThermohydraulicsThermalSolver(ThermalSolver):
+    """
+        Solve the heat transfer problem by iterating between a simple
+        1D thermal hydraulics model and a FiniteDifferenceImplicitThermalSolver.
+    """
+    def __init__(self,
+            pset = solverparams.ParameterSet()):
+        self.rtol = pset.get_default("rtol", 1.0e-6)
+        self.atol = pset.get_default("atol", 1.0e-4)
+        self.miter = pset.get_default("miter", 1000)
+        self.verbose = pset.get_default("verbose", False)
+
+        self.solid_params = pset.get_default("solid", solverparams.ParameterSet())
+        self.thermo_params = pset.get_default("fluid", solverparams.ParameterSet())
+
+    def solve_receiver(self, receiver, solid_material, fluid_material, 
+            decorator = None, nthreads = 1):
+        """Solve the entire receiver by splitting into independent flow paths
+
+            Args:
+                receiver (Receiver): fully-populated receiver object
+                solid_material (ThermalMaterial): solid thermal properties
+                fluid_material (ThermalFluidMaterial): fluid thermal properties
+                decorator (Optional[decorator]): progress decorator
+                nthreads(Optional[int]): number of allowable threads to use
+        """
+        # Setup
+        self.receiver = receiver
+        self.solid_material = solid_material
+        self.fluid_material = fluid_material
+
+        # Stupid algorithm to decide on times
+        solve_times = self._determine_solve_times()
+
+        # Add the result fields we'll need, specifically nodal temperatures
+        # and axial fluid temperatures
+        for tube in self.receiver.tubes:
+            tube.set_times(solve_times)
+            tube.add_blank_axial_results("fluid_temperature")
+            tube.add_blank_results("temperature", (tube.ntime,) + tube_dim(tube))
+
+        print("HERE")
+
+        sys.exit()
+
+    def _determine_solve_times(self):
+        """Determine which times to solve the temperatures for
+            
+            Dumb algorithm to determine times to solve at -- just look at a tube
+        """
+        return list(list(self.receiver.panels.values())[0].tubes.values())[0].times
+
+def tube_dim(tube):
+    """
+        Figure out a tube's nodal field array size based on the discertization and
+        abstraction
+    """
+    dim = (tube.nr, tube.nt, tube.nz)
+    if tube.abstraction == "1D":
+        return dim[:1]
+    elif tube.abstraction == "2D":
+        return dim[:2]
+    elif tube.abstraction == "3D":
+        return dim
+    else:
+        raise ValueError("Unknown abstraction %s" % tube.abstraction)
 
 class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     """

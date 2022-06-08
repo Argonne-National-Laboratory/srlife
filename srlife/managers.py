@@ -138,6 +138,21 @@ class SolutionManager:
         )
 
     def solve_heat_transfer(self):
+        """Solve heat transfer for the receiver
+        
+        Adds thermal results in each tube
+        """
+        if isinstance(self.thermal_solver, thermal.ThermohydraulicsThermalSolver):
+            if self.progress:
+                print("Running thermohydraulic analysis")
+            # TODO: resetters
+            self.thermal_solver.solve_receiver(self.receiver, self.thermal_material,
+                    self.fluid_material, decorator = self.progress_decorator,
+                    nthreads = self.nthreads)
+        else:
+            self.solve_heat_transfer_tube()
+
+    def solve_heat_transfer_tube(self):
         """Solve the heat transfer problem for each tube
 
         Adds the thermal results to each receiver.Tube object
