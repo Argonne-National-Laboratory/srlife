@@ -274,7 +274,7 @@ class FlowPath:
         self.atol = 1e-8
         self.miter = 50
         self.verbose = verbose
-
+    
     def add_panel(self, weights, ri, h, metal_temp, material):
         """
         Construct and add the standard panel -> manifold link

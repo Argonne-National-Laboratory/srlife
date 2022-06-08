@@ -15,6 +15,8 @@ import h5py
 
 from srlife import writers
 
+from collections import OrderedDict
+
 
 class Receiver:
     """Basic definition of the tubular receiver geometry.
@@ -206,6 +208,16 @@ class Receiver:
 
         for name in grp:
             res.add_panel(Panel.load(grp[name]), name)
+        
+        if "flowpaths" in fobj:
+            grp = fobj["flowpaths"]
+
+            for name in grp:
+                res.add_flowpath(
+                        list(map(lambda x: x.decode(encoding='UTF-8'), np.copy(grp[name]["panels"]))),
+                        np.copy(grp[name]["times"]),
+                        np.copy(grp[name]["mass_flow"]),
+                        np.copy(grp[name]["inlet_temp"]), name = name)
 
         if "flowpaths" in fobj:
             grp = fobj["flowpaths"]
@@ -842,6 +854,8 @@ class Tube:
         fobj.attrs["nr"] = self.nr
         fobj.attrs["nt"] = self.nt
         fobj.attrs["nz"] = self.nz
+        
+        fobj.attrs["multiplier"] = self.multiplier_val
 
         fobj.attrs["multiplier"] = self.multiplier_val
 
@@ -917,6 +931,11 @@ class Tube:
         grp = fobj["quadrature_results"]
         for name in grp:
             res.add_quadrature_results(name, np.copy(grp[name]))
+        
+        if "axial_results" in fobj:
+            grp = fobj["axial_results"]
+            for name in grp:
+                res.add_axial_results(name, np.copy(grp[name]))
 
         if "axial_results" in fobj:
             grp = fobj["axial_results"]
@@ -1346,19 +1365,30 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         radius (float):     radius of application
         height (float):     height of tube
         nz (int):           number of divisions along height
-        data (np.array):    film coefficient data
+        fluid_T (np.array): fluid temperature
+        film (np.array):    film coefficient data
     """
-    def __init__(self, radius, height, nz, data):
+    def __init__(self, radius, height, nz, fluid_T, film):
         self.r = radius
         self.h = height
 
         self.nz = nz
 
-        if data.shape != (nz,):
-            raise ValueError("Film coefficient data must have size (nz,)")
+        if fluid_T.shape != (nz,) or film.shape != (nz):
+            raise ValueError("Film coefficient and fluid temperature data must have size (nz,)")
             
         zs = np.linspace(0, self.h, self.nz)
-        self.ifn = inter.interp1d(zs, data)
+        self.ifn_fluid = inter.interp1d(zs, fluid_T)
+        self.ifn_film = inter.interp1d(zs, film)
+
+    def fluid_temperature(self, t, z):
+        """Return the fluid temperature at a given time and position
+
+        Args:
+            t (float): time
+            z (float): height
+        """
+        return self.ifn_fluid(z)
 
     def film_coefficient(self, t, z):
         """Return the film coefficient at a given time and position
@@ -1370,7 +1400,7 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         Return:
           float: film coefficient at this location and time
         """
-        return self.ifn(z)
+        return self.ifn_film(z)
 
     def save(self, fobj):
         """Save to an HDF5 file
