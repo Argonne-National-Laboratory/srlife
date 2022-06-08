@@ -14,6 +14,8 @@ import h5py
 
 from srlife import writers
 
+from collections import OrderedDict
+
 
 class Receiver:
     """Basic definition of the tubular receiver geometry.
@@ -41,10 +43,10 @@ class Receiver:
         """Initialize a Receiver object"""
         self.period = period
         self.days = days
-        self.panels = {}
+        self.panels = OrderedDict()
         self.stiffness = panel_stiffness
 
-        self.flowpaths = {}
+        self.flowpaths = OrderedDict()
 
     def add_flowpath(self, panels_in_path, times, mass_rate, inlet_temp,
             name = None):
@@ -173,6 +175,14 @@ class Receiver:
             sgrp = grp.create_group(name)
             panel.save(sgrp)
 
+        grp = fobj.create_group("flowpaths")
+        for name, path in self.flowpaths.items():
+            sgrp = grp.create_group(name)
+            sgrp.create_dataset("panels", data = path["panels"])
+            sgrp.create_dataset("times", data = path["times"])
+            sgrp.create_dataset("mass_flow", data = path["mass_flow"])
+            sgrp.create_dataset("inlet_temp", data = path["inlet_temp"])
+
     @classmethod
     def load(cls, fobj):
         """Load a Receiver from an HDF5 file
@@ -194,6 +204,16 @@ class Receiver:
 
         for name in grp:
             res.add_panel(Panel.load(grp[name]), name)
+        
+        if "flowpaths" in fobj:
+            grp = fobj["flowpaths"]
+
+            for name in grp:
+                res.add_flowpath(
+                        list(map(lambda x: x.decode(encoding='UTF-8'), np.copy(grp[name]["panels"]))),
+                        np.copy(grp[name]["times"]),
+                        np.copy(grp[name]["mass_flow"]),
+                        np.copy(grp[name]["inlet_temp"]), name = name)
 
         return res
 
@@ -214,7 +234,7 @@ class Panel:
 
     def __init__(self, stiffness, ntubes_actual = None):
         """Initialize the panel"""
-        self.tubes = {}
+        self.tubes = OrderedDict()
         self.stiffness = stiffness
 
     def write_vtk(self, basename):
@@ -366,7 +386,7 @@ class Tube:
     """
 
     def __init__(self, outer_radius, thickness, height, nr, nt, nz, T0=0.0, page=False,
-            multiplier = None):
+            multiplier = 1):
         """Initialize the tube"""
         self.r = outer_radius
         self.t = thickness
@@ -401,10 +421,7 @@ class Tube:
             Returns:
                 int:    tube multiplier
         """
-        if not self.multiplier_val:
-            return 1
-        else:
-            return self.multiplier_val
+        return self.multiplier_val
 
     def copy_results(self, other):
         """Copy the results fields from one tube to another
@@ -414,6 +431,7 @@ class Tube:
         """
         self.results = other.results
         self.quadrature_results = other.quadrature_results
+        self.axial_results = other.axial_results
 
     def set_paging(self, page, i):
         """Set the value of the page parameter
@@ -804,6 +822,8 @@ class Tube:
         fobj.attrs["nr"] = self.nr
         fobj.attrs["nt"] = self.nt
         fobj.attrs["nz"] = self.nz
+        
+        fobj.attrs["multiplier"] = self.multiplier_val
 
         fobj.attrs["abstraction"] = self.abstraction
         if self.abstraction == "2D" or self.abstraction == "1D":
@@ -820,6 +840,10 @@ class Tube:
         grp = fobj.create_group("quadrature_results")
         for name, result in self.quadrature_results.items():
             grp.create_dataset(name, data=result)
+
+        grp = fobj.create_group("axial_results")
+        for name, result in self.axial_results.items():
+            grp.create_dataset(name, data = result)
 
         if self.outer_bc:
             grp = fobj.create_group("outer_bc")
@@ -842,6 +866,11 @@ class Tube:
         Parameters:
           fobj (h5py.Group):  h5py to load from
         """
+        if "multiplier" in fobj.attrs:
+            mult = fobj.attrs["multiplier"]
+        else:
+            mult = 1
+
         res = cls(
             fobj.attrs["r"],
             fobj.attrs["t"],
@@ -850,6 +879,7 @@ class Tube:
             fobj.attrs["nt"],
             fobj.attrs["nz"],
             T0=fobj.attrs["T0"],
+            multiplier = mult,
         )
 
         res.abstraction = fobj.attrs["abstraction"]
@@ -867,6 +897,11 @@ class Tube:
         grp = fobj["quadrature_results"]
         for name in grp:
             res.add_quadrature_results(name, np.copy(grp[name]))
+        
+        if "axial_results" in fobj:
+            grp = fobj["axial_results"]
+            for name in grp:
+                res.add_axial_results(name, np.copy(grp[name]))
 
         if "outer_bc" in fobj:
             res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")
@@ -1291,19 +1326,30 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         radius (float):     radius of application
         height (float):     height of tube
         nz (int):           number of divisions along height
-        data (np.array):    film coefficient data
+        fluid_T (np.array): fluid temperature
+        film (np.array):    film coefficient data
     """
-    def __init__(self, radius, height, nz, data):
+    def __init__(self, radius, height, nz, fluid_T, film):
         self.r = radius
         self.h = height
 
         self.nz = nz
 
-        if data.shape != (nz,):
-            raise ValueError("Film coefficient data must have size (nz,)")
+        if fluid_T.shape != (nz,) or film.shape != (nz):
+            raise ValueError("Film coefficient and fluid temperature data must have size (nz,)")
             
         zs = np.linspace(0, self.h, self.nz)
-        self.ifn = inter.interp1d(zs, data)
+        self.ifn_fluid = inter.interp1d(zs, fluid_T)
+        self.ifn_film = inter.interp1d(zs, film)
+
+    def fluid_temperature(self, t, z):
+        """Return the fluid temperature at a given time and position
+
+        Args:
+            t (float): time
+            z (float): height
+        """
+        return self.ifn_fluid(z)
 
     def film_coefficient(self, t, z):
         """Return the film coefficient at a given time and position
@@ -1315,7 +1361,7 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         Return:
           float: film coefficient at this location and time
         """
-        return self.ifn(z)
+        return self.ifn_film(z)
 
     def save(self, fobj):
         """Save to an HDF5 file

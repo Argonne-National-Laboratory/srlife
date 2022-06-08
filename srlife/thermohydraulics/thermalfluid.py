@@ -26,6 +26,8 @@ class ThermalFluidMaterial:
 
     as a function of temperature (in K).
     """
+    def __init__(self, film_min = 1e-3):
+        self.film_min = film_min
 
     @classmethod
     def load(cls, fname, modelname):
@@ -66,19 +68,19 @@ class ThermalFluidMaterial:
 
         Parameters:
             T:      temperature, in K
-            u:      flow velocity, in m/s
+            u:      flow velocity, in mm/hr
             r:      tube inner radius, in mm
         """
         nu = self.nusselt(T, u, r)
 
-        return nu * self.k(T) / (2.0 * r)
+        return jnp.maximum(nu * self.k(T) / (2.0 * r), self.film_min)
 
     def reynolds(self, T, u, r):
         """Reynolds number
 
         Parameters:
             T:      temperature, in K
-            u:      flow velocity, in m/s
+            u:      flow velocity, in mm/hr
             r:      tube inner radius, in mm
         """
         return self.rho(T) * u * 2.0 * r / self.mu(T)
@@ -107,7 +109,7 @@ class ThermalFluidMaterial:
         re = self.reynolds(T, u, r)
         pr = self.prandtl(T)
         f = (0.79 * jnp.log(re) - 1.64) ** -2.0
-
+        
         return ((f / 8.0) * (re - 1000.0) * pr) / (
             1.0 + 12.7 * (f / 8.0) ** 0.5 * (pr ** (2.0 / 3.0) - 1.0)
         )
@@ -126,6 +128,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
     """
 
     def __init__(self, cp_poly, rho_poly, mu_poly, k_poly):
+        super().__init__()
         self.cp_poly = jnp.asarray(cp_poly)
         self.rho_poly = jnp.asarray(rho_poly)
         self.mu_poly = jnp.asarray(mu_poly)
