@@ -51,7 +51,7 @@ def load_thermal_fluid(name, model):
     """
     fdir = os.path.join(LIBRARY_DIR, "thermalfluid")
     filename = get_file(fdir, name)
-    return materials.ThermalFluidMaterial.load(filename, model)
+    return thermalfluid.ThermalFluidMaterial.load(filename, model)
 
 
 def load_material(name, thermal_model, deformation_model, damage_model):
