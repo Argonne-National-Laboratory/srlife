@@ -1339,6 +1339,84 @@ class FixedTempBC(ThermalBC):
             and np.allclose(self.data, other.data)
         )
 
+class FilmCoefficientConvectiveBC(ThermalBC):
+    """A convective BC on the ID of a tube, this version provides the film coefficient directly
+
+    Args:
+        radius (float):     radius of application
+        height (float):     height of tube
+        nz (int):           number of divisions along height
+        data (np.array):    film coefficient data
+    """
+    def __init__(self, radius, height, nz, data):
+        self.r = radius
+        self.h = height
+
+        self.nz = nz
+
+        if data.shape != (nz,):
+            raise ValueError("Film coefficient data must have size (nz,)")
+            
+        zs = np.linspace(0, self.h, self.nz)
+        self.ifn = inter.interp1d(zs, data)
+
+    def film_coefficient(self, t, z):
+        """Return the film coefficient at a given time and position
+
+        Args:
+          t (float): time
+          z (float): height
+
+        Return:
+          float: film coefficient at this location and time
+        """
+        return self.ifn(z)
+
+    def save(self, fobj):
+        """Save to an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to save to
+        """
+        fobj.attrs["type"] = "FilmCoefficientConvective"
+        fobj.attrs["r"] = self.r
+        fobj.attrs["h"] = self.h
+
+        fobj.attrs["nz"] = self.nz
+
+        fobj.create_dataset("data", data=self.data)
+
+    @classmethod
+    def load(cls, fobj):
+        """Load from an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to load from
+        """
+        return cls(
+            fobj.attrs["r"],
+            fobj.attrs["h"],
+            fobj.attrs["nz"],
+            np.copy(fobj["data"]),
+        )
+
+    def close(self, other):
+        """Check to see if two objects are nearly equal.
+
+        Primarily used for testing
+
+        Args:
+          other (ConvectiveBC): the object to compare against
+
+        Returns:
+          bool: true if sufficiently similar
+        """
+        return (
+            np.isclose(self.r, other.r)
+            and np.isclose(self.h, other.h)
+            and (self.nz == other.nz)
+            and np.allclose(self.data, other.data)
+        )
 
 class FilmCoefficientConvectiveBC(ThermalBC):
     """A convective BC on the ID of a tube, this version provides the film coefficient directly
