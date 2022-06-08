@@ -597,7 +597,9 @@ def make_piecewise(x, y):
     ydiff[:-1] = np.diff(y) / np.diff(x)
     ydiff[-1] = ydiff[-2]
 
-    return inter.interp1d(x, y), inter.interp1d(x, ydiff, kind="previous")
+    return inter.interp1d(x, y, fill_value = (ydiff[0], ydiff[-1])
+            ), inter.interp1d(x, ydiff, kind="previous", 
+            fill_value = (0, 0))
 
 
 def find_name(xmlfile, name):
