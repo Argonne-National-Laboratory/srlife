@@ -170,17 +170,15 @@ class SimplePanelLink(PanelLink):
             t:                  time
         """
         # Flow velocity
-        mdot = self.mass_flow_rate(t)
-        T_mean = self.mean_temperature(T_start, T_tube)
-        rho = self.material.rho(T_mean)
-        u = mdot / (self.ntube * np.pi * rho * self.ri**2.0)
+        u = self.flow_rates(T_start, T_tube, t)
 
         # Convective heat transfer coefficient
         # We could make this height dependent if we're using AD...
+        T_mean = self.mean_temperature(T_start, T_tube)
         h = self.material.film_coefficient(T_mean, u, self.ri)
 
         # Integrate up the total contributions
-        fluid_temps = ((T_tube - T_start) / self.h * self.zs[:, None] + T_start).T
+        fluid_temps = self.fluid_temperatures(T_start, T_tube, t)
         T_metal = self.metal_temperature(t)
 
         flux = (
@@ -191,6 +189,18 @@ class SimplePanelLink(PanelLink):
 
         return self.ri * self.dz * self.dtheta * jnp.sum(flux, axis=(1, 2))
 
+    def flow_rates(self, T_start, T_tube, t):
+        """Recover the flow rates for a given state
+        """
+        mdot = self.mass_flow_rate(t)
+        T_mean = self.mean_temperature(T_start, T_tube)
+        rho = self.material.rho(T_mean)
+        return mdot / (self.ntube * np.pi * rho * self.ri**2.0)
+
+    def fluid_temperatures(self, T_start, T_tube, t):
+        """Recover the fluid temperatures for a given state
+        """
+        return ((T_tube - T_start) / self.h * self.zs[:, None] + T_start).T
 
 class FlowPath:
     """Flow path data structure
@@ -226,7 +236,7 @@ class FlowPath:
         self.atol = 1e-8
         self.miter = 50
         self.verbose = verbose
-
+    
     def add_panel(self, weights, ri, h, metal_temp, material):
         """
         Construct and add the standard panel -> manifold link
@@ -244,6 +254,25 @@ class FlowPath:
             )
         )
         self.chain.append(ManifoldLink(self.times, self.mass_flow, weights))
+
+    def add_panel_from_object(self, panel, material):
+        """Same as add_panel, but use a panel object directly
+        """
+        weights = np.array([float(tube.multiplier) for tube in panel.tubes.values()])
+        # Fix this, we should take variable radii and heights
+        ri = np.array([tube.r - tube.t for tube in panel.tubes.values()])[0]
+        h = np.array([tube.h for tube in panel.tubes.values()])[0]
+        
+        metal_temps = []
+        for tube in panel.tubes.values():
+            if tube.abstraction == "3D":
+                metal_temps.append(tube.quadrature_results["ghost_temperature"][...,1,1:-1,1:-1])
+            else:
+                raise ValueError("Need to add")
+
+        metal_temps = np.swapaxes(np.array(metal_temps), 0, 1)
+
+        self.add_panel(weights, ri, h, metal_temps, material)
 
     def _setup(self):
         """
@@ -286,6 +315,24 @@ class FlowPath:
             raise RuntimeError("Too many iterations in newton solver!")
 
         return T
+
+    def recover_tube_results(self, T, t):
+        """Recover the tube flow rates and actual temperature fields
+        """
+        flow_rates = []
+        tube_temperatures = []
+        dofs_prev = []
+        for i,(obj, dofs) in enumerate(zip(self.chain, self.dof_map)):
+            # Panels are every other entry
+            T_prev = T[dofs_prev]
+            T_curr = T[dofs]
+            
+            if i % 2 == 1:
+                flow_rates.append(obj.flow_rates(T_prev, T_curr, t))
+                tube_temperatures.append(obj.fluid_temperatures(T_prev, T_curr, t))
+            dofs_prev = dofs
+        
+        return flow_rates, tube_temperatures
 
     def RJ(self, T):
         """

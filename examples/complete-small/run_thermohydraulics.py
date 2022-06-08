@@ -27,8 +27,6 @@ def sample_parameters():
     # If true store results on disk (slower, but less memory)
     params["page_results"] = False
 
-    params["thermal"]["rtol"] = 1.0e-6
-    params["thermal"]["atol"] = 1.0e-4
     params["thermal"]["miter"] = 200
     params["thermal"]["verbose"] = True
 
@@ -70,6 +68,7 @@ if __name__ == "__main__":
     #     Interconnect stiffnesses
     model = receiver.Receiver.load("example-small.hdf5")
     
+    # Demonstration on how to setup a flowpath
     # Setup the flow path information
     flowpath = []
     for name_panel, panel in model.panels.items():
@@ -77,14 +76,21 @@ if __name__ == "__main__":
         for name_tube, tube in panel.tubes.items():
             times = tube.times
             tube.multiplier_val = 100
+            tube.T0 = 300+273.15
     
     mass_flow = np.zeros_like(times)
-    mass_flow[:] = 2500.0
-    inlet_temp = tube.outer_bc.data[:,0,0]
+    mass_flow[:] = 3600000.0 # kg/hr
+    inlet_temp = np.copy(tube.outer_bc.data[:,0,0])
     inlet_temp /= np.max(inlet_temp)
-    inlet_temp *= 280
-    inlet_temp += 440.0
+    inlet_temp *= 250.0
+    inlet_temp += 300.0
+    inlet_temp += 273.15
+
+    model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
     
+    model.save("example-small-with-flowpath.hdf")
+    model = receiver.Receiver.load("example-small-with-flowpath.hdf")
+
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
     # for parameters not provided by the user
