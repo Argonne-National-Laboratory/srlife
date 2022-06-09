@@ -1,3 +1,8 @@
+# pylint: disable=wrong-import-position
+"""
+    Simple 1D heat balance thermohydraulics solver
+"""
+
 import numpy as np
 import numpy.linalg as la
 import scipy.interpolate as inter
@@ -10,21 +15,8 @@ config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 from jax import jacfwd
 
-import networkx as nx
 
-
-class FlowLink:
-    """Connection in a flow path
-
-    Calculates the mass flow, provides the residual and Jacobian
-    connections for a element in a flow path
-    """
-
-    def __init__(self):
-        pass
-
-
-class StartLink(FlowLink):
+class StartLink:
     """Starting link in the chain, gives the first temperature"""
 
     def __init__(self, times, inlet_temperature, **kwargs):
@@ -42,17 +34,25 @@ class StartLink(FlowLink):
         self.size = 1
 
     def T_inlet(self, t):
-        """
+        """Calculate the inlet temperature at a given time
+
         Parameters:
             t:      time
         """
         return jnp.asarray(self.inlet_ifn(t))
 
     def residual(self, T_start, T_end, t):
+        """Calculate the residual contribution
+
+        Parameters:
+            T_start:    inlet temperatures (null here)
+            T_end:      outlet temperatures
+            t:          time
+        """
         return T_end - self.T_inlet(t)
 
 
-class PanelLink(FlowLink):
+class PanelLink:
     """Connection representing part of a panel"""
 
     def __init__(self, times, mass_flow, weights, **kwargs):
@@ -62,8 +62,6 @@ class PanelLink(FlowLink):
             mass_flow (ntime,): discrete flow rates
             weights (ntube,):   number of actual tube represented by each panel
         """
-        super().__init__(**kwargs)
-
         self.times = times
         self.mass_flow = mass_flow
         self.weights = jnp.asarray(weights)
@@ -78,23 +76,32 @@ class PanelLink(FlowLink):
 
     @property
     def ntube(self):
+        """Number of actual tubes in the panel"""
         return jnp.sum(self.weights)
 
 
 class ManifoldLink(PanelLink):
-    """
-    Averages temperatures
-    """
+    """Averages temperatures together at this node in the flow path"""
 
     def __init__(self, times, mass_flow, weights, **kwargs):
+        """
+        Args:
+            times (ntime,):     times for input
+            mass_flow (ntime,): mass flow rates
+            weights (ntube,):   tube weights
+        """
         super().__init__(times, mass_flow, weights, **kwargs)
 
         # Fixed again...
         self.size = 1
 
     def residual(self, T_in, T_out, t):
-        """
-        Residual equations
+        """Residual equations
+
+        Parameters:
+            T_in:       inlet temperatures
+            T_out:      outlet temperatures
+            t:          time
         """
         return jnp.sum(self.weights * T_in) / self.ntube - T_out
 
@@ -128,9 +135,17 @@ class SimplePanelLink(PanelLink):
 
     @property
     def size(self):
+        """Number of explicitly-represented tubes"""
         return len(self.weights)
 
     def residual(self, T_in, T_out, t):
+        """Residual equations
+
+        Args:
+            T_in:       inlet temperatures
+            T_out:      outlet temperatures
+            t:          time
+        """
         return self.Q_mass(T_in, T_out, t) - self.Q_conv(T_in, T_out, t)
 
     def mean_temperature(self, T_start, T_tube):
@@ -190,14 +205,26 @@ class SimplePanelLink(PanelLink):
         return self.ri * self.dz * self.dtheta * jnp.sum(flux, axis=(1, 2))
 
     def flow_rates(self, T_start, T_tube, t):
-        """Recover the flow rates for a given state"""
+        """Recover the flow rates for a given state
+
+        Args:
+            T_start:    inlet temperatures
+            T_tube:     outlet temperatures
+            t:          time
+        """
         mdot = self.mass_flow_rate(t)
         T_mean = self.mean_temperature(T_start, T_tube)
         rho = self.material.rho(T_mean)
         return mdot / (self.ntube * np.pi * rho * self.ri**2.0)
 
     def fluid_temperatures(self, T_start, T_tube, t):
-        """Recover the fluid temperatures for a given state"""
+        """Recover the fluid temperatures for a given state
+
+        Args:
+            T_start:    inlet temperatures
+            T_tube:     outlet temperatures
+            t:          time
+        """
         return ((T_tube - T_start) / self.h * self.zs[:, None] + T_start).T
 
 
@@ -267,7 +294,12 @@ class FlowPath:
         self.chain.append(ManifoldLink(self.times, self.mass_flow, weights))
 
     def add_panel_from_object(self, panel, material):
-        """Same as add_panel, but use a panel object directly"""
+        """Same as add_panel, but use a panel object directly
+
+        Args:
+            panel (receiver.Panel): panel object
+            material: fluid material properties
+        """
         weights = np.array([float(tube.multiplier) for tube in panel.tubes.values()])
         # Fix this, we should take variable radii and heights
         ri = np.array([tube.r - tube.t for tube in panel.tubes.values()])[0]
@@ -275,7 +307,6 @@ class FlowPath:
 
         metal_temps = []
         for tube in panel.tubes.values():
-            tshape = tube.quadrature_results["ghost_temperature"].shape
             if tube.abstraction == "3D":
                 metal_temps.append(
                     tube.quadrature_results["ghost_temperature"][..., 1, 1:-1, 1:-1]
@@ -314,6 +345,9 @@ class FlowPath:
     def solve(self, t):
         """
         Solve for the current fluid temperatures
+
+        Args:
+            t:      time
         """
         self._setup()
         self.t = t
@@ -344,7 +378,12 @@ class FlowPath:
         return T
 
     def recover_tube_results(self, T, t):
-        """Recover the tube flow rates and actual temperature fields"""
+        """Recover the tube flow rates and actual temperature fields
+
+        Args:
+            T (np.array):   temperatures
+            t (float):      time
+        """
         flow_rates = []
         tube_temperatures = []
         dofs_prev = []
@@ -361,8 +400,10 @@ class FlowPath:
         return flow_rates, tube_temperatures
 
     def RJ(self, T):
-        """
-        Formulate the residual and Jacobian for a given time
+        """Formulate the residual and Jacobian for a given time
+
+        Args:
+            T (np.array):   nodal temperatures
         """
         R = np.zeros((self.nvals,))
         I = []
@@ -398,6 +439,11 @@ def coo_entries(row, col, jac):
     """
     Provide flat list for the row indices, column indices, and entries
     of a jacobian entry
+
+    Args:
+        row (np.array): row indices
+        col (np.array): column indices
+        jac (np.array): actual matrix entries
     """
     i, j = np.meshgrid(row, col)
 
