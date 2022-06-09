@@ -4,6 +4,8 @@
 
 from abc import ABC, abstractmethod
 
+import multiprocess
+
 import numpy as np
 import numpy.linalg as la
 import scipy.sparse as sp
@@ -23,6 +25,7 @@ class ThermalSolver(ABC):
     The solver must read the Tube abstraction parameter and
     return a 3D, 2D, or 1D analysis, as appropriate
     """
+
     pass
 
 
@@ -54,13 +57,43 @@ class TemperatureResetter:
         if self.trigger(time):
             temps[step] = self.vals
 
+
+class ReceiverResetter:
+    """
+    Reset the tube temperatures to a fixed value every so often.
+    This object works on the entire receiver at once
+    """
+
+    def __init__(self, trigger):
+        """
+        Setup the resetter
+
+        Parameters:
+          trigger     function which triggers the reset
+        """
+        self.trigger = trigger
+
+    def apply(self, time, step, receiver):
+        """
+        Actually make the modification
+
+        Parameters:
+          time        current time
+          step        current step
+          temps       current temperatures
+        """
+        if self.trigger(time):
+            for tube in receiver.tubes:
+                tube.quadrature_results["ghost_temperature"][step] = tube.T0
+
+
 class ThermohydraulicsThermalSolver(ThermalSolver):
     """
-        Solve the heat transfer problem by iterating between a simple
-        1D thermal hydraulics model and a FiniteDifferenceImplicitThermalSolver.
+    Solve the heat transfer problem by iterating between a simple
+    1D thermal hydraulics model and a FiniteDifferenceImplicitThermalSolver.
     """
-    def __init__(self,
-            pset = solverparams.ParameterSet()):
+
+    def __init__(self, pset=solverparams.ParameterSet()):
         self.rtol = pset.get_default("rtol", 1.0e-6)
         self.atol = pset.get_default("atol", 1.0e-3)
         self.miter = pset.get_default("miter", 1000)
@@ -70,16 +103,24 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
         self.solid_params = pset.get_default("solid", solverparams.ParameterSet())
         self.thermo_params = pset.get_default("fluid", solverparams.ParameterSet())
 
-    def solve_receiver(self, receiver, solid_material, fluid_material, 
-            decorator = None, nthreads = 1):
+    def solve_receiver(
+        self,
+        receiver,
+        solid_material,
+        fluid_material,
+        decorator=None,
+        nthreads=1,
+        resetters=[],
+    ):
         """Solve the entire receiver by splitting into independent flow paths
 
-            Args:
-                receiver (Receiver): fully-populated receiver object
-                solid_material (ThermalMaterial): solid thermal properties
-                fluid_material (ThermalFluidMaterial): fluid thermal properties
-                decorator (Optional[decorator]): progress decorator
-                nthreads(Optional[int]): number of allowable threads to use
+        Args:
+            receiver (Receiver): fully-populated receiver object
+            solid_material (ThermalMaterial): solid thermal properties
+            fluid_material (ThermalFluidMaterial): fluid thermal properties
+            decorator (Optional[decorator]): progress decorator
+            nthreads(Optional[int]): number of allowable threads to use
+            resetters(Optional[list]): resetting objects to apply
         """
         # Setup
         self.receiver = receiver
@@ -97,23 +138,40 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
             tube.set_times(solve_times)
             tube.add_blank_axial_results("fluid_temperature")
             tube.add_blank_axial_results("fluid_velocity")
-            tube.add_blank_quadrature_results("ghost_temperature", (tube.ntime,) + tube_dim(tube))
-        
+            tube.add_blank_quadrature_results(
+                "ghost_temperature", (tube.ntime,) + tube_dim(tube)
+            )
+
         # Check that we have enough information to solve the problem and
         # setup the initial conditions for metal and fluid temperature
         self._setup()
 
         # Loop over time and solve each time step
-        for i, (time, dt) in enumerate(zip(solve_times[1:], solve_times[1:] - solve_times[:-1])):
-            self.solve_step(i+1, time, dt) # Results are dumped right into the tubes
-        
+        def do_stuff(x):
+            i = x[0] + 1
+            time = x[1][0]
+            dt = x[1][1]
+            self.solve_step(i, time, dt)
+
+            for resetter in resetters:
+                resetter.apply(time, i, receiver)
+
+        res = list(
+            decorator(
+                map(
+                    do_stuff,
+                    enumerate(zip(solve_times[1:], solve_times[1:] - solve_times[:-1])),
+                ),
+                len(solve_times) - 1,
+            )
+        )
+
         # Add the unghosted temperature field
         for tube in self.receiver.tubes:
-            tube.add_results("temperature", self.unghost(tube))
-    
+            tube.add_results("temperature", self._unghost(tube))
+
     def _unghost(self, tube):
-        """Remove the ghost nodes from tube "ghost_temperature" results
-        """
+        """Remove the ghost nodes from tube "ghost_temperature" results"""
         T = tube.quadrature_results["ghost_temperature"]
         # Don't return ghost values
         if tube.abstraction == "3D":
@@ -135,82 +193,153 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
         """
         # Setup initial guesses for the metal and tube temperatures (use last step!)
         for tube in self.receiver.tubes:
-            tube.quadrature_results["ghost_temperature"][i] = tube.quadrature_results["ghost_temperature"][i-1]
-            tube.axial_results["fluid_temperature"][i] = tube.axial_results["fluid_temperature"][i-1]
-            tube.axial_results["fluid_velocity"][i] = tube.axial_results["fluid_velocity"][i-1]
+            tube.quadrature_results["ghost_temperature"][i] = tube.quadrature_results[
+                "ghost_temperature"
+            ][i - 1]
+            tube.axial_results["fluid_temperature"][i] = tube.axial_results[
+                "fluid_temperature"
+            ][i - 1]
+            tube.axial_results["fluid_velocity"][i] = tube.axial_results[
+                "fluid_velocity"
+            ][i - 1]
 
         # Iterate between solving the metal temperatures and solving the fluid temperatures until both
         # are fairly stationary
         if self.verbose:
             print("Solving timestep %i, discrete time %f" % (i, time))
         for j in range(self.miter):
-            previous_temps = np.array([tube.quadrature_results["ghost_temperature"][i] for panel in self.receiver.panels.values() 
-                for tube in panel.tubes.values()])
+            previous_temps = np.array(
+                [
+                    tube.quadrature_results["ghost_temperature"][i]
+                    for panel in self.receiver.panels.values()
+                    for tube in panel.tubes.values()
+                ]
+            )
             self.solve_metal(i, time, dt)
-            next_temps = np.array([tube.quadrature_results["ghost_temperature"][i] for panel in self.receiver.panels.values() 
-                for tube in panel.tubes.values()])
-            temp_diff = np.abs(next_temps-previous_temps)
+            next_temps = np.array(
+                [
+                    tube.quadrature_results["ghost_temperature"][i]
+                    for panel in self.receiver.panels.values()
+                    for tube in panel.tubes.values()
+                ]
+            )
+            temp_diff = np.abs(next_temps - previous_temps)
             temp_max_diff = np.max(temp_diff)
-            temp_max_rel_diff = np.max(temp_diff / (previous_temps+self.eps))
+            temp_max_rel_diff = np.max(temp_diff / (previous_temps + self.eps))
             if self.verbose:
-                print("\tSolved metal temperatures, absolute difference %e / relative difference %e" % (temp_max_diff, temp_max_rel_diff))
+                print(
+                    "\tSolved metal temperatures, absolute difference %e / relative difference %e"
+                    % (temp_max_diff, temp_max_rel_diff)
+                )
 
-            previous_fluid_temps = np.array([tube.axial_results["fluid_temperature"][i] for panel in self.receiver.panels.values() 
-                for tube in panel.tubes.values()])
+            previous_fluid_temps = np.array(
+                [
+                    tube.axial_results["fluid_temperature"][i]
+                    for panel in self.receiver.panels.values()
+                    for tube in panel.tubes.values()
+                ]
+            )
             self.solve_fluid(i, time, dt)
-            next_fluid_temps = np.array([tube.axial_results["fluid_temperature"][i] for panel in self.receiver.panels.values() 
-                for tube in panel.tubes.values()])
+            next_fluid_temps = np.array(
+                [
+                    tube.axial_results["fluid_temperature"][i]
+                    for panel in self.receiver.panels.values()
+                    for tube in panel.tubes.values()
+                ]
+            )
             fluid_diff = np.abs(next_fluid_temps - previous_fluid_temps)
             fluid_max_diff = np.max(fluid_diff)
             fluid_max_rel_diff = np.max(fluid_diff / (previous_fluid_temps + self.eps))
             if self.verbose:
-                print("\tSolved fluid temperatures, absolute difference %e / relative difference %e" % (fluid_max_diff, fluid_max_rel_diff))
-            
-            if ((fluid_max_diff < self.atol and temp_max_diff < self.atol) or 
-                    (fluid_max_rel_diff < self.rtol and temp_max_rel_diff < self.rtol)):
+                print(
+                    "\tSolved fluid temperatures, absolute difference %e / relative difference %e"
+                    % (fluid_max_diff, fluid_max_rel_diff)
+                )
+
+            if (fluid_max_diff < self.atol and temp_max_diff < self.atol) or (
+                fluid_max_rel_diff < self.rtol and temp_max_rel_diff < self.rtol
+            ):
                 break
         else:
-            raise RuntimeError("Picard iteration in the thermohydraulics solver did not converge")
-        
-    def solve_metal(self, i, time, dt):
-        """Setup and solve for the metal temperatures in each tube
-        """
-        # Setup the appropriate convective BCs on the ID of each tube
-        for tube in self.receiver.tubes:
-            tube.set_bc(receiver.FilmCoefficientConvectiveBC(tube.r - tube.t,
-                tube.h, tube.nz, tube.axial_results["fluid_temperature"][i],
-                self.fluid_material.film_coefficient(tube.axial_results["fluid_temperature"][i],
-                    tube.axial_results["fluid_velocity"][i], tube.r - tube.t)), "inner")
+            raise RuntimeError(
+                "Picard iteration in the thermohydraulics solver did not converge"
+            )
 
+    def solve_metal(self, i, time, dt):
+        """Setup and solve for the metal temperatures in each tube"""
+        # Setup the appropriate convective BCs on the ID of each tube
+        # This is the best use of threads as best I can tell
+        for tube in self.receiver.tubes:
+            tube.set_bc(
+                receiver.FilmCoefficientConvectiveBC(
+                    tube.r - tube.t,
+                    tube.h,
+                    tube.nz,
+                    tube.axial_results["fluid_temperature"][i],
+                    self.fluid_material.film_coefficient(
+                        tube.axial_results["fluid_temperature"][i],
+                        tube.axial_results["fluid_velocity"][i],
+                        tube.r - tube.t,
+                    ),
+                ),
+                "inner",
+            )
+
+        def work(tube):
             # Need to add params
-            tube_solver = FiniteDifferenceImplicitThermalProblem(tube, self.solid_material, self.fluid_material)
+            tube_solver = FiniteDifferenceImplicitThermalProblem(
+                tube,
+                self.solid_material,
+                self.fluid_material,
+                **deparametrize_finite_difference(self.solid_params)
+            )
             # Solve...
-            tube.quadrature_results["ghost_temperature"][i] = tube_solver.solve_step_substep(tube.quadrature_results["ghost_temperature"][i-1], time, dt)
-            
+            return tube_solver.solve_step_substep(
+                tube.quadrature_results["ghost_temperature"][i - 1], time, dt
+            )
+
+        with multiprocess.Pool(self.nthreads) as p:
+            data = list(p.map(work, self.receiver.tubes))
+
+        for tube, res in zip(self.receiver.tubes, data):
+            tube.quadrature_results["ghost_temperature"][i] = res
+
     def solve_fluid(self, i, time, dt):
-        """Setup and solve for the fluid temperatures in each tube
-        """
+        """Setup and solve for the fluid temperatures in each tube"""
         # Setup the thermohydraulic solver for each flow path
         for path in self.receiver.flowpaths.values():
             # Add parameters
-            model = flowpath.FlowPath(path["times"], path["mass_flow"], path["inlet_temp"])
+            model = flowpath.FlowPath(
+                path["times"],
+                path["mass_flow"],
+                path["inlet_temp"],
+                **flowpath.deparameterize_flow_path(self.thermo_params)
+            )
             for panel_name in path["panels"]:
-                model.add_panel_from_object(self.receiver.panels[panel_name], self.fluid_material)
+                model.add_panel_from_object(
+                    self.receiver.panels[panel_name], self.fluid_material
+                )
 
             # Solve for the fluid temperatures
             nodal_temps = model.solve(time)
 
             # Update the stored fluid temperature and flow velocities
-            flow_rates, tube_temperatures = model.recover_tube_results(nodal_temps, time)
+            flow_rates, tube_temperatures = model.recover_tube_results(
+                nodal_temps, time
+            )
 
-            for panel_name, panel_rates, panel_temps in zip(path["panels"], flow_rates, tube_temperatures):
-                for k,tube in enumerate(self.receiver.panels[panel_name].tubes.values()):
+            for panel_name, panel_rates, panel_temps in zip(
+                path["panels"], flow_rates, tube_temperatures
+            ):
+                for k, tube in enumerate(
+                    self.receiver.panels[panel_name].tubes.values()
+                ):
                     tube.axial_results["fluid_temperature"][i] = panel_temps[k]
                     tube.axial_results["fluid_velocity"][i] = panel_rates[k]
-            
+
     def _setup(self):
         """Setup for solve
-        
+
         Sets initial conditions on the metal and fluid temperature and does some
         checking to make sure the problem is fully-defined
         """
@@ -231,22 +360,24 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
                 for tube in panel.tubes.values():
                     tube.quadrature_results["ghost_temperature"][0] = tube.T0
                     tube.axial_results["fluid_temperature"][0] = path["inlet_temp"][0]
-                    tube.axial_results["fluid_velocity"][0] = 100000000.0 # Need to provide IC?
-
+                    tube.axial_results["fluid_velocity"][
+                        0
+                    ] = 100000000.0  # Need to provide IC?
 
     def _determine_solve_times(self):
         """Determine which times to solve the temperatures for
-            
-            Dumb algorithm to determine times to solve at -- just look at a tube
+
+        Dumb algorithm to determine times to solve at -- just look at a tube
         """
         return list(list(self.receiver.panels.values())[0].tubes.values())[0].times
 
+
 def tube_dim(tube):
     """
-        Figure out a tube's nodal field array size based on the discertization and
-        abstraction
+    Figure out a tube's nodal field array size based on the discertization and
+    abstraction
     """
-    dim = (tube.nr+2, tube.nt+2, tube.nz+2)
+    dim = (tube.nr + 2, tube.nt + 2, tube.nz + 2)
     if tube.abstraction == "1D":
         return dim[:1]
     elif tube.abstraction == "2D":
@@ -255,6 +386,21 @@ def tube_dim(tube):
         return dim
     else:
         raise ValueError("Unknown abstraction %s" % tube.abstraction)
+
+
+def deparametrize_finite_difference(pset):
+    """
+    Convert a ParameterSet to kwargs with defaults
+    """
+    return {
+        "rtol": pset.get_default("rtol", 1.0e-6),
+        "atol": pset.get_default("atol", 1.0e-2),
+        "miter": pset.get_default("miter", 100),
+        "substep": pset.get_default("substep", 1),
+        "verbose": pset.get_default("verbose", False),
+        "steady": pset.get_default("steady", False),
+    }
+
 
 class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
     """
@@ -492,8 +638,7 @@ class FiniteDifferenceImplicitThermalProblem:
         return self._real_results(T)
 
     def _real_results(self, T):
-        """Helper that only returns the actual results, without the ghosts
-        """
+        """Helper that only returns the actual results, without the ghosts"""
         # Don't return ghost values
         if self.ndim == 3:
             return T[..., 1:-1, 1:-1, 1:-1]
@@ -780,16 +925,15 @@ class FiniteDifferenceImplicitThermalProblem:
                         / self.k[1, j, k]
                     )
                 # Convection giving the film coefficient and fluid temperature
-                elif isinstance(self.tube.inner_bc, receiver.FilmCoefficientConvectiveBC):
+                elif isinstance(
+                    self.tube.inner_bc, receiver.FilmCoefficientConvectiveBC
+                ):
                     fluid_T = self.tube.inner_bc.fluid_temperature(
-                        time, self.z[1, j, k])
-                    h = self.tube.inner_bc.film_coefficient(time, self.z[1, j, k]
-                            )
+                        time, self.z[1, j, k]
+                    )
+                    h = self.tube.inner_bc.film_coefficient(time, self.z[1, j, k])
                     R[self.dof(i, j, k)] = (
-                        self.dr
-                        * h
-                        * (T[1, j, k] - fluid_T)
-                        / self.k[1, j, k]
+                        self.dr * h * (T[1, j, k] - fluid_T) / self.k[1, j, k]
                     )
                 else:
                     raise ValueError("Unknown boundary condition!")
@@ -830,13 +974,8 @@ class FiniteDifferenceImplicitThermalProblem:
                     fluid_T = self.tube.inner_bc.fluid_temperature(
                         time, self.z[1, j, k]
                     )
-                    h = self.tube.inner_bc.film_coefficient(time, 
-                        self.z[1, j, k])
-                    D.append(
-                        self.dr
-                        * h
-                        / self.k[1, j, k]
-                    )
+                    h = self.tube.inner_bc.film_coefficient(time, self.z[1, j, k])
+                    D.append(self.dr * h / self.k[1, j, k])
 
         return sp.coo_matrix((D, (I, J)), shape=(self.ndof, self.ndof))
 
@@ -959,8 +1098,11 @@ class FiniteDifferenceImplicitThermalProblem:
                     J.append(self.dof(0, j, k))
                     D.append(-1.0)
                 # Convection
-                elif (isinstance(self.tube.inner_bc, receiver.ConvectiveBC) or
-                        isinstance(self.tube.inner_bc, receiver.FilmCoefficientConvectiveBC)):
+                elif isinstance(
+                    self.tube.inner_bc, receiver.ConvectiveBC
+                ) or isinstance(
+                    self.tube.inner_bc, receiver.FilmCoefficientConvectiveBC
+                ):
                     I.append(self.dof(i, j, k))
                     J.append(self.dof(1, j, k))
                     D.append(1.0)

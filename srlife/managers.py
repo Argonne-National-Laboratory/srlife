@@ -139,16 +139,23 @@ class SolutionManager:
 
     def solve_heat_transfer(self):
         """Solve heat transfer for the receiver
-        
+
         Adds thermal results in each tube
         """
         if isinstance(self.thermal_solver, thermal.ThermohydraulicsThermalSolver):
             if self.progress:
                 print("Running thermohydraulic analysis")
-            # TODO: resetters
-            self.thermal_solver.solve_receiver(self.receiver, self.thermal_material,
-                    self.fluid_material, decorator = self.progress_decorator,
-                    nthreads = self.nthreads)
+            self.thermal_solver.solve_receiver(
+                self.receiver,
+                self.thermal_material,
+                self.fluid_material,
+                decorator=self.progress_decorator,
+                nthreads=self.nthreads,
+                **merge_dicts(
+                    h.args_for_thermohydraulic_solver(self.receiver)
+                    for h in self.heuristics
+                )
+            )
         else:
             self.solve_heat_transfer_tube()
 
@@ -169,7 +176,7 @@ class SolutionManager:
                             self.thermal_material,
                             self.fluid_material,
                             **merge_dicts(
-                                h.args_for_tube_thermal_solver(self.receiver, x)
+                                h.args_for_thermal_solver(self.receiver, x)
                                 for h in self.heuristics
                             )
                         ),
@@ -218,6 +225,15 @@ class Heuristic:
         """
         return {}
 
+    def args_for_thermohydraulic_solver(self, receiver):
+        """Add tube solver args
+
+        Args:
+          receiver (receiver.receiver):       receiver object affected
+
+        """
+        return {}
+
 
 class CycleResetHeuristic(Heuristic):
     """
@@ -233,6 +249,19 @@ class CycleResetHeuristic(Heuristic):
         """
         resetter = thermal.TemperatureResetter(
             lambda t: np.isclose(t % receiver.period, 0), tube.T0
+        )
+
+        return {"resetters": [resetter]}
+
+    def args_for_thermohydraulic_solver(self, receiver):
+        """Add tube solver args
+
+        Args:
+          receiver (receiver.receiver):       receiver object affected
+
+        """
+        resetter = thermal.ReceiverResetter(
+            lambda t: np.isclose(t % receiver.period, 0)
         )
 
         return {"resetters": [resetter]}
