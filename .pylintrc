@@ -155,7 +155,9 @@ disable=print-statement,
         consider-using-f-string,
         consider-using-in,
         unnecessary-lambda-assignment,
-        implicit-str-concat
+        implicit-str-concat,
+        too-many-lines,
+        too-many-public-methods
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
