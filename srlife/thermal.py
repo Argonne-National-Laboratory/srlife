@@ -2,8 +2,6 @@
   This module defines 1D, 2D, and 3D thermal solvers.
 """
 
-from abc import ABC, abstractmethod
-
 import multiprocess
 
 import numpy as np
@@ -13,20 +11,6 @@ import scipy.sparse.linalg as sla
 
 from srlife import receiver, solverparams
 from srlife.thermohydraulics import flowpath
-
-
-class ThermalSolver(ABC):
-    """
-    When called this class takes as input:
-      1) A Tube object
-      2) A ThermalMaterial
-      3) The FluidMaterial object
-
-    The solver must read the Tube abstraction parameter and
-    return a 3D, 2D, or 1D analysis, as appropriate
-    """
-
-    pass
 
 
 class TemperatureResetter:
@@ -73,7 +57,7 @@ class ReceiverResetter:
         """
         self.trigger = trigger
 
-    def apply(self, time, step, receiver):
+    def apply(self, time, step, model):
         """
         Actually make the modification
 
@@ -83,11 +67,11 @@ class ReceiverResetter:
           temps       current temperatures
         """
         if self.trigger(time):
-            for tube in receiver.tubes:
+            for tube in model.tubes:
                 tube.quadrature_results["ghost_temperature"][step] = tube.T0
 
 
-class ThermohydraulicsThermalSolver(ThermalSolver):
+class ThermohydraulicsThermalSolver:
     """
     Solve the heat transfer problem by iterating between a simple
     1D thermal hydraulics model and a FiniteDifferenceImplicitThermalSolver.
@@ -105,25 +89,28 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
 
     def solve_receiver(
         self,
-        receiver,
+        model,
         solid_material,
         fluid_material,
         decorator=None,
         nthreads=1,
-        resetters=[],
+        resetters=None,
     ):
         """Solve the entire receiver by splitting into independent flow paths
 
         Args:
-            receiver (Receiver): fully-populated receiver object
+            model (Receiver): fully-populated receiver object
             solid_material (ThermalMaterial): solid thermal properties
             fluid_material (ThermalFluidMaterial): fluid thermal properties
             decorator (Optional[decorator]): progress decorator
             nthreads(Optional[int]): number of allowable threads to use
             resetters(Optional[list]): resetting objects to apply
         """
+        if resetters is None:
+            resetters = []
+
         # Setup
-        self.receiver = receiver
+        self.receiver = model
         self.solid_material = solid_material
         self.fluid_material = fluid_material
         self.decorator = decorator
@@ -156,7 +143,7 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
             for resetter in resetters:
                 resetter.apply(time, i, receiver)
 
-        res = list(
+        list(
             decorator(
                 map(
                     do_stuff,
@@ -203,8 +190,8 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
                 "fluid_velocity"
             ][i - 1]
 
-        # Iterate between solving the metal temperatures and solving the fluid temperatures until both
-        # are fairly stationary
+        # Iterate between solving the metal temperatures and solving the
+        # fluid temperatures until both are fairly stationary
         if self.verbose:
             print("Solving timestep %i, discrete time %f" % (i, time))
         for j in range(self.miter):
@@ -228,8 +215,9 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
             temp_max_rel_diff = np.max(temp_diff / (previous_temps + self.eps))
             if self.verbose:
                 print(
-                    "\tSolved metal temperatures, absolute difference %e / relative difference %e"
-                    % (temp_max_diff, temp_max_rel_diff)
+                    "\tSolved metal temperatures for iteration %i, "
+                    "absolute difference %e / relative difference %e"
+                    % (j, temp_max_diff, temp_max_rel_diff)
                 )
 
             previous_fluid_temps = np.array(
@@ -252,8 +240,9 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
             fluid_max_rel_diff = np.max(fluid_diff / (previous_fluid_temps + self.eps))
             if self.verbose:
                 print(
-                    "\tSolved fluid temperatures, absolute difference %e / relative difference %e"
-                    % (fluid_max_diff, fluid_max_rel_diff)
+                    "\tSolved fluid temperatures for iteration %i, "
+                    "absolute difference %e / relative difference %e"
+                    % (j, fluid_max_diff, fluid_max_rel_diff)
                 )
 
             if (fluid_max_diff < self.atol and temp_max_diff < self.atol) or (
@@ -267,6 +256,7 @@ class ThermohydraulicsThermalSolver(ThermalSolver):
 
     def solve_metal(self, i, time, dt):
         """Setup and solve for the metal temperatures in each tube"""
+        # pylint: disable=no-member
         # Setup the appropriate convective BCs on the ID of each tube
         # This is the best use of threads as best I can tell
         for tube in self.receiver.tubes:
@@ -402,7 +392,7 @@ def deparametrize_finite_difference(pset):
     }
 
 
-class FiniteDifferenceImplicitThermalSolver(ThermalSolver):
+class FiniteDifferenceImplicitThermalSolver:
     """
     Solves the heat transfer problem using the finite difference method.
 
@@ -1099,9 +1089,8 @@ class FiniteDifferenceImplicitThermalProblem:
                     D.append(-1.0)
                 # Convection
                 elif isinstance(
-                    self.tube.inner_bc, receiver.ConvectiveBC
-                ) or isinstance(
-                    self.tube.inner_bc, receiver.FilmCoefficientConvectiveBC
+                    self.tube.inner_bc,
+                    (receiver.ConvectiveBC, receiver.FilmCoefficientConvectiveBC),
                 ):
                     I.append(self.dof(i, j, k))
                     J.append(self.dof(1, j, k))
