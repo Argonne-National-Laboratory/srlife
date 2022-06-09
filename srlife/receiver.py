@@ -208,16 +208,23 @@ class Receiver:
 
         for name in grp:
             res.add_panel(Panel.load(grp[name]), name)
-        
+
         if "flowpaths" in fobj:
             grp = fobj["flowpaths"]
 
             for name in grp:
                 res.add_flowpath(
-                        list(map(lambda x: x.decode(encoding='UTF-8'), np.copy(grp[name]["panels"]))),
-                        np.copy(grp[name]["times"]),
-                        np.copy(grp[name]["mass_flow"]),
-                        np.copy(grp[name]["inlet_temp"]), name = name)
+                    list(
+                        map(
+                            lambda x: x.decode(encoding="UTF-8"),
+                            np.copy(grp[name]["panels"]),
+                        )
+                    ),
+                    np.copy(grp[name]["times"]),
+                    np.copy(grp[name]["mass_flow"]),
+                    np.copy(grp[name]["inlet_temp"]),
+                    name=name,
+                )
 
         if "flowpaths" in fobj:
             grp = fobj["flowpaths"]
@@ -854,7 +861,7 @@ class Tube:
         fobj.attrs["nr"] = self.nr
         fobj.attrs["nt"] = self.nt
         fobj.attrs["nz"] = self.nz
-        
+
         fobj.attrs["multiplier"] = self.multiplier_val
 
         fobj.attrs["multiplier"] = self.multiplier_val
@@ -931,7 +938,7 @@ class Tube:
         grp = fobj["quadrature_results"]
         for name in grp:
             res.add_quadrature_results(name, np.copy(grp[name]))
-        
+
         if "axial_results" in fobj:
             grp = fobj["axial_results"]
             for name in grp:
@@ -1358,6 +1365,7 @@ class FixedTempBC(ThermalBC):
             and np.allclose(self.data, other.data)
         )
 
+
 class FilmCoefficientConvectiveBC(ThermalBC):
     """A convective BC on the ID of a tube, this version provides the film coefficient directly
 
@@ -1368,6 +1376,7 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         fluid_T (np.array): fluid temperature
         film (np.array):    film coefficient data
     """
+
     def __init__(self, radius, height, nz, fluid_T, film):
         self.r = radius
         self.h = height
@@ -1375,8 +1384,10 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         self.nz = nz
 
         if fluid_T.shape != (nz,) or film.shape != (nz):
-            raise ValueError("Film coefficient and fluid temperature data must have size (nz,)")
-            
+            raise ValueError(
+                "Film coefficient and fluid temperature data must have size (nz,)"
+            )
+
         zs = np.linspace(0, self.h, self.nz)
         self.ifn_fluid = inter.interp1d(zs, fluid_T)
         self.ifn_film = inter.interp1d(zs, film)

@@ -274,7 +274,7 @@ class FlowPath:
         self.atol = 1e-8
         self.miter = 50
         self.verbose = verbose
-    
+
     def add_panel(self, weights, ri, h, metal_temp, material):
         """
         Construct and add the standard panel -> manifold link
@@ -307,6 +307,7 @@ class FlowPath:
 
         metal_temps = []
         for tube in panel.tubes.values():
+            tshape = tube.quadrature_results["ghost_temperature"].shape
             if tube.abstraction == "3D":
                 metal_temps.append(
                     tube.quadrature_results["ghost_temperature"][..., 1, 1:-1, 1:-1]
