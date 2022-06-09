@@ -48,8 +48,7 @@ class Receiver:
 
         self.flowpaths = OrderedDict()
 
-    def add_flowpath(self, panels_in_path, times, mass_rate, inlet_temp,
-            name = None):
+    def add_flowpath(self, panels_in_path, times, mass_rate, inlet_temp, name=None):
         """Add a flow path to the receiver model
 
         Args:
@@ -66,8 +65,12 @@ class Receiver:
             if n not in self.panels.keys():
                 raise ValueError("Panel %s does not exist in the receiver!" % n)
 
-        self.flowpaths[name] = {"panels": panels_in_path, "times": times,
-                "mass_flow": mass_rate, "inlet_temp": inlet_temp}
+        self.flowpaths[name] = {
+            "panels": panels_in_path,
+            "times": times,
+            "mass_flow": mass_rate,
+            "inlet_temp": inlet_temp,
+        }
 
     def write_vtk(self, basename):
         """Write out the receiver as individual panels with names basename_panelname
@@ -178,10 +181,10 @@ class Receiver:
         grp = fobj.create_group("flowpaths")
         for name, path in self.flowpaths.items():
             sgrp = grp.create_group(name)
-            sgrp.create_dataset("panels", data = path["panels"])
-            sgrp.create_dataset("times", data = path["times"])
-            sgrp.create_dataset("mass_flow", data = path["mass_flow"])
-            sgrp.create_dataset("inlet_temp", data = path["inlet_temp"])
+            sgrp.create_dataset("panels", data=path["panels"])
+            sgrp.create_dataset("times", data=path["times"])
+            sgrp.create_dataset("mass_flow", data=path["mass_flow"])
+            sgrp.create_dataset("inlet_temp", data=path["inlet_temp"])
 
     @classmethod
     def load(cls, fobj):
@@ -204,16 +207,23 @@ class Receiver:
 
         for name in grp:
             res.add_panel(Panel.load(grp[name]), name)
-        
+
         if "flowpaths" in fobj:
             grp = fobj["flowpaths"]
 
             for name in grp:
                 res.add_flowpath(
-                        list(map(lambda x: x.decode(encoding='UTF-8'), np.copy(grp[name]["panels"]))),
-                        np.copy(grp[name]["times"]),
-                        np.copy(grp[name]["mass_flow"]),
-                        np.copy(grp[name]["inlet_temp"]), name = name)
+                    list(
+                        map(
+                            lambda x: x.decode(encoding="UTF-8"),
+                            np.copy(grp[name]["panels"]),
+                        )
+                    ),
+                    np.copy(grp[name]["times"]),
+                    np.copy(grp[name]["mass_flow"]),
+                    np.copy(grp[name]["inlet_temp"]),
+                    name=name,
+                )
 
         return res
 
@@ -232,7 +242,7 @@ class Panel:
       stiffness:                        manifold spring stiffness
     """
 
-    def __init__(self, stiffness, ntubes_actual = None):
+    def __init__(self, stiffness, ntubes_actual=None):
         """Initialize the panel"""
         self.tubes = OrderedDict()
         self.stiffness = stiffness
@@ -284,9 +294,8 @@ class Panel:
         total = 0
         for t in self.tubes.values():
             total += t.multiplier
-        
-        return total
 
+        return total
 
     def add_tube(self, tube, name=None):
         """Add a tube object to the panel
@@ -385,8 +394,18 @@ class Tube:
       multiplier (Optional[int]): number of tubes represented by this actual model, defaults to 1
     """
 
-    def __init__(self, outer_radius, thickness, height, nr, nt, nz, T0=0.0, page=False,
-            multiplier = 1):
+    def __init__(
+        self,
+        outer_radius,
+        thickness,
+        height,
+        nr,
+        nt,
+        nz,
+        T0=0.0,
+        page=False,
+        multiplier=1,
+    ):
         """Initialize the tube"""
         self.r = outer_radius
         self.t = thickness
@@ -416,10 +435,10 @@ class Tube:
     @property
     def multiplier(self):
         """
-            Number of actual tubes represented by this model
+        Number of actual tubes represented by this model
 
-            Returns:
-                int:    tube multiplier
+        Returns:
+            int:    tube multiplier
         """
         return self.multiplier_val
 
@@ -734,11 +753,13 @@ class Tube:
 
     def add_blank_axial_results(self, name):
         """Add a blank axial results field
-        
+
         Args:
             name (str): name of field
         """
-        self.axial_results[name] = self._setup_memmap(name + "_axial", (self.ntime, self.nz))
+        self.axial_results[name] = self._setup_memmap(
+            name + "_axial", (self.ntime, self.nz)
+        )
 
     def _setup_memmap(self, name, shape):
         """Map array to disk if required
@@ -822,7 +843,7 @@ class Tube:
         fobj.attrs["nr"] = self.nr
         fobj.attrs["nt"] = self.nt
         fobj.attrs["nz"] = self.nz
-        
+
         fobj.attrs["multiplier"] = self.multiplier_val
 
         fobj.attrs["abstraction"] = self.abstraction
@@ -843,7 +864,7 @@ class Tube:
 
         grp = fobj.create_group("axial_results")
         for name, result in self.axial_results.items():
-            grp.create_dataset(name, data = result)
+            grp.create_dataset(name, data=result)
 
         if self.outer_bc:
             grp = fobj.create_group("outer_bc")
@@ -879,7 +900,7 @@ class Tube:
             fobj.attrs["nt"],
             fobj.attrs["nz"],
             T0=fobj.attrs["T0"],
-            multiplier = mult,
+            multiplier=mult,
         )
 
         res.abstraction = fobj.attrs["abstraction"]
@@ -897,7 +918,7 @@ class Tube:
         grp = fobj["quadrature_results"]
         for name in grp:
             res.add_quadrature_results(name, np.copy(grp[name]))
-        
+
         if "axial_results" in fobj:
             grp = fobj["axial_results"]
             for name in grp:
@@ -1319,6 +1340,7 @@ class FixedTempBC(ThermalBC):
             and np.allclose(self.data, other.data)
         )
 
+
 class FilmCoefficientConvectiveBC(ThermalBC):
     """A convective BC on the ID of a tube, this version provides the film coefficient directly
 
@@ -1329,6 +1351,7 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         fluid_T (np.array): fluid temperature
         film (np.array):    film coefficient data
     """
+
     def __init__(self, radius, height, nz, fluid_T, film):
         self.r = radius
         self.h = height
@@ -1336,8 +1359,10 @@ class FilmCoefficientConvectiveBC(ThermalBC):
         self.nz = nz
 
         if fluid_T.shape != (nz,) or film.shape != (nz):
-            raise ValueError("Film coefficient and fluid temperature data must have size (nz,)")
-            
+            raise ValueError(
+                "Film coefficient and fluid temperature data must have size (nz,)"
+            )
+
         zs = np.linspace(0, self.h, self.nz)
         self.ifn_fluid = inter.interp1d(zs, fluid_T)
         self.ifn_film = inter.interp1d(zs, film)
@@ -1408,6 +1433,7 @@ class FilmCoefficientConvectiveBC(ThermalBC):
             and (self.nz == other.nz)
             and np.allclose(self.data, other.data)
         )
+
 
 class ConvectiveBC(ThermalBC):
     """A convective BC on the surface of a tube defined by a radius and height.

@@ -26,7 +26,8 @@ class ThermalFluidMaterial:
 
     as a function of temperature (in K).
     """
-    def __init__(self, film_min = 1e-3):
+
+    def __init__(self, film_min=1e-3):
         self.film_min = film_min
 
     @classmethod
@@ -109,7 +110,7 @@ class ThermalFluidMaterial:
         re = self.reynolds(T, u, r)
         pr = self.prandtl(T)
         f = (0.79 * jnp.log(re) - 1.64) ** -2.0
-        
+
         return ((f / 8.0) * (re - 1000.0) * pr) / (
             1.0 + 12.7 * (f / 8.0) ** 0.5 * (pr ** (2.0 / 3.0) - 1.0)
         )

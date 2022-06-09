@@ -22,13 +22,13 @@ from srlife import (
 def sample_parameters():
     params = solverparams.ParameterSet()
 
-    params["nthreads"] = 1
+    params["nthreads"] = 4
     params["progress_bars"] = True
     # If true store results on disk (slower, but less memory)
     params["page_results"] = False
 
     params["thermal"]["miter"] = 200
-    params["thermal"]["verbose"] = True
+    params["thermal"]["verbose"] = False
 
     params["thermal"]["solid"]["rtol"] = 1.0e-6
     params["thermal"]["solid"]["atol"] = 1.0e-4
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     #     Pressure boundary conditions
     #     Interconnect stiffnesses
     model = receiver.Receiver.load("example-small.hdf5")
-    
+
     # Demonstration on how to setup a flowpath
     # Setup the flow path information
     flowpath = []
@@ -76,20 +76,25 @@ if __name__ == "__main__":
         for name_tube, tube in panel.tubes.items():
             times = tube.times
             tube.multiplier_val = 100
-            tube.T0 = 300+273.15
-    
+            tube.T0 = 300 + 273.15
+
     mass_flow = np.zeros_like(times)
-    mass_flow[:] = 3600000.0 # kg/hr
-    inlet_temp = np.copy(tube.outer_bc.data[:,0,0])
+    mass_flow[:] = 3600000.0  # kg/hr
+    inlet_temp = np.copy(tube.outer_bc.data[:, 0, 0])
     inlet_temp /= np.max(inlet_temp)
     inlet_temp *= 250.0
     inlet_temp += 300.0
     inlet_temp += 273.15
 
     model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
-    
+
     model.save("example-small-with-flowpath.hdf")
     model = receiver.Receiver.load("example-small-with-flowpath.hdf")
+
+    # Cut down on run time for now
+    # for panel in model.panels.values():
+    #    for tube in panel.tubes.values():
+    #        tube.make_1D(tube.h/2,0.0)
 
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
@@ -110,7 +115,7 @@ if __name__ == "__main__":
     thermal, deformation, damage = library.load_material(
         "740H", "base", "elastic_model", "base"
     )
-    
+
     # The solution manager
     solver = managers.SolutionManager(
         model,
