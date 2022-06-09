@@ -15,8 +15,6 @@ import h5py
 
 from srlife import writers
 
-from collections import OrderedDict
-
 
 class Receiver:
     """Basic definition of the tubular receiver geometry.
@@ -1383,6 +1381,9 @@ class FilmCoefficientConvectiveBC(ThermalBC):
 
         self.nz = nz
 
+        self.fluid_T = fluid_T
+        self.film = film
+
         if fluid_T.shape != (nz,) or film.shape != (nz):
             raise ValueError(
                 "Film coefficient and fluid temperature data must have size (nz,)"
@@ -1425,7 +1426,8 @@ class FilmCoefficientConvectiveBC(ThermalBC):
 
         fobj.attrs["nz"] = self.nz
 
-        fobj.create_dataset("data", data=self.data)
+        fobj.create_dataset("fluid_T", data=self.fluid_T)
+        fobj.create_dataset("film", data=self.film)
 
     @classmethod
     def load(cls, fobj):
@@ -1438,7 +1440,8 @@ class FilmCoefficientConvectiveBC(ThermalBC):
             fobj.attrs["r"],
             fobj.attrs["h"],
             fobj.attrs["nz"],
-            np.copy(fobj["data"]),
+            np.copy(fobj["fluid_T"]),
+            np.copy(fobj["film"]),
         )
 
     def close(self, other):
@@ -1456,7 +1459,8 @@ class FilmCoefficientConvectiveBC(ThermalBC):
             np.isclose(self.r, other.r)
             and np.isclose(self.h, other.h)
             and (self.nz == other.nz)
-            and np.allclose(self.data, other.data)
+            and np.allclose(self.fluid_T, other.fluid_T)
+            and np.allclose(self.film, other.film)
         )
 
 class FilmCoefficientConvectiveBC(ThermalBC):

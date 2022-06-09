@@ -307,7 +307,6 @@ class FlowPath:
 
         metal_temps = []
         for tube in panel.tubes.values():
-            tshape = tube.quadrature_results["ghost_temperature"].shape
             if tube.abstraction == "3D":
                 metal_temps.append(
                     tube.quadrature_results["ghost_temperature"][..., 1, 1:-1, 1:-1]
