@@ -43,7 +43,7 @@ class TestPIAModel(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.PIAModel(self.temperatures, self.material)
+        self.model = damage.PIAModel(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -119,7 +119,7 @@ class TestWNTSAModel(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.WNTSAModel(self.temperatures, self.material)
+        self.model = damage.WNTSAModel(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -193,9 +193,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.MTSModelGriffithFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.MTSModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -269,9 +267,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.MTSModelPennyShapedFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.MTSModelPennyShapedFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -311,9 +307,9 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
     def setUp(self):
 
         # Case 1: Single stress tensor over 1 time step
-        self.stress = np.array([[100.0, 25.0, 50.0, 0, 0, 0]])
-        self.temperatures = np.array([1.0])
-        self.volumes = np.array([0.1])
+        # self.stress = np.array([[100.0, 25.0, 50.0, 0, 0, 0]])
+        # self.temperatures = np.array([1.0])
+        # self.volumes = np.array([0.1])
 
         # Case 2: Testing for multiple (principal) stress tensors over 2 time steps
         self.stress = np.array(
@@ -345,9 +341,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.CSEModelGriffithFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -421,9 +415,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.CSEModelPennyShapedFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.CSEModelPennyShapedFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -497,9 +489,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.SMMModelGriffithFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.SMMModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
@@ -573,9 +563,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             self.nu,
         )
 
-        self.model = damage.SMMModelPennyShapedFlaw(
-            self.temperatures, self.material, self.stress
-        )
+        self.model = damage.SMMModelPennyShapedFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         k = self.s0 ** (-self.m)
