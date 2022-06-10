@@ -56,7 +56,7 @@ class WeibullFailureModel:
 
         Parameters:
           receiver        fully-solved receiver object
-          material        material model ot use
+          material        material model to use
 
         Additional Parameters:
           nthreads        number of threads
@@ -131,26 +131,17 @@ class CrackShapeIndependent(WeibullFailureModel):
     """
     Parent class for crack shape dependent models
     """
-
-    def __init__(self, temperatures, material):
+    def __init__(self, pset, *args, **kwargs):
         """
-        Input the material parameters
         Create a mesh grid for integration
         Evaluate direction cosines using the mesh grid
         only for PIA and WNTSA models which are crack shape independent
         """
-        super().__init__(temperatures, material)
-        self.temperatures = temperatures
-        self.material = material
-        # Material parameters
-        self.svals = self.material.strength(temperatures)
-        self.mvals = self.material.modulus(temperatures)
-        self.kvals = self.svals ** (-self.mvals)
-        self.kpvals = (2 * self.mvals + 1) * self.kvals
+        super().__init__(pset, *args, **kwargs)
 
         # limits and number of segments for angles
-        self.nalpha = 21
-        self.nbeta = 31
+        self.nalpha = pset.get_default("nalpha",21)
+        self.nbeta = pset.get_default("nbeta",31)
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -168,34 +159,36 @@ class CrackShapeIndependent(WeibullFailureModel):
         self.m = np.sin(self.A) * np.cos(self.B)
         self.n = np.sin(self.A) * np.sin(self.B)
 
+    def calculate_normal_stress(self, mandel_stress):
+        """
+        Calculate the normal stress given the Mandel vector
+        """
+        # Principal stresses
+        pstress = self.calculate_principal_stress(mandel_stress)
+
+        # Normal stress
+        return (
+            pstress[..., 0, None, None] * (self.l**2)
+            + pstress[..., 1, None, None] * (self.m**2)
+            + pstress[..., 2, None, None] * (self.n**2)
+        )
+
 
 class CrackShapeDependent(WeibullFailureModel):
     """
     Parent class for crack shape dependent models
     """
-
-    def __init__(self, temperatures, material, mandel_stress):
+    def __init__(self, pset, *args, **kwargs):
         """
-        Input the material parameters
         Create a mesh grid for integration
         Evaluate direction cosines using the mesh grid
         for fracture based models which are crack shape dependent
         """
-        super().__init__(temperatures, material, mandel_stress)
-        self.temperatures = temperatures
-        self.material = material
-        self.mandel_stress = mandel_stress
-        # Material parameters
-        self.svals = self.material.strength(temperatures)
-        self.mvals = self.material.modulus(temperatures)
-        self.cbar = self.material.c_bar(temperatures)[0, 0]
-        self.nu = self.material.nu(temperatures)[0, 0]
-        self.kvals = self.svals ** (-self.mvals)
-        self.kpvals = (2 * self.mvals + 1) * self.kvals
+        super().__init__(pset, *args, **kwargs)
 
         # limits and number of segments for angles
-        self.nalpha = 121
-        self.nbeta = 121
+        self.nalpha = pset.get_default("nalpha",121)
+        self.nbeta = pset.get_default("nbeta",121)
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -213,26 +206,47 @@ class CrackShapeDependent(WeibullFailureModel):
         self.m = np.sin(self.A) * np.cos(self.B)
         self.n = np.sin(self.A) * np.sin(self.B)
 
+    def calculate_normal_stress(self, mandel_stress):
+        """
+        Calculate the normal stress given the Mandel vector
+        """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
 
-        # Total stress
-        self.sigma = np.sqrt(
-            ((pstress[..., 0, None, None] * self.l) ** 2)
-            + ((pstress[..., 1, None, None] * self.m) ** 2)
-            + ((pstress[..., 2, None, None] * self.n) ** 2)
-        )
-
         # Normal stress
-        self.sigma_n = (
+        return (
             pstress[..., 0, None, None] * (self.l**2)
             + pstress[..., 1, None, None] * (self.m**2)
             + pstress[..., 2, None, None] * (self.n**2)
         )
 
+    def calculate_total_stress(self, mandel_stress):
+        """
+        Calculate the total stress given the Mandel vector
+        """
+        # Principal stresses
+        pstress = self.calculate_principal_stress(mandel_stress)
+
+        # Total stress
+        return np.sqrt(
+            ((pstress[..., 0, None, None] * self.l) ** 2)
+            + ((pstress[..., 1, None, None] * self.m) ** 2)
+            + ((pstress[..., 2, None, None] * self.n) ** 2)
+        )
+
+    def calculate_shear_stress(self, mandel_stress):
+        """
+        Calculate the shear stress given the normal and total stress
+        """
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Total stress
+        sigma = self.calculate_total_stress(mandel_stress)
+
         # Shear stress
         with np.errstate(invalid="ignore"):
-            self.tau = np.sqrt(self.sigma**2 - self.sigma_n**2)
+            return np.sqrt(sigma**2 - sigma_n**2)
 
     def calculate_flattened_eq_stress(
         self, mandel_stress, temperatures, material, A, dalpha, dbeta
@@ -241,6 +255,9 @@ class CrackShapeDependent(WeibullFailureModel):
         Calculate the integral of equivalent stresses given the material
         properties and integration limits
         """
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
         self.mvals = self.material.modulus(temperatures)
 
         # Principal stresses
@@ -290,6 +307,15 @@ class CrackShapeDependent(WeibullFailureModel):
           volumes:        element volumes
           material:       material model  object with required data
         """
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+
+        # Material parameters
+        self.svals = self.material.strength(temperatures)
+        self.mvals = self.material.modulus(temperatures)
+        self.kvals = self.svals ** (-self.mvals)
+        self.kpvals = (2 * self.mvals + 1) * self.kvals
 
         # Equivalent stress raied to exponent mv
         flat = (
@@ -323,6 +349,15 @@ class PIAModel(CrackShapeIndependent):
           volumes:        element volumes
           material:       material model  object with required data
         """
+        self.temperatures = temperatures
+        self.material = material
+
+        # Material parameters
+        self.svals = self.material.strength(temperatures)
+        self.mvals = self.material.modulus(temperatures)
+        self.kvals = self.svals ** (-self.mvals)
+
+        # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
 
         # Only tension
@@ -347,11 +382,7 @@ class WNTSAModel(CrackShapeIndependent):
         pstress = self.calculate_principal_stress(mandel_stress)
 
         # Normal stress
-        sigma_n = (
-            pstress[..., 0, None, None] * (self.l**2)
-            + pstress[..., 1, None, None] * (self.m**2)
-            + pstress[..., 2, None, None] * (self.n**2)
-        )
+        sigma_n = self.calculate_normal_stress(mandel_stress)
 
         # Area integral; suppressing warning given when negative numbers are raised
         # to rational numbers
@@ -391,6 +422,15 @@ class WNTSAModel(CrackShapeIndependent):
           material:       material model  object with required data
         """
 
+        self.temperatures = temperatures
+        self.material = material
+
+        # Material parameters
+        self.svals = self.material.strength(temperatures)
+        self.mvals = self.material.modulus(temperatures)
+        self.kvals = self.svals ** (-self.mvals)
+        self.kpvals = (2 * self.mvals + 1) * self.kvals
+
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
             self.calculate_avg_normal_stress(
@@ -412,9 +452,14 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses given the pricipal stresses
         """
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_shear_stress(mandel_stress)
 
         # Projected equivalent stress
-        return 0.5 * (self.sigma_n + np.sqrt((self.sigma_n**2) + (self.tau**2)))
+        return 0.5 * (sigma_n + np.sqrt((sigma_n**2) + (tau**2)))
 
 
 class MTSModelPennyShapedFlaw(CrackShapeDependent):
@@ -428,10 +473,19 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         """
         Calculate the average normal tensile stresses given the pricipal stresses
         """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+
+        self.nu = self.material.nu(temperatures).flat[0]
+
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+        tau = self.calculate_shear_stress(mandel_stress)
         # Projected equivalent stress
         return 0.5 * (
-            self.sigma_n
-            + np.sqrt((self.sigma_n**2) + ((self.tau / (1 - (0.5 * self.nu))) ** 2))
+            sigma_n
+            + np.sqrt((sigma_n**2) + ((tau / (1 - (0.5 * self.nu))) ** 2))
         )
 
 
@@ -446,8 +500,14 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses given the pricipal stresses
         """
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_shear_stress(mandel_stress)
+
         # Projected equivalent stress
-        return np.sqrt((self.sigma_n**2) + (self.tau**2))
+        return np.sqrt((sigma_n**2) + (tau**2))
 
 
 class CSEModelPennyShapedFlaw(CrackShapeDependent):
@@ -461,8 +521,21 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses given the pricipal stresses
         """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+
+        self.nu = self.material.nu(temperatures).flat[0]
+
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_shear_stress(mandel_stress)
+
         # Projected equivalent stress
-        return np.sqrt((self.sigma_n**2) + (self.tau / (1 - (0.5 * self.nu))) ** 2)
+        return np.sqrt((sigma_n**2) + (tau / (1 - (0.5 * self.nu))) ** 2)
 
 
 class SMMModelGriffithFlaw(CrackShapeDependent):
@@ -476,10 +549,24 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses given the pricipal stresses
         """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+
+        self.nu = self.material.nu(temperatures).flat[0]
+        self.cbar = self.material.c_bar(temperatures).flat[0]
+
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_shear_stress(mandel_stress)
+
         # Projected equivalent stress
         return 0.5 * (
-            self.sigma_n
-            + np.sqrt((self.sigma_n**2) + ((2 * self.tau / self.cbar) ** 2))
+            sigma_n
+            + np.sqrt((sigma_n**2) + ((2 * tau / self.cbar) ** 2))
         )
 
 
@@ -494,12 +581,26 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses given the pricipal stresses
         """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+
+        self.nu = self.material.nu(temperatures).flat[0]
+        self.cbar = self.material.c_bar(temperatures).flat[0]
+
+        # Normal stress
+        sigma_n = self.calculate_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_shear_stress(mandel_stress)
+
         # Projected equivalent stress
         return 0.5 * (
-            self.sigma_n
+            sigma_n
             + np.sqrt(
-                (self.sigma_n**2)
-                + ((4 * self.tau / (self.cbar * (2 - self.nu))) ** 2)
+                (sigma_n**2)
+                + ((4 * tau / (self.cbar * (2 - self.nu))) ** 2)
             )
         )
 
