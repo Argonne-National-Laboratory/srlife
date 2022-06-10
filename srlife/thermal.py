@@ -141,7 +141,7 @@ class ThermohydraulicsThermalSolver:
             self.solve_step(i, time, dt)
 
             for resetter in resetters:
-                resetter.apply(time, i, receiver)
+                resetter.apply(time, i, self.receiver)
 
         list(
             decorator(
