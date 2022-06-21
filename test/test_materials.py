@@ -246,9 +246,10 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         self.s0s = np.array([507.0, 467.0, 528.0, 570.0, 746.0, 461.0])
         self.m = 10.7
         self.c_bar = 1.5
+        self.nu = 0.17
 
         self.mat = materials.StandardCeramicMaterial(
-            self.Ts, self.s0s, self.m, self.c_bar
+            self.Ts, self.s0s, self.m, self.c_bar, self.nu
         )
 
     def test_strength(self):
@@ -276,6 +277,13 @@ class TestStandardCeramicMaterial(unittest.TestCase):
 
         self.assertAlmostEqual(a, b)
 
+    def test_nu(self):
+        T = 1099.1
+
+        a = self.mat.nu(T)
+        b = self.nu
+        self.assertAlmostEqual(a, b)
+
     def test_store_receover(self):
         tfile = tempfile.mktemp()
         self.mat.save(tfile, "blah")
@@ -286,3 +294,4 @@ class TestStandardCeramicMaterial(unittest.TestCase):
 
         self.assertTrue(np.isclose(test.m, self.m))
         self.assertTrue(np.isclose(test.C, self.c_bar))
+        self.assertTrue(np.isclose(test.nu_val, self.nu))

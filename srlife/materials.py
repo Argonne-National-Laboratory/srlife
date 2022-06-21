@@ -701,9 +701,10 @@ class StandardCeramicMaterial:
     1) Weibull strength depends on temperature
     2) Weibull modulus is constant
     3) Constant c_bar parameter
+    4) Constant Poisson's ratio
     """
 
-    def __init__(self, temperatures, strengths, modulus, c_bar, *args, **kwargs):
+    def __init__(self, temperatures, strengths, modulus, c_bar, nu, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.s0 = inter.interp1d(temperatures, strengths)
@@ -711,6 +712,7 @@ class StandardCeramicMaterial:
         self.strengths = strengths
         self.m = modulus
         self.C = c_bar
+        self.nu_val = nu
 
     def strength(self, T):
         """
@@ -736,6 +738,15 @@ class StandardCeramicMaterial:
         else:
             return self.C * np.ones(T.shape)
 
+    def nu(self, T):
+        """
+        Poisson's ratio as a function of temperature
+        """
+        if np.isscalar(T):
+            return self.nu_val
+        else:
+            return self.nu_val * np.ones(T.shape)
+
     @classmethod
     def load(cls, node):
         """
@@ -749,12 +760,14 @@ class StandardCeramicMaterial:
         temps = strength.find("temperatures")
         svals = strength.find("strengths")
         m = node.find("modulus")
+        nu = node.find("nu")
 
         return StandardCeramicMaterial(
             np.array(list(map(float, temps.text.strip().split()))),
             np.array(list(map(float, svals.text.strip().split()))),
             float(m.text),
             float(c_bar.text),
+            float(nu.text),
         )
 
     def save(self, fname, modelname):
@@ -775,6 +788,9 @@ class StandardCeramicMaterial:
 
         c_bar = ET.SubElement(base, "c_bar")
         c_bar.text = str(self.C)
+
+        nu = ET.SubElement(base, "nu")
+        nu.text = str(self.nu_val)
 
         tree = ET.ElementTree(element=root)
         tree.write(fname)
