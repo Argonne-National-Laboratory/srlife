@@ -1072,6 +1072,8 @@ class ThermalBC:
             return ConvectiveBC.load(fobj)
         elif fobj.attrs["type"] == "FixedTemp":
             return FixedTempBC.load(fobj)
+        elif fobj.attrs["type"] == "FilmCoefficientConvective":
+            return FilmCoefficientConvectiveBC.load(fobj)
         else:
             raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
 
