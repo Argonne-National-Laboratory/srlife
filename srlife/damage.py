@@ -63,7 +63,7 @@ class WeibullFailureModel:
           decorator       progress bar
         """
         with multiprocess.Pool(nthreads) as p:
-            p_tube = list(
+            results = list(
                 decorator(
                     p.imap(
                         lambda x: self.tube_log_reliability(x, material, receiver),
@@ -73,13 +73,18 @@ class WeibullFailureModel:
                 )
             )
 
-        p_tube = np.array(p_tube)
+        p_tube = np.array([res[0] for res in results])
+        tube_fields = [res[1] for res in results]
 
         # Tube reliability is the minimum of all the time steps
         tube = np.min(p_tube, axis=1)
 
         # Overall reliability is the minimum of the sum
         overall = np.min(np.sum(p_tube, axis=0))
+
+        # Add the field to the tubes
+        for tubei, field in zip(receiver.tubes, tube_fields):
+            tubei.add_quadrature_results("log_reliability", field)
 
         # Convert back from log-prob as we go
         return {
@@ -117,14 +122,10 @@ class WeibullFailureModel:
             stresses, temperatures, volumes, material
         )
 
-        # Add as an element field
-        tube.add_quadrature_results(
-            "log_reliability",
-            np.transpose(np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)),
+        # Return the sums as a function of time along with the field itself
+        return np.sum(inc_prob, axis=1), np.transpose(
+            np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
         )
-
-        # Return the sums as a function of time
-        return np.sum(inc_prob, axis=1)
 
 
 class CrackShapeIndependent(WeibullFailureModel):
