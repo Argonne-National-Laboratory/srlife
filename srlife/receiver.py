@@ -1,4 +1,4 @@
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,too-many-branches
 """
   This module define the data structures used as input and output to the analysis module.
 
@@ -1365,105 +1365,6 @@ class FixedTempBC(ThermalBC):
             and np.allclose(self.data, other.data)
         )
 
-
-class FilmCoefficientConvectiveBC(ThermalBC):
-    """A convective BC on the ID of a tube, this version provides the film coefficient directly
-
-    Args:
-        radius (float):     radius of application
-        height (float):     height of tube
-        nz (int):           number of divisions along height
-        fluid_T (np.array): fluid temperature
-        film (np.array):    film coefficient data
-    """
-
-    def __init__(self, radius, height, nz, fluid_T, film):
-        self.r = radius
-        self.h = height
-
-        self.nz = nz
-
-        self.fluid_T = fluid_T
-        self.film = film
-
-        if fluid_T.shape != (nz,) or film.shape != (nz):
-            raise ValueError(
-                "Film coefficient and fluid temperature data must have size (nz,)"
-            )
-
-        zs = np.linspace(0, self.h, self.nz)
-        self.ifn_fluid = inter.interp1d(zs, fluid_T)
-        self.ifn_film = inter.interp1d(zs, film)
-
-    def fluid_temperature(self, t, z):
-        """Return the fluid temperature at a given time and position
-
-        Args:
-            t (float): time
-            z (float): height
-        """
-        return self.ifn_fluid(z)
-
-    def film_coefficient(self, t, z):
-        """Return the film coefficient at a given time and position
-
-        Args:
-          t (float): time
-          z (float): height
-
-        Return:
-          float: film coefficient at this location and time
-        """
-        return self.ifn_film(z)
-
-    def save(self, fobj):
-        """Save to an HDF5 file
-
-        Args:
-          fobj (h5py.Group): h5py group to save to
-        """
-        fobj.attrs["type"] = "FilmCoefficientConvective"
-        fobj.attrs["r"] = self.r
-        fobj.attrs["h"] = self.h
-
-        fobj.attrs["nz"] = self.nz
-
-        fobj.create_dataset("fluid_T", data=self.fluid_T)
-        fobj.create_dataset("film", data=self.film)
-
-    @classmethod
-    def load(cls, fobj):
-        """Load from an HDF5 file
-
-        Args:
-          fobj (h5py.Group): h5py group to load from
-        """
-        return cls(
-            fobj.attrs["r"],
-            fobj.attrs["h"],
-            fobj.attrs["nz"],
-            np.copy(fobj["fluid_T"]),
-            np.copy(fobj["film"]),
-        )
-
-    def close(self, other):
-        """Check to see if two objects are nearly equal.
-
-        Primarily used for testing
-
-        Args:
-          other (ConvectiveBC): the object to compare against
-
-        Returns:
-          bool: true if sufficiently similar
-        """
-        return (
-            np.isclose(self.r, other.r)
-            and np.isclose(self.h, other.h)
-            and (self.nz == other.nz)
-            and np.allclose(self.fluid_T, other.fluid_T)
-            and np.allclose(self.film, other.film)
-        )
 
 class FilmCoefficientConvectiveBC(ThermalBC):
     """A convective BC on the ID of a tube, this version provides the film coefficient directly

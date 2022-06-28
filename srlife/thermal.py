@@ -4,8 +4,6 @@
 
 import multiprocess
 
-import multiprocess
-
 import numpy as np
 import numpy.linalg as la
 import scipy.sparse as sp

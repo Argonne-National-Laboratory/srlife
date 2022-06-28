@@ -30,9 +30,6 @@ class ThermalFluidMaterial:
     def __init__(self, film_min=1e-3):
         self.film_min = film_min
 
-    def __init__(self, film_min=1e-3):
-        self.film_min = film_min
-
     @classmethod
     def load(cls, fname, modelname):
         """Load model from an XML file
