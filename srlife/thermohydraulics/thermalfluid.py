@@ -27,8 +27,9 @@ class ThermalFluidMaterial:
     as a function of temperature (in K).
     """
 
-    def __init__(self, film_min=1e-3):
+    def __init__(self, film_min=1e-3, T_max = 2000.0):
         self.film_min = film_min
+        self.T_max = T_max
 
     @classmethod
     def load(cls, fname, modelname):
@@ -169,7 +170,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.cp_poly, T)
+        return jnp.polyval(self.cp_poly, jnp.maximum(T, self.T_max))
 
     def rho(self, T):
         """Density as a function of temperature in K
@@ -177,7 +178,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.rho_poly, T)
+        return jnp.polyval(self.rho_poly, jnp.maximum(T, self.T_max))
 
     def mu(self, T):
         """Dynamic viscosity, as a function of temperature in K
@@ -185,7 +186,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.mu_poly, T)
+        return jnp.polyval(self.mu_poly, jnp.maximum(T, self.T_max))
 
     def k(self, T):
         """Conductivity, as a function of temperature in K
@@ -193,4 +194,4 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.k_poly, T)
+        return jnp.polyval(self.k_poly, jnp.maximum(T, self.T_max))
