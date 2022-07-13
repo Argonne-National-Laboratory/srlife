@@ -368,6 +368,8 @@ class FlowPath:
             T -= dT
             R, J = self.RJ(T)
             nr = la.norm(R)
+            if np.isnan(nr):
+              raise RuntimeError("NaN detected!")
             if self.verbose:
                 print("%i\t%e\t%e" % (i + 1, nr, nr / nr0))
             if (nr < self.atol) or (nr / nr0 < self.rtol):
