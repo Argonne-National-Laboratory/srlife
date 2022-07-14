@@ -15,8 +15,8 @@ class WeibullFailureModel:
     Parent class for time independent Weibull models
     """
 
-    def __init__(self, pset, *args, **kwargs):
-        pass
+    def __init__(self, pset, *args, cares_cutoff=True):
+        self.cares_cutoff = cares_cutoff
 
     def calculate_principal_stress(self, stress):
         """
@@ -121,6 +121,16 @@ class WeibullFailureModel:
         inc_prob = self.calculate_element_log_reliability(
             stresses, temperatures, volumes, material
         )
+
+        # CARES/LIFE cutoff
+        if self.cares_cutoff:
+            pstress = self.calculate_principal_stress(stresses).reshape(-1, 3)
+            pmax = np.max(pstress, axis=1)
+            pmin = np.min(pstress, axis=1)
+            remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
+            mod_prob = inc_prob.flatten()
+            mod_prob[remove] = 1.0
+            inc_prob = mod_prob.reshape(inc_prob.shape)
 
         # Return the sums as a function of time along with the field itself
         return np.sum(inc_prob, axis=1), np.transpose(
