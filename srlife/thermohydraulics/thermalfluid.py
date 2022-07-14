@@ -29,7 +29,7 @@ class ThermalFluidMaterial:
 
     def __init__(
         self,
-        film_min=1e-3,
+        film_min=1e-8,
         T_max=2000.0,
         T_min=0.0,
         laminar_cutoff=2e3,
@@ -40,6 +40,12 @@ class ThermalFluidMaterial:
         self.T_min = T_min
         self.laminar_cutoff = laminar_cutoff
         self.laminar_value = laminar_value
+
+    def T_effective(self, T):
+        """
+        Cutoff T to avoid issues with the correlations
+        """
+        return jnp.maximum(jnp.minimum(T, self.T_max), self.T_min)
 
     @classmethod
     def load(cls, fname, modelname):
@@ -85,7 +91,7 @@ class ThermalFluidMaterial:
         """
         nu = self.nusselt(T, u, r)
 
-        return jnp.minimum(nu * self.k(T) / (2.0 * r), self.film_min)
+        return jnp.maximum(nu * self.k(T) / (2.0 * r), self.film_min)
 
     def reynolds(self, T, u, r):
         """Reynolds number
@@ -118,8 +124,8 @@ class ThermalFluidMaterial:
             u:      flow velocity, in m/s
             r:      tube inner radius, in mm
         """
-        re = self.reynolds(T, u, r)
-        pr = self.prandtl(T)
+        re = self.reynolds(self.T_effective(T), u, r)
+        pr = self.prandtl(self.T_effective(T))
         f = (0.79 * jnp.log(re) - 1.64) ** -2.0
 
         turbulent = ((f / 8.0) * (re - 1000.0) * pr) / (
@@ -202,9 +208,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(
-            self.cp_poly, jnp.maximum(jnp.minimum(T, self.T_max), self.T_min)
-        )
+        return jnp.polyval(self.cp_poly, T)
 
     def rho(self, T):
         """Density as a function of temperature in K
@@ -212,9 +216,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(
-            self.rho_poly, jnp.maximum(jnp.minimum(T, self.T_max), self.T_min)
-        )
+        return jnp.polyval(self.rho_poly, self.T_effective(T))
 
     def mu(self, T):
         """Dynamic viscosity, as a function of temperature in K
@@ -222,9 +224,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(
-            self.mu_poly, jnp.maximum(jnp.minimum(T, self.T_max), self.T_min)
-        )
+        return jnp.polyval(self.mu_poly, T)
 
     def k(self, T):
         """Conductivity, as a function of temperature in K
@@ -232,6 +232,4 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(
-            self.k_poly, jnp.maximum(jnp.minimum(T, self.T_max), self.T_min)
-        )
+        return jnp.polyval(self.k_poly, T)
