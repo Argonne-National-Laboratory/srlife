@@ -40,5 +40,6 @@ class TestPolynomialThermalFluidMaterial(unittest.TestCase):
 
         self.assertTrue(np.isclose(recover.film_min, self.model.film_min))
         self.assertTrue(np.isclose(recover.T_max, self.model.T_max))
+        self.assertTrue(np.isclose(recover.T_min, self.model.T_min))
         self.assertTrue(np.isclose(recover.laminar_cutoff, self.model.laminar_cutoff))
         self.assertTrue(np.isclose(recover.laminar_value, self.model.laminar_value))
