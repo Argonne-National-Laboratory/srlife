@@ -3,9 +3,12 @@
   <base type="StandardModel">
     <strength>
       <temperatures>25.0 800.0 1000.0 1200.0 1400.0 1500.0</temperatures>
-      <strengths>507.0 467.0 528.0 570.0 476.0 471.0</strengths>
+      <values>507.0 467.0 528.0 570.0 476.0 471.0</values>
     </strength>
-    <modulus>10.7</modulus>
+    <modulus>
+      <temperatures>25.0 1500.0</temperatures>
+      <values>10.7 10.7</values>
+    </modulus>
     <c_bar>1.5</c_bar>
     <nu>0.16</nu>
   </base>
