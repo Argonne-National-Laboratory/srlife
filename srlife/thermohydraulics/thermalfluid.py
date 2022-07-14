@@ -27,9 +27,13 @@ class ThermalFluidMaterial:
     as a function of temperature (in K).
     """
 
-    def __init__(self, film_min=1e-3, T_max = 2000.0):
+    def __init__(
+        self, film_min=1e-3, T_max=2000.0, laminar_cutoff=2e3, laminar_value=4.01
+    ):
         self.film_min = film_min
         self.T_max = T_max
+        self.laminar_cutoff = laminar_cutoff
+        self.laminar_value = laminar_value
 
     @classmethod
     def load(cls, fname, modelname):
@@ -75,7 +79,7 @@ class ThermalFluidMaterial:
         """
         nu = self.nusselt(T, u, r)
 
-        return jnp.maximum(nu * self.k(T) / (2.0 * r), self.film_min)
+        return jnp.minimum(nu * self.k(T) / (2.0 * r), self.film_min)
 
     def reynolds(self, T, u, r):
         """Reynolds number
@@ -112,9 +116,13 @@ class ThermalFluidMaterial:
         pr = self.prandtl(T)
         f = (0.79 * jnp.log(re) - 1.64) ** -2.0
 
-        return ((f / 8.0) * (re - 1000.0) * pr) / (
+        turbulent = ((f / 8.0) * (re - 1000.0) * pr) / (
             1.0 + 12.7 * (f / 8.0) ** 0.5 * (pr ** (2.0 / 3.0) - 1.0)
         )
+
+        turbulent.at[re < self.laminar_cutoff].set(self.laminar_value)
+
+        return turbulent
 
 
 class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
@@ -123,14 +131,18 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
     The polynomial definitions use C, the class handles converting K -> C
 
     Parameters:
-        cp_poly:    coefficients for the heat capacity, in numpy order
-        rho_poly:   coefficients for the density, in numpy order
-        mu_poly:    coefficients for the viscosity, in numpy order
-        k_poly:     coefficients for the conductivity, in numpy order
+        cp_poly (array): coefficients for the heat capacity, in numpy order
+        rho_poly (array): coefficients for the density, in numpy order
+        mu_poly (array): coefficients for the viscosity, in numpy order
+        k_poly (array): coefficients for the conductivity, in numpy order
+        film_min (Optional[float]): lower cutoff on the value of the film coefficient
+        T_max (Optional[float]): upper cutoff on temperature used in finding values
+        laminar_cutoff (Optional[float]): Reynolds number upper limit for laminar flow
+        laminar_value (Optional[float]): Nusslet number to use in laminar flow
     """
 
-    def __init__(self, cp_poly, rho_poly, mu_poly, k_poly):
-        super().__init__()
+    def __init__(self, cp_poly, rho_poly, mu_poly, k_poly, **kwargs):
+        super().__init__(**kwargs)
         self.cp_poly = jnp.asarray(cp_poly)
         self.rho_poly = jnp.asarray(rho_poly)
         self.mu_poly = jnp.asarray(mu_poly)
@@ -148,6 +160,10 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
             "rho_poly": materials.string_array(self.rho_poly),
             "mu_poly": materials.string_array(self.mu_poly),
             "k_poly": materials.string_array(self.k_poly),
+            "film_min": str(self.film_min),
+            "T_max": str(self.T_max),
+            "laminar_cutoff": str(self.laminar_cutoff),
+            "laminar_value": str(self.laminar_value),
         }
 
     @classmethod
@@ -157,11 +173,19 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             values:     dictionary of values
         """
+        # Assemble kwargs
+        kwargs = {
+            k: float(values[k])
+            for k in ["film_min", "T_max", "laminar_cutoff", "laminar_value"]
+            if k in values
+        }
+
         return cls(
             materials.destring_array(values["cp_poly"]),
             materials.destring_array(values["rho_poly"]),
             materials.destring_array(values["mu_poly"]),
             materials.destring_array(values["k_poly"]),
+            **kwargs
         )
 
     def cp(self, T):
@@ -170,7 +194,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.cp_poly, jnp.maximum(T, self.T_max))
+        return jnp.polyval(self.cp_poly, jnp.minimum(T, self.T_max))
 
     def rho(self, T):
         """Density as a function of temperature in K
@@ -178,7 +202,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:      temperature, in K
         """
-        return jnp.polyval(self.rho_poly, jnp.maximum(T, self.T_max))
+        return jnp.polyval(self.rho_poly, jnp.minimum(T, self.T_max))
 
     def mu(self, T):
         """Dynamic viscosity, as a function of temperature in K
@@ -186,7 +210,7 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.mu_poly, jnp.maximum(T, self.T_max))
+        return jnp.polyval(self.mu_poly, jnp.minimum(T, self.T_max))
 
     def k(self, T):
         """Conductivity, as a function of temperature in K
@@ -194,4 +218,4 @@ class PolynomialThermalFluidMaterial(ThermalFluidMaterial):
         Parameters:
             T:  temperature, in K
         """
-        return jnp.polyval(self.k_poly, jnp.maximum(T, self.T_max))
+        return jnp.polyval(self.k_poly, jnp.minimum(T, self.T_max))

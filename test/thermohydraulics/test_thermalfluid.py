@@ -37,3 +37,8 @@ class TestPolynomialThermalFluidMaterial(unittest.TestCase):
         self.assertTrue(np.allclose(recover.rho_poly, self.model.rho_poly))
         self.assertTrue(np.allclose(recover.mu_poly, self.model.mu_poly))
         self.assertTrue(np.allclose(recover.k_poly, self.model.k_poly))
+
+        self.assertTrue(np.isclose(recover.film_min, self.model.film_min))
+        self.assertTrue(np.isclose(recover.T_max, self.model.T_max))
+        self.assertTrue(np.isclose(recover.laminar_cutoff, self.model.laminar_cutoff))
+        self.assertTrue(np.isclose(recover.laminar_value, self.model.laminar_value))
