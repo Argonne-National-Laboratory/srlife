@@ -129,7 +129,7 @@ class WeibullFailureModel:
             pmin = np.min(pstress, axis=1)
             remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
             mod_prob = inc_prob.flatten()
-            mod_prob[remove] = 1.0
+            mod_prob[remove] = 0.0
             inc_prob = mod_prob.reshape(inc_prob.shape)
 
         # Return the sums as a function of time along with the field itself
