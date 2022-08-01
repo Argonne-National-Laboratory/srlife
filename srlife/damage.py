@@ -225,13 +225,10 @@ class CrackShapeDependent(WeibullFailureModel):
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
+        exps = [self.l, self.m, self.n]
 
-        # Normal stress
-        return (
-            pstress[..., 0, None, None] * (self.l**2)
-            + pstress[..., 1, None, None] * (self.m**2)
-            + pstress[..., 2, None, None] * (self.n**2)
-        )
+        return sum(pstress[...,i,None,None] * (exps[i]**2.0)
+            for i in range(3))
 
     def calculate_total_stress(self, mandel_stress):
         """
@@ -239,13 +236,12 @@ class CrackShapeDependent(WeibullFailureModel):
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
+        exps = [self.l, self.m, self.n]
 
         # Total stress
         return np.sqrt(
-            ((pstress[..., 0, None, None] * self.l) ** 2)
-            + ((pstress[..., 1, None, None] * self.m) ** 2)
-            + ((pstress[..., 2, None, None] * self.n) ** 2)
-        )
+                sum((pstress[...,i,None,None] * exps[i])**2
+                    for i in range(3)))
 
     def calculate_shear_stress(self, mandel_stress):
         """
