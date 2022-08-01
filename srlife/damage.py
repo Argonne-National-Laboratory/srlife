@@ -8,6 +8,7 @@ import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
 import multiprocess
+import tempfile
 
 
 class WeibullFailureModel:
@@ -226,9 +227,16 @@ class CrackShapeDependent(WeibullFailureModel):
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
         exps = [self.l, self.m, self.n]
+        
+        rshape = pstress.shape[:-1] + self.l.shape
 
-        return sum(pstress[...,i,None,None] * (exps[i]**2.0)
-            for i in range(3))
+        result = np.memmap(tempfile.TemporaryFile(), dtype = np.float,
+                shape = rshape)
+
+        for i in range(3):
+            result[:] += pstress[...,i,None,None] * exps[i]**2.0
+
+        return result
 
     def calculate_total_stress(self, mandel_stress):
         """
@@ -238,10 +246,15 @@ class CrackShapeDependent(WeibullFailureModel):
         pstress = self.calculate_principal_stress(mandel_stress)
         exps = [self.l, self.m, self.n]
 
-        # Total stress
-        return np.sqrt(
-                sum((pstress[...,i,None,None] * exps[i])**2
-                    for i in range(3)))
+        rshape = pstress.shape[:-1] + self.l.shape
+
+        result = np.memmap(tempfile.TemporaryFile(), dtype = np.float,
+                shape = rshape)
+
+        for i in range(3):
+            result[:] += (pstress[...,i,None,None] * exps[i])**2.0
+
+        return np.sqrt(result)
 
     def calculate_shear_stress(self, mandel_stress):
         """
