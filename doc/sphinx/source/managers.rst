@@ -14,7 +14,7 @@ taking the basic input information:
 and providing the estimated life of the receiver as a number of 
 repetitions of the daily cycle.
 
-Once the manager class is constructed the user only needs to call the
+Once the manager class is constructed for metallic materials the user only needs to call the
 
 .. code-block::
 
@@ -24,6 +24,13 @@ method, which completes the full analysis and returns the estimated life in
 terms of the number of expected single-day repetitions.  The calculation scales
 the results appropriately given the number of explicitly-defined `days` 
 provided to the :py:class:`srlife.receiver.Receiver`.
+
+For ceramic materials function instead returns the time independent
+reliability of the design
+
+.. code-block::
+
+   reliability = manager.solve_life()
 
 SolutionManager description
 ----------------------------
@@ -38,7 +45,8 @@ internal srlife subclasses.  Specifically, the manager handles the process of:
       displacements.
    3. Using the temperature and stress/strain information to solve for the
       damage in each tube.
-   4. Finding the worst-case tube and calculating the estimated life.
+   4. Finding the worst-case tube and calculating the estimated life or 
+      estimated reliability.
 
 .. autoclass:: srlife.managers.SolutionManager
    :members:
@@ -105,8 +113,44 @@ Global options
 | progress | bool      | False   | Provide progress bar in the command line     |
 +----------+-----------+---------+----------------------------------------------+
 
-Thermal solver options
-^^^^^^^^^^^^^^^^^^^^^^
+Coupled thermal solver options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
++---------+--------------+---------+--------------------------------------------------------------+
+| Option  | Data type    | Default | Explanation                                                  |
++=========+==============+=========+==============================================================+
+| rtol    | float        | 1.0e-6  | Nonlinear solver relative tolerance                          |
++---------+--------------+---------+--------------------------------------------------------------+
+| atol    | float        | 1.0e-3  | Nonlinear solver absolute tolerance                          |
++---------+--------------+---------+--------------------------------------------------------------+
+| miter   | int          | 1000    | Maximum Picard solver iterations                             |
++---------+--------------+---------+--------------------------------------------------------------+
+| verbose | bool         | False   | Print debug information to the terminal                      |
++---------+--------------+---------+--------------------------------------------------------------+
+| eps     | float        | 1.0e-10 | Offset from zero for relative tolerance calculation          |
++---------+--------------+---------+--------------------------------------------------------------+
+| solid   | ParameterSet | empty   | Parameters for the solid heat transfer solver                |
++---------+--------------+---------+--------------------------------------------------------------+
+| fluid   | ParameterSet | empty   | Parameters for the thermohydraulic solver                    |
++---------+--------------+---------+--------------------------------------------------------------+
+
+Panel thermalhydraulic solver options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
++---------+-----------+---------+--------------------------------------------------------------+
+| Option  | Data type | Default | Explanation                                                  |
++=========+===========+=========+==============================================================+
+| rtol    | float     | 1.0e-6  | Nonlinear solver relative tolerance                          |
++---------+-----------+---------+--------------------------------------------------------------+
+| atol    | float     | 1.0e-8  | Nonlinear solver absolute tolerance                          |
++---------+-----------+---------+--------------------------------------------------------------+
+| miter   | int       | 50      | Maximum nonlinear solver iterations                          |
++---------+-----------+---------+--------------------------------------------------------------+
+| verbose | bool      | False   | Print debug information to the terminal                      |
++---------+-----------+---------+--------------------------------------------------------------+
+
+Solid temperature solver options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 +---------+-----------+---------+--------------------------------------------------------------+
 | Option  | Data type | Default | Explanation                                                  |
@@ -158,8 +202,8 @@ Structural solver options
 | verbose | bool      | False   | Print debug information to the terminal |
 +---------+-----------+---------+-----------------------------------------+
 
-Damage model options
-^^^^^^^^^^^^^^^^^^^^
+Metallic damage model options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 +-------------+-----------+---------+-------------------------------------------------------------------+
 | Option      | Data type | Default | Explanation                                                       |
@@ -168,6 +212,15 @@ Damage model options
 +-------------+-----------+---------+-------------------------------------------------------------------+
 | order       | int       | 1       | Polynomial order to use in conjunction with the "poly" option     |
 +-------------+-----------+---------+-------------------------------------------------------------------+
+
+Ceramic damage model options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
++--------------+-----------+---------+----------------------------------------------------------------------+
+| Option       | Data type | Default | Explanation                                                          |
++==============+===========+=========+======================================================================+
+| cares_cutoff | bool      | true    | Do not include large compressive stresses in reliability calculation |
++--------------+-----------+---------+----------------------------------------------------------------------+
 
 Class description
 ^^^^^^^^^^^^^^^^^

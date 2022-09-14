@@ -15,8 +15,12 @@ class WeibullFailureModel:
     Parent class for time independent Weibull models
     """
 
-    def __init__(self, pset, *args, cares_cutoff=True):
-        self.cares_cutoff = cares_cutoff
+    def __init__(self, pset, *args):
+        """
+        Parameters:
+          pset:       damage parameters
+        """
+        self.cares_cutoff = pset.get_default("cares_cutoff", True)
 
     def calculate_principal_stress(self, stress):
         """
