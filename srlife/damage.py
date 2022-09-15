@@ -1,7 +1,8 @@
 # pylint: disable=no-member
 """
-  Module with methods for calculating creep-fatigue damage given
-  completely-solved tube results and damage material properties
+  This module contains methods for calculating the reliability and
+  creep-fatigue damage given completely-solved tube results and
+  damage material properties
 """
 
 import numpy as np
@@ -11,20 +12,27 @@ import multiprocess
 
 
 class WeibullFailureModel:
-    """
-    Parent class for time independent Weibull models
+    """Parent class for time independent Weibull failure models
+
+    Determines principal stresses from mandel stress
+
+    Determines tube reliability and overall reliability by taking input of
+    element log reliabilities from respective Weibull failure model
     """
 
-    def __init__(self, pset, *args):
+    def __init__(self, pset, *args, cares_cutoff=True):
+        """Initialize the Weibull Failure Model
+
+        Boolean:
+        cares_cutoff:    condition for forcing reliability as unity in case of
+                        high compressive stresses
         """
-        Parameters:
-          pset:       damage parameters
-        """
-        self.cares_cutoff = pset.get_default("cares_cutoff", True)
+        self.cares_cutoff = cares_cutoff
 
     def calculate_principal_stress(self, stress):
         """
-        Calculate the principal stresses given the Mandel vector
+        Calculate the principal stresses from Mandel vector and converts
+        to conventional notation
         """
         if stress.ndim == 2:
             tensor = np.zeros(
@@ -53,10 +61,10 @@ class WeibullFailureModel:
 
         return la.eigvalsh(tensor)
 
-    def determine_life(self, receiver, material, nthreads=1, decorator=lambda x, n: x):
+    def determine_reliability(self, receiver, material, nthreads=1, decorator=lambda x, n: x):
         """
-        Determine the life of the receiver by calculating individual
-        material point damage and finding the minimum of all points.
+        Determine the reliability of the tubes in the receiver by calculating individual
+        material point reliabilities and finding the minimum of all points.
 
         Parameters:
           receiver        fully-solved receiver object
@@ -144,14 +152,19 @@ class WeibullFailureModel:
 
 class CrackShapeIndependent(WeibullFailureModel):
     """
-    Parent class for crack shape dependent models
+    Parent class for crack shape independent models
+    which include only PIA and WNTSA models
+
+    Determines normal stress acting on crack
     """
 
     def __init__(self, pset, *args, **kwargs):
         """
-        Create a mesh grid for integration
-        Evaluate direction cosines using the mesh grid
-        only for PIA and WNTSA models which are crack shape independent
+        Create a mesh grid of angles that can represent crack orientations
+        Evaluate direction cosines using the angles
+
+        Default values given to nalpha and nbeta which are the number of
+        segments in the mesh grid
         """
         super().__init__(pset, *args, **kwargs)
 
@@ -177,7 +190,8 @@ class CrackShapeIndependent(WeibullFailureModel):
 
     def calculate_normal_stress(self, mandel_stress):
         """
-        Calculate the normal stress given the Mandel vector
+        Use direction cosines to calculate the normal stress to
+        a crack given the Mandel vector
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
@@ -193,13 +207,20 @@ class CrackShapeIndependent(WeibullFailureModel):
 class CrackShapeDependent(WeibullFailureModel):
     """
     Parent class for crack shape dependent models
+
+    Determines normal, shear, total and equivanlent stresses acting on cracks
+
+    Calculates the element reliability using the equivalent stress from the
+    crack shape dependent models
     """
 
     def __init__(self, pset, *args, **kwargs):
         """
-        Create a mesh grid for integration
-        Evaluate direction cosines using the mesh grid
-        for fracture based models which are crack shape dependent
+        Create a mesh grid of angles that can represent crack orientations
+        Evaluate direction cosines using the angles
+
+        Default values given to nalpha and nbeta which are the number of
+        segments in the mesh grid
         """
         super().__init__(pset, *args, **kwargs)
 
@@ -225,7 +246,8 @@ class CrackShapeDependent(WeibullFailureModel):
 
     def calculate_normal_stress(self, mandel_stress):
         """
-        Calculate the normal stress given the Mandel vector
+        Use direction cosines to calculate the normal stress to
+        a crack given the Mandel vector
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
@@ -271,6 +293,16 @@ class CrackShapeDependent(WeibullFailureModel):
         """
         Calculate the integral of equivalent stresses given the material
         properties and integration limits
+
+        Parameters:
+          mandel_stress:  element stresses in Mandel convention
+          temperatures:   element temperatures
+          material        material model to use
+
+        Additional Parameters:
+          A:              mesh grid of vectorized angle values
+          dalpha:         increment of angle alpha to be used in evaluating integral
+          dbeta:          increment of angle beta to be used in evaluating integral
         """
         self.temperatures = temperatures
         self.material = material
@@ -282,7 +314,7 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Projected equivalent stresses
         sigma_e = self.calculate_eq_stress(
-            mandel_stress, self.mvals, self.temperatures, self.material
+            mandel_stress, self.temperatures, self.material
         )
 
         # Suppressing warning given when negative numbers are raised to rational numbers
@@ -316,7 +348,7 @@ class CrackShapeDependent(WeibullFailureModel):
         self, mandel_stress, temperatures, volumes, material
     ):
         """
-        Calculate the element log reliability
+        Calculate the element log reliability given the equivalent stress
 
         Parameters:
           mandel_stress:  element stresses in Mandel convention
@@ -352,6 +384,9 @@ class CrackShapeDependent(WeibullFailureModel):
 class PIAModel(CrackShapeIndependent):
     """
     Principal of independent action failure model
+
+    Calculates reliability using only tensile stresses
+    that are assumed to act independently on cracks
     """
 
     def calculate_element_log_reliability(
@@ -364,7 +399,8 @@ class PIAModel(CrackShapeIndependent):
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
           volumes:        element volumes
-          material:       material model  object with required data
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals) and Weibull modulus (mvals)
         """
         # Material parameters
         svals = material.strength(temperatures)
@@ -384,13 +420,21 @@ class WNTSAModel(CrackShapeIndependent):
     """
     Weibull normal tensile average failure model
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an average normal tensile stress (acting on the cracks) integrated over the
+    area of a sphere, and uses it to calculate the element reliability
     """
 
-    def calculate_avg_normal_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_avg_normal_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the average normal tensile stresses given the pricipal stresses
+        Calculate the average normal tensile stresses from the pricipal stresses
+
+        Parameters:
+          mandel_stress:  element stresses in Mandel convention
+          temperatures:   element temperatures
+          material:       material model object with required data
         """
+        # Material parameters
+        mvals = material.modulus(temperatures)
 
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
@@ -445,7 +489,7 @@ class WNTSAModel(CrackShapeIndependent):
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
             self.calculate_avg_normal_stress(
-                mandel_stress, mvals, temperatures, material
+                mandel_stress, temperatures, material
             )
         ) ** (1 / mvals)
 
@@ -456,12 +500,13 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
     """
     Maximum tensile stess failure model with a Griffith flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the maximum tensile stress fracture criterion for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the equivalent stresses given the pricipal stresses
+        Calculate the equivalent stresses from the normal and shear stresses
         """
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -477,12 +522,16 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
     """
     Maximum tensile stess failure model with a penny shaped flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the maximum tensile stress fracture criterion for a penny shaped flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the average normal tensile stresses given the pricipal stresses
+        Calculate the average normal tensile stresses from the normal and shear stresses
+
+        Additional parameter:
+        nu:     Poisson ratio
         """
 
         # Material parameters
@@ -500,12 +549,14 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
     """
     Coplanar strain energy failure model with a Griffith flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the coplanar strain energy fracture criterion
+    for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the equivalent stresses given the pricipal stresses
+        Calculate the equivalent stresses from the normal and shear stresses
         """
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -521,12 +572,17 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
     """
     Coplanar strain energy failure model with a penny shaped flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the coplanar strain energy fracture criterion
+    for a penny shaped flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the equivalent stresses given the pricipal stresses
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameter:
+        nu:     Poisson ratio
         """
 
         # Material parameters
@@ -546,12 +602,17 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
     """
     Shetty mixed-mod failure model with a Griffith flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the Shetty mixed-mode fracture criterion
+    for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the equivalent stresses given the pricipal stresses
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameters:
+        cbar:   Emperical constant
         """
 
         # Material parameters
@@ -571,12 +632,18 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
     """
     Shetty mixed mode failure model with a penny shaped flaw
 
-    Assigning default values for nalpha and nbeta
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the Shetty mixed-mode fracture criterion
+    for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, mvals, temperatures, material):
+    def calculate_eq_stress(self, mandel_stress, temperatures, material):
         """
-        Calculate the equivalent stresses given the pricipal stresses
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameters:
+        nu:     Poisson ratio
+        cbar:   Emperical constant
         """
 
         # Material parameters
