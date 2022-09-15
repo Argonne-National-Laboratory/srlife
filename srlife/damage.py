@@ -61,7 +61,9 @@ class WeibullFailureModel:
 
         return la.eigvalsh(tensor)
 
-    def determine_reliability(self, receiver, material, nthreads=1, decorator=lambda x, n: x):
+    def determine_reliability(
+        self, receiver, material, nthreads=1, decorator=lambda x, n: x
+    ):
         """
         Determine the reliability of the tubes in the receiver by calculating individual
         material point reliabilities and finding the minimum of all points.
@@ -488,9 +490,7 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
-            self.calculate_avg_normal_stress(
-                mandel_stress, temperatures, material
-            )
+            self.calculate_avg_normal_stress(mandel_stress, temperatures, material)
         ) ** (1 / mvals)
 
         return -kpvals * (avg_nstress**mvals) * volumes
