@@ -1,3 +1,4 @@
+<!-- cp in W-hr/kg-k, rho in kg/mm^3, mu in kg/mm-hr, k in W/mm-k -->
 <models>
   <base type="PolynomialThermalFluidMaterial">
     <cp_poly>2.90556e-05 0.254458</cp_poly>

@@ -272,7 +272,7 @@ class FlowPath:
         # Solver parameters
         self.rtol = 1e-6
         self.atol = 1e-8
-        self.miter = 50
+        self.miter = 100
         self.verbose = verbose
 
     def add_panel(self, weights, ri, h, metal_temp, material):

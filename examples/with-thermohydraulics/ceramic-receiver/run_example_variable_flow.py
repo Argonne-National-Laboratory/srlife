@@ -45,6 +45,7 @@ def sample_parameters():
     params["system"]["atol"] = 1.0e-8
     params["system"]["miter"] = 10
     params["system"]["verbose"] = False
+
     # If true store results on disk (slower, but less memory)
     params["page_results"] = False
 
@@ -59,6 +60,7 @@ if __name__ == "__main__":
     #     Pressure boundary conditions
     #     Interconnect stiffnesses
     model = receiver.Receiver.load("example-receiver.hdf5")
+
 
     # Demonstration on how to setup a flowpath
     # Setup the flow path information
@@ -96,8 +98,17 @@ if __name__ == "__main__":
     structural_solver = structural.PythonTubeSolver(params["structural"])
     # Define the system solver to use in solving the coupled structural system
     system_solver = system.SpringSystemSolver(params["system"])
-    # Ceramic failure model to use in calculating reliability
+
+    # Damage model to use in calculating reliability
+    # damage_model = damage.TimeFractionInteractionDamage(params["damage"])
     damage_model = damage.PIAModel(params["damage"])
+    # damage_model = damage.WNTSAModel(params["damage"])
+    # damage_model = damage.MTSModelGriffithFlaw(params["damage"])
+    # damage_model = damage.MTSModelPennyShapedFlaw(params["damage"])
+    # damage_model = damage.CSEModelGriffithFlaw(params["damage"])
+    # damage_model = damage.CSEModelPennyShapedFlaw(params["damage"])
+    # damage_model = damage.SMMModelGriffithFlaw(params["damage"])
+    # damage_model = damage.SMMModelPennyShapedFlaw(params["damage"])
 
     # Load the materials
     fluid = library.load_thermal_fluid("32MgCl2-68KCl", "base")
@@ -123,7 +134,7 @@ if __name__ == "__main__":
     solver.add_heuristic(managers.CycleResetHeuristic())
 
     # Report tube reliability
-    reliability = solver.solve_life()
+    reliability = solver.solve_reliability()
 
     print("Individual tube reliabilities:")
     print(reliability["tube_reliability"])
