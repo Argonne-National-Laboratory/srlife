@@ -91,6 +91,8 @@ class VTKWriter:
 
     def _dump_element_data(self, grid, i):
         for field, data in self.tube.quadrature_results.items():
+            if field.split("_")[0] == "ghost":
+                continue
             pdata = vtk.vtkFloatArray()
             pdata.SetNumberOfComponents(1)
             pdata.SetName(field)

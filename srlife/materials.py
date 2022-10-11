@@ -597,7 +597,9 @@ def make_piecewise(x, y):
     ydiff[:-1] = np.diff(y) / np.diff(x)
     ydiff[-1] = ydiff[-2]
 
-    return inter.interp1d(x, y), inter.interp1d(x, ydiff, kind="previous")
+    return inter.interp1d(x, y, fill_value=(ydiff[0], ydiff[-1])), inter.interp1d(
+        x, ydiff, kind="previous", fill_value=(0, 0)
+    )
 
 
 def find_name(xmlfile, name):
@@ -697,18 +699,30 @@ class StandardCeramicMaterial:
     Ceramic material where:
 
     1) Weibull strength depends on temperature
-    2) Weibull modulus is constant
+    2) Weibull modulus depends on temperature
     3) Constant c_bar parameter
     4) Constant Poisson's ratio
     """
 
-    def __init__(self, temperatures, strengths, modulus, c_bar, nu, *args, **kwargs):
+    def __init__(
+        self,
+        s_temperatures,
+        strengths,
+        m_temperatures,
+        modulus,
+        c_bar,
+        nu,
+        *args,
+        **kwargs
+    ):
         super().__init__(*args, **kwargs)
 
-        self.s0 = inter.interp1d(temperatures, strengths)
-        self.temperatures = temperatures
+        self.s0 = inter.interp1d(s_temperatures, strengths)
+        self.s_temperatures = s_temperatures
         self.strengths = strengths
-        self.m = modulus
+        self.m_temperatures = m_temperatures
+        self.mvals = modulus
+        self.m = inter.interp1d(m_temperatures, modulus)
         self.C = c_bar
         self.nu_val = nu
 
@@ -722,10 +736,7 @@ class StandardCeramicMaterial:
         """
         Weibull modulus as a function of temperature
         """
-        if np.isscalar(T):
-            return self.m
-        else:
-            return self.m * np.ones(T.shape)
+        return self.m(T)
 
     def c_bar(self, T):
         """
@@ -755,15 +766,18 @@ class StandardCeramicMaterial:
         """
         strength = node.find("strength")
         c_bar = node.find("c_bar")
-        temps = strength.find("temperatures")
-        svals = strength.find("strengths")
+        s_temps = strength.find("temperatures")
+        svals = strength.find("values")
         m = node.find("modulus")
+        m_temps = m.find("temperatures")
+        mvals = m.find("values")
         nu = node.find("nu")
 
         return StandardCeramicMaterial(
-            np.array(list(map(float, temps.text.strip().split()))),
+            np.array(list(map(float, s_temps.text.strip().split()))),
             np.array(list(map(float, svals.text.strip().split()))),
-            float(m.text),
+            np.array(list(map(float, m_temps.text.strip().split()))),
+            np.array(list(map(float, mvals.text.strip().split()))),
             float(c_bar.text),
             float(nu.text),
         )
@@ -777,12 +791,15 @@ class StandardCeramicMaterial:
         base = ET.SubElement(root, modelname, {"type": "StandardModel"})
         strength = ET.SubElement(base, "strength")
         temps = ET.SubElement(strength, "temperatures")
-        temps.text = " ".join(map(str, self.temperatures))
-        svals = ET.SubElement(strength, "strengths")
+        temps.text = " ".join(map(str, self.s_temperatures))
+        svals = ET.SubElement(strength, "values")
         svals.text = " ".join(map(str, self.strengths))
 
         m = ET.SubElement(base, "modulus")
-        m.text = str(self.m)
+        mtemps = ET.SubElement(m, "temperatures")
+        mtemps.text = " ".join(map(str, self.m_temperatures))
+        mvals = ET.SubElement(m, "values")
+        mvals.text = " ".join(map(str, self.mvals))
 
         c_bar = ET.SubElement(base, "c_bar")
         c_bar.text = str(self.C)

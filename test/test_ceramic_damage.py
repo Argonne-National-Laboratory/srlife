@@ -38,7 +38,8 @@ class TestPIAModel(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -114,7 +115,8 @@ class TestWNTSAModel(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -188,7 +190,8 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -262,7 +265,8 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -336,7 +340,8 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -410,7 +415,8 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -484,7 +490,8 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )
@@ -558,7 +565,8 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
             np.array([self.s0, self.s0]),
-            self.m,
+            np.array([0, 1000.0]),
+            np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
         )

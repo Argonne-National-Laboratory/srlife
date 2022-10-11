@@ -5,23 +5,22 @@ srlife is available in the `pypi <https://pypi.org/>`_ package repository
 and can be installed with `pip`.  srlife uses python3 and requires several
 additional python packages, all of which are available pypi.
 
-srlife is compatible with python3 only, specifically python versions 3.6, 3.7,
-3.8, and 3.9
+srlife is compatible with python3 only.
 
 Install using the pip package manager
 -------------------------------------
 
 The easiest way to install the package is to use the `pip` package manager, installing srlife from pypi automatically.
 
-Ubuntu Linux 18.04
-""""""""""""""""""
+Linux
+"""""
 
 .. code-block:: console
 
    pip install srlife
 
-MacOS Sierra 10.14 Mojave
-"""""""""""""""""""""""""
+MacOS
+"""""
 
 It is easiest to install srlife using a homebrew version of python, not the
 default system python.
@@ -45,7 +44,7 @@ to also obtain the tutorial, example, and test files you can install the
 package directly from `github <https://github.com/Argonne-National-Laboratory/srlife>`_.  In addition to the, cmake, BLAS, and LAPACK requirements you will
 need git and, optionally, the nose package to automatically run the tests.
 
-Ubuntu Linux 18.04
+Ubuntu Linux 20.04
 """"""""""""""""""
 
 The following installs the prerequisites, downloads srlife, sets up the python package, and runs the automated test suite.

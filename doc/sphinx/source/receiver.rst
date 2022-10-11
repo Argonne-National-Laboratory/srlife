@@ -76,12 +76,10 @@ The inner pressure boundary condition :py:class:`srlife.receiver.PressureBC` hol
 defining the pressure at discrete times.  The size of this 1D array
 must be :math:`n_{time}` and match the tube object.
 
-The user has three options for thermal boundary conditions, which can
-be specified on the inner diameter, outer diameter, or both:
+The user has two options for outer diameter thermal boundary conditions:
 
    1. Fixed flux boundary condition :py:class:`srlife.receiver.HeatFluxBC`.
    2. Fixed temperature boundary condition :py:class:`srlife.receiver.FixedTempBC`.
-   3. Convective heat transfer :py:class:`srlife.receiver.ConvectiveBC`.
 
 The data for the flux and temperature boundary conditions is an array of
 flux or temperature values of size
@@ -93,14 +91,58 @@ flux or temperature values of size
 representing a fixed grid of points on either the tube inner or outer diameter.
 The user must provide the full 3D data.
 
-Similarly, the data for the convective heat transfer boundary condition
-is an array of fluid temperature data of size
+Inner tube thermal BCs
+----------------------
 
-.. math::
+By default, the inner boundary condition for each tube is a representation of heat transfer between the tubes and the working fluid.
+Two separate solvers are used to balance heat transfer between the tube and the fluid: a finite difference, 1D/2D/3D 
+transient heat transfer solver for the solid temperatures and a 1D transient thermohydraulic solver for the fluid temperatures.
+The boundary conditions for the finite difference solver are the outside diameter boundary condition specified by the user
+for each tube (often the net incident flux) and convective heat transfer between the tube inner diameter and the fluid.
+The input conditions for the thermohydraulic solver are the flow rate and inlet temperature along each flow path in the receiver,
+given as a function of time throughout the user-provided load history.  Heat then transfers along each flow path, with the fluid
+absorbing heat from each tube in the path.
 
-   n_{time} \times n_{z}
+These two solvers are coupled along the inner diameter of each tube.  srlife solves for overall heat balance using Picard
+iteration on the heat transfered from the tube into the fluid (equal to the heat transfered out of the fluid and into each tube).
+This means that the solver starts with a guess at what this convective heat transfer will be, solves for the metal temperatures, 
+calculates the convective heat transfer into the fluid, solves for the fluid temperatures, and iterates to solve again for the
+tube temperatures.  This process repeats until both the fluid and tube temperatures no longer change.
 
-Again, the user must always provide the full 3D information.
+The previous section discusses specifying the tube outer diameter boundary conditions, which, again, are often the next
+incident flux directed at each tube in the receiver.  
+The model divides up the panels in the receiver into one or more flow paths.  Fluid flows into the
+first panel, through the panel, into the next connected panel, and so on until it reaches the panel outlet.  
+The user specifies which panels in the receiver are connected with a method of the :py:class:`srlife.receiver.Receiver`
+class
+
+.. code:: python
+
+   receiver.add_flowpath(panels, times, flow_rate, inlet_temp)
+
+where the method takes as input a list of panels in the flow path, in the order the fluid flow through time, a
+numpy array of times throughout the loading history for which the `flow_rate` and `inlet_temp` arrays provide the
+corresponding inlet mass flow rates and inlet temperatures.
+
+Each panel in the receiver must belong to one and only one flow path.
+
+A model of a tubular panel receiver can explicitly represent fewer tubes than the actual number in each panel to 
+save computational cost.  Because the structural damage and reliability models base the overall performance of
+the receiver on the worst (most damaged/least reliable) tube, these models do not need any special modification to
+accommodate models that use fewer than the full number of tubes to represent each panel.  However, the
+flow velocity through each tube depends on overall mass flow rate into a panel and the actual number of tubes
+the flow divides into in that panel.  Each :py:class:`srlife.receiver.Tube` in the :py:class:`srlife.receiver.Receiver` 
+has a `multiplier` property that the user can set to have the tube represent more than one tube in the actual panel
+for the thermohydraulic calculation.  For example, if there are 100 tubes in the actual panel and the user 
+represents only two tubes per panel in the actual thermal and structural model then this multiplier could be:
+
+.. code:: python
+   
+   for tube in panel.tubes:
+      tube.multiplier = 50
+
+Defining the model
+------------------
 
 The user can provide the required input data in two ways:
    1. The :ref:`python-receiver`
@@ -157,8 +199,6 @@ temperature (FixedTempBC), and convection (ConvectiveBC).
 .. autoclass:: srlife.receiver.HeatFluxBC
 
 .. autoclass:: srlife.receiver.FixedTempBC
-
-.. autoclass:: srlife.receiver.ConvectiveBC
 
 .. _hdf-receiver:
 
@@ -273,50 +313,6 @@ The user must always provide the full flux information (i.e. over the full 3D tu
 +-------+-----------+----------------------+---------------------------------+-------------------------------------------+
 | data  | dataset   | dim: (ntime, nt, nz) | Discrete flux data              | Fixed array over tube inner/outer surface |
 +-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-
-FixedTempBC
-^^^^^^^^^^^
-
-The user must always provide the full temperature information (i.e. over the full 3D tube).
-
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| Field | Type      | Data type            | Explanation                     | Notes                                     |
-+=======+===========+======================+=================================+===========================================+
-| type  | attribute | string               | Thermal BC type                 | Must be "FixedTemp"                       |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| r     | attribute | float                | Radius of application           | Must match tube inner or outer radius     |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| h     | attribute | float                | Tube height                     | Must match tube height                    |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| nt    | attribute | int                  | Number of circumferential nodes |                                           |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| nz    | attribute | int                  | Number of axial nodes           |                                           |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| times | dataset   | dim: (ntime,)        | Discrete times points           |                                           |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-| data  | dataset   | dim: (ntime, nt, nz) | Discrete temperature data       | Fixed array over tube inner/outer surface |
-+-------+-----------+----------------------+---------------------------------+-------------------------------------------+
-
-ConvectiveBC
-^^^^^^^^^^^^
-
-The user must always provide the full fluid temperature information (i.e. over the full 3D tube).
-
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| Field | Type      | Data type        | Explanation                     | Notes                                 |
-+=======+===========+==================+=================================+=======================================+
-| type  | attribute | string           | Thermal BC type                 | Must be "Convective"                  |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| r     | attribute | float            | Radius of application           | Must match tube inner or outer radius |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| h     | attribute | float            | Tube height                     | Must match tube height                |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| nz    | attribute | int              | Number of axial nodes           |                                       |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| times | dataset   | dim: (ntime,)    | Discrete times points           |                                       |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
-| data  | dataset   | dim: (ntime, nz) | Discrete fluid temperature data | Fixed array over tube height          |
-+-------+-----------+------------------+---------------------------------+---------------------------------------+
 
 PressureBC
 ^^^^^^^^^^

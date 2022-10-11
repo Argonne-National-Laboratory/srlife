@@ -1,4 +1,4 @@
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,too-many-branches
 """
   This module define the data structures used as input and output to the analysis module.
 
@@ -7,6 +7,7 @@
 """
 
 import itertools
+from collections import OrderedDict
 
 import numpy as np
 import scipy.interpolate as inter
@@ -41,8 +42,34 @@ class Receiver:
         """Initialize a Receiver object"""
         self.period = period
         self.days = days
-        self.panels = {}
+        self.panels = OrderedDict()
         self.stiffness = panel_stiffness
+
+        self.flowpaths = OrderedDict()
+
+    def add_flowpath(self, panels_in_path, times, mass_rate, inlet_temp, name=None):
+        """Add a flow path to the receiver model
+
+        Args:
+            panels_in_path (list):  list of panel names in the path
+            times (np.array):       time data
+            mass_rate (np.array):   mass flow rate data
+            inlet_temp (np.array):  inlet temperature data
+            name (Optional[str]):   optional flowpath name
+        """
+        if not name:
+            name = next_name(self.flowpaths.keys())
+
+        for n in panels_in_path:
+            if n not in self.panels.keys():
+                raise ValueError("Panel %s does not exist in the receiver!" % n)
+
+        self.flowpaths[name] = {
+            "panels": panels_in_path,
+            "times": times,
+            "mass_flow": mass_rate,
+            "inlet_temp": inlet_temp,
+        }
 
     def write_vtk(self, basename):
         """Write out the receiver as individual panels with names basename_panelname
@@ -150,6 +177,14 @@ class Receiver:
             sgrp = grp.create_group(name)
             panel.save(sgrp)
 
+        grp = fobj.create_group("flowpaths")
+        for name, path in self.flowpaths.items():
+            sgrp = grp.create_group(name)
+            sgrp.create_dataset("panels", data=path["panels"])
+            sgrp.create_dataset("times", data=path["times"])
+            sgrp.create_dataset("mass_flow", data=path["mass_flow"])
+            sgrp.create_dataset("inlet_temp", data=path["inlet_temp"])
+
     @classmethod
     def load(cls, fobj):
         """Load a Receiver from an HDF5 file
@@ -172,6 +207,40 @@ class Receiver:
         for name in grp:
             res.add_panel(Panel.load(grp[name]), name)
 
+        if "flowpaths" in fobj:
+            grp = fobj["flowpaths"]
+
+            for name in grp:
+                res.add_flowpath(
+                    list(
+                        map(
+                            lambda x: x.decode(encoding="UTF-8"),
+                            np.copy(grp[name]["panels"]),
+                        )
+                    ),
+                    np.copy(grp[name]["times"]),
+                    np.copy(grp[name]["mass_flow"]),
+                    np.copy(grp[name]["inlet_temp"]),
+                    name=name,
+                )
+
+        if "flowpaths" in fobj:
+            grp = fobj["flowpaths"]
+
+            for name in grp:
+                res.add_flowpath(
+                    list(
+                        map(
+                            lambda x: x.decode(encoding="UTF-8"),
+                            np.copy(grp[name]["panels"]),
+                        )
+                    ),
+                    np.copy(grp[name]["times"]),
+                    np.copy(grp[name]["mass_flow"]),
+                    np.copy(grp[name]["inlet_temp"]),
+                    name=name,
+                )
+
         return res
 
 
@@ -186,12 +255,12 @@ class Panel:
     names are sequential numbers.
 
     Args:
-      stiffness:       manifold spring stiffness
+      stiffness:                        manifold spring stiffness
     """
 
-    def __init__(self, stiffness):
+    def __init__(self, stiffness, ntubes_actual=None):
         """Initialize the panel"""
-        self.tubes = {}
+        self.tubes = OrderedDict()
         self.stiffness = stiffness
 
     def write_vtk(self, basename):
@@ -230,6 +299,19 @@ class Panel:
           int:  number of tubes in the panel
         """
         return len(self.tubes)
+
+    @property
+    def ntubes_actual(self):
+        """Number of actual tubes in the panel
+
+        Returns:
+            int:    number of tubes in the full panel
+        """
+        total = 0
+        for t in self.tubes.values():
+            total += t.multiplier
+
+        return total
 
     def add_tube(self, tube, name=None):
         """Add a tube object to the panel
@@ -325,9 +407,21 @@ class Tube:
       nz (int): number of axial increments
       T0 (Optional[float]): initial temperature
       page (Optional[bool]): store results on disk if True
+      multiplier (Optional[int]): number of tubes represented by this actual model, defaults to 1
     """
 
-    def __init__(self, outer_radius, thickness, height, nr, nt, nz, T0=0.0, page=False):
+    def __init__(
+        self,
+        outer_radius,
+        thickness,
+        height,
+        nr,
+        nt,
+        nz,
+        T0=0.0,
+        page=False,
+        multiplier=1,
+    ):
         """Initialize the tube"""
         self.r = outer_radius
         self.t = thickness
@@ -342,6 +436,7 @@ class Tube:
         self.times = []
         self.results = {}
         self.quadrature_results = {}
+        self.axial_results = {}
 
         self.outer_bc = None
         self.inner_bc = None
@@ -351,6 +446,18 @@ class Tube:
         self.page = page
         self.page_prefix = ""
 
+        self.multiplier_val = multiplier
+
+    @property
+    def multiplier(self):
+        """
+        Number of actual tubes represented by this model
+
+        Returns:
+            int:    tube multiplier
+        """
+        return self.multiplier_val
+
     def copy_results(self, other):
         """Copy the results fields from one tube to another
 
@@ -359,6 +466,7 @@ class Tube:
         """
         self.results = other.results
         self.quadrature_results = other.quadrature_results
+        self.axial_results = other.axial_results
 
     def set_paging(self, page, i):
         """Set the value of the page parameter
@@ -647,6 +755,28 @@ class Tube:
             raise ValueError("Quadrature data must have time axis first!")
         self.quadrature_results[name] = self._setup_memmap(name + "_quad", shape)
 
+    def add_axial_results(self, name, data):
+        """Add a result distributed over the tube height at nz points
+
+        Args:
+            name (str): results name
+            data (np.array): data to store
+        """
+        if data.shape != (self.ntime, self.nz):
+            raise ValueError("Axial result field must have shape (ntime, nz)!")
+        self.axial_results[name] = self._setup_memmap(name + " _axial", data.shape)
+        self.axial_results[name][:] = data[:]
+
+    def add_blank_axial_results(self, name):
+        """Add a blank axial results field
+
+        Args:
+            name (str): name of field
+        """
+        self.axial_results[name] = self._setup_memmap(
+            name + "_axial", (self.ntime, self.nz)
+        )
+
     def _setup_memmap(self, name, shape):
         """Map array to disk if required
 
@@ -730,6 +860,10 @@ class Tube:
         fobj.attrs["nt"] = self.nt
         fobj.attrs["nz"] = self.nz
 
+        fobj.attrs["multiplier"] = self.multiplier_val
+
+        fobj.attrs["multiplier"] = self.multiplier_val
+
         fobj.attrs["abstraction"] = self.abstraction
         if self.abstraction == "2D" or self.abstraction == "1D":
             fobj.attrs["plane"] = self.plane
@@ -744,6 +878,10 @@ class Tube:
 
         grp = fobj.create_group("quadrature_results")
         for name, result in self.quadrature_results.items():
+            grp.create_dataset(name, data=result)
+
+        grp = fobj.create_group("axial_results")
+        for name, result in self.axial_results.items():
             grp.create_dataset(name, data=result)
 
         if self.outer_bc:
@@ -767,6 +905,11 @@ class Tube:
         Parameters:
           fobj (h5py.Group):  h5py to load from
         """
+        if "multiplier" in fobj.attrs:
+            mult = fobj.attrs["multiplier"]
+        else:
+            mult = 1
+
         res = cls(
             fobj.attrs["r"],
             fobj.attrs["t"],
@@ -775,6 +918,7 @@ class Tube:
             fobj.attrs["nt"],
             fobj.attrs["nz"],
             T0=fobj.attrs["T0"],
+            multiplier=mult,
         )
 
         res.abstraction = fobj.attrs["abstraction"]
@@ -792,6 +936,16 @@ class Tube:
         grp = fobj["quadrature_results"]
         for name in grp:
             res.add_quadrature_results(name, np.copy(grp[name]))
+
+        if "axial_results" in fobj:
+            grp = fobj["axial_results"]
+            for name in grp:
+                res.add_axial_results(name, np.copy(grp[name]))
+
+        if "axial_results" in fobj:
+            grp = fobj["axial_results"]
+            for name in grp:
+                res.add_axial_results(name, np.copy(grp[name]))
 
         if "outer_bc" in fobj:
             res.set_bc(ThermalBC.load(fobj["outer_bc"]), "outer")
@@ -942,6 +1096,8 @@ class ThermalBC:
             return ConvectiveBC.load(fobj)
         elif fobj.attrs["type"] == "FixedTemp":
             return FixedTempBC.load(fobj)
+        elif fobj.attrs["type"] == "FilmCoefficientConvective":
+            return FilmCoefficientConvectiveBC.load(fobj)
         else:
             raise ValueError("Unknown BC type %s" % fobj.attrs["type"])
 
@@ -1207,6 +1363,106 @@ class FixedTempBC(ThermalBC):
             and (self.nz == other.nz)
             and np.allclose(self.times, other.times)
             and np.allclose(self.data, other.data)
+        )
+
+
+class FilmCoefficientConvectiveBC(ThermalBC):
+    """A convective BC on the ID of a tube, this version provides the film coefficient directly
+
+    Args:
+        radius (float):     radius of application
+        height (float):     height of tube
+        nz (int):           number of divisions along height
+        fluid_T (np.array): fluid temperature
+        film (np.array):    film coefficient data
+    """
+
+    def __init__(self, radius, height, nz, fluid_T, film):
+        self.r = radius
+        self.h = height
+
+        self.nz = nz
+
+        self.fluid_T = fluid_T
+        self.film = film
+
+        if fluid_T.shape != (nz,) or film.shape != (nz):
+            raise ValueError(
+                "Film coefficient and fluid temperature data must have size (nz,)"
+            )
+
+        zs = np.linspace(0, self.h, self.nz)
+        self.ifn_fluid = inter.interp1d(zs, fluid_T)
+        self.ifn_film = inter.interp1d(zs, film)
+
+    def fluid_temperature(self, t, z):
+        """Return the fluid temperature at a given time and position
+
+        Args:
+            t (float): time
+            z (float): height
+        """
+        return self.ifn_fluid(z)
+
+    def film_coefficient(self, t, z):
+        """Return the film coefficient at a given time and position
+
+        Args:
+          t (float): time
+          z (float): height
+
+        Return:
+          float: film coefficient at this location and time
+        """
+        return self.ifn_film(z)
+
+    def save(self, fobj):
+        """Save to an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to save to
+        """
+        fobj.attrs["type"] = "FilmCoefficientConvective"
+        fobj.attrs["r"] = self.r
+        fobj.attrs["h"] = self.h
+
+        fobj.attrs["nz"] = self.nz
+
+        fobj.create_dataset("fluid_T", data=self.fluid_T)
+        fobj.create_dataset("film", data=self.film)
+
+    @classmethod
+    def load(cls, fobj):
+        """Load from an HDF5 file
+
+        Args:
+          fobj (h5py.Group): h5py group to load from
+        """
+        return cls(
+            fobj.attrs["r"],
+            fobj.attrs["h"],
+            fobj.attrs["nz"],
+            np.copy(fobj["fluid_T"]),
+            np.copy(fobj["film"]),
+        )
+
+    def close(self, other):
+        """Check to see if two objects are nearly equal.
+
+        Primarily used for testing
+
+        Args:
+          other (ConvectiveBC): the object to compare against
+
+        Returns:
+          bool: true if sufficiently similar
+        """
+        return (
+            np.isclose(self.r, other.r)
+            and np.isclose(self.h, other.h)
+            and (self.nz == other.nz)
+            and np.allclose(self.fluid_T, other.fluid_T)
+            and np.allclose(self.film, other.film)
         )
 
 

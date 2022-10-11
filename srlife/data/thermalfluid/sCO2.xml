@@ -1,0 +1,34 @@
+<!-- cp in W-hr/kg-k, rho in kg/mm^3, mu in kg/mm-hr, k in W/mm-k -->
+<!-- valid for T between 600K and 1050k-->
+<models>
+  <p15mpa type="PolynomialThermalFluidMaterial">
+    <cp_poly>7.03948e-13 -2.58673e-09 3.53650e-06 -2.07319e-03 7.70504e-01</cp_poly>
+    <rho_poly>2.00326e-13 -4.63206e-10 3.39679e-07</rho_poly>
+    <mu_poly>1.06716e-07 4.53845e-05</mu_poly>
+    <k_poly>6.895e-08 4.693279e-06</k_poly>
+  </p15mpa>
+  <p17pt5mpa type="PolynomialThermalFluidMaterial">
+    <cp_poly>8.43396e-13 -3.10782e-09 4.27343e-06 -2.54474e-03 8.87998e-01</cp_poly>
+    <rho_poly>2.39882e-13 -5.51476e-10 4.00667e-07</rho_poly>
+    <mu_poly>1.03956e-07 4.87811e-05</mu_poly>
+    <k_poly>6.76109e-08 6.341342e-06</k_poly>
+  </p17pt5mpa>
+  <p20mpa type="PolynomialThermalFluidMaterial">
+    <cp_poly>9.77732e-13 -3.60657e-09 4.97511e-06 -2.99215e-03 9.99333e-01</cp_poly>
+    <rho_poly>2.79776e-13 -6.40181e-10 4.61593e-07</rho_poly>
+    <mu_poly>1.00917e-07 5.24813e-05</mu_poly>
+    <k_poly>6.61234e-08 8.125005e-06</k_poly>
+  </p20mpa>
+  <p22pt5mpa type="PolynomialThermalFluidMaterial">
+    <cp_poly>1.11219e-12 -4.10216e-09 5.66723e-06 -3.43019e-03 1.10754</cp_poly>
+    <rho_poly>3.19627e-13 -7.28582e-10 5.22099e-07</rho_poly>
+    <mu_poly>9.75921e-08 5.64921e-05</mu_poly>
+    <k_poly>6.44985e-08 10.040558e-06</k_poly>
+  </p22pt5mpa>
+  <p25mpa type="PolynomialThermalFluidMaterial">
+    <cp_poly>1.20828e-12 -4.46721e-09 6.19318e-06 -3.77406e-03 1.19555</cp_poly>
+    <rho_poly>3.58815e-13 -8.15512e-10 5.81636e-07</rho_poly>
+    <mu_poly>9.39921e-08 6.08074e-05</mu_poly>
+    <k_poly>6.27524e-08 12.078258e-06</k_poly>
+  </p25mpa>
+</models>

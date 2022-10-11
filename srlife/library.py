@@ -6,6 +6,7 @@ import os.path
 import xml.etree.ElementTree as ET
 
 from srlife import materials
+from srlife.thermohydraulics import thermalfluid
 
 LIBRARY_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "data"))
 
@@ -39,6 +40,18 @@ def load_fluid(name, model):
     fdir = os.path.join(LIBRARY_DIR, "fluid")
     filename = get_file(fdir, name)
     return materials.FluidMaterial.load(filename, model)
+
+
+def load_thermal_fluid(name, model):
+    """Load thermal fluid material properties
+
+    Args:
+        name (str): name of the fluid (XML filename)
+        model (str): model variant to use
+    """
+    fdir = os.path.join(LIBRARY_DIR, "thermalfluid")
+    filename = get_file(fdir, name)
+    return thermalfluid.ThermalFluidMaterial.load(filename, model)
 
 
 def load_material(name, thermal_model, deformation_model, damage_model):
