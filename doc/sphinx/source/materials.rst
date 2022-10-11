@@ -66,10 +66,14 @@ commonly-available experimental data.
 Damage (structural) materials
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The current version of srlife includes only one damage model: an ASME-type approach that uses Miner's rule, time-fraction creep damage,
-and a creep-fatigue interaction diagram to determine creep-fatigue failure.
-The damage material model provides the required data, including nominal strain-based fatigue curves, a creep rupture correlation, and
-the interaction diagram.
+The current version of srlife includes two damage models:
+
+* An ASME-type approach that uses Miner's rule, time-fraction creep damage, a
+  and a creep-fatigue interaction diagram to determine creep-fatigue failure.
+  The damage material model provides the required data, including nominal strain-based fatigue curves, a creep rupture correlation, and
+  the interaction diagram.  This model is suitable for metallic materials.
+* A time-independent ceramic reliability models representing an extension to 3D of standard uniaxial Weibull failure statistics.
+  This model is suitable for ceramic materials.
 
 Thermal fluid materials
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -79,11 +83,13 @@ the solid material.  This system provides the physical properties (density, dyna
 and thermohydraulic correlations (a Nusselt correlation) required to calculate heat transfer along a flow path, including
 convective heat transfer between the tube material and the working fluid.
 
-+--------------------------------------------+-----------------+----------+
-| Fluid                                      | String ID       | Comments |
-+============================================+=================+==========+
-| Magnesium-potassium eutectic chloride salt | "32MgCl2-68KCl" |          |
-+--------------------------------------------+-----------------+----------+
++--------------------------------------------+--------------------+----------+
+| Fluid                                      | String ID          | Comments |
++============================================+====================+==========+
+| Magnesium-potassium eutectic chloride salt | "32MgCl2-68KCl"    |          |
++--------------------------------------------+--------------------+----------+
+| Supercritical carbon dioxide               | "sCO2"             |          |
++--------------------------------------------+--------------------+----------+
 
 As with the solid material models, the fluid material system also subdivides models with a variant specification.  Again, srlife provides a
 `"base"` variant and users could expand the system to other models.  
