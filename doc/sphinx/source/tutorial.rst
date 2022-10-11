@@ -54,7 +54,10 @@ The two tubes in each individual panel are rigidly connected through their
 top-surface displacements.  The two panels are completely structurally
 disconnected.
 
-The thermal boundary conditions are an incident flux on the tube outer diameter and convective heat transfer on the inner diameter.  The tubes also
+The thermal boundary conditions are an incident flux on the tube outer diameter and convective heat transfer on the inner diameter
+resulting from heat transfer molten salt flowing through the receiver.  
+The two tubes per panel in the model represent 50 actual tubes (so 100 tubes per panel) in the receiver.
+The tubes also
 experience a time varying inner pressure.
 
 The analysis encompasses a single, representative day of 24 hours.  The
@@ -100,20 +103,10 @@ incident flux for tube 0 at the peak flux (:math:`t=6` hours).
    :width: 800
    :alt: Incident flux on the front face of tube 0.
 
-For the internal convective heat transfer the four tubes all have the same 
-fluid temperature distribution, given by
-
-.. math::
-   
-   T_{fluid}(t,z) = \Delta T O(t) \frac{z}{h} + T_{start}
-
-with :math:`\Delta T = 50` K and :math:`T_{start} = 823` K in this example.
-The plot below shows the fluid temperature gradient in each tube at several
-different times throughout the daily cycle:
-
-.. image:: tube-gradient.png
-   :width: 800
-   :alt: Fluid temperature gradient in each tube at different times.
+Heat transfers from the incident flux, through the receiver tubes, and into
+molten salt flowing at a constant mass flow rate of 500 kg/s with an inlet
+temperature of 550 C.  The two panels are in a single flow path, salt flows
+through one panel and then into the next.
 
 Finally, the internal pressure in all four tubes is the same and given by
 
@@ -124,7 +117,7 @@ Finally, the internal pressure in all four tubes is the same and given by
 with :math:`p_{max} = 1` MPa.
 
 In the example the tube material is 316H stainless steel and the working fluid is 
-molten chloride salt.
+32MgCL2-68KCl chloride salt.
 
 Defining the receiver geometry and loading conditions
 -----------------------------------------------------
@@ -202,10 +195,17 @@ in the previous section
   h_tube_2 = 0.6
   h_tube_3 = 0.4
 
-  # ID fluid temperature histories for each tube
-  delta_T = 50 # K
-  T_base = 550 + 273.15 # K
-  fluid_temp = lambda t, z: delta_T * onoff(t) * z/height + T_base
+  # Both panels are in the same flow path with constant mass flow rate
+  # of 500 kg/s and an inlet temperature of 550 C
+  mass_flow = 500 * 3600.0
+  inlet_temp = 550.0 + 273.15
+
+  # Tubes start at 300 K
+  T_base = 300.0
+
+  # For the thermohydraulic calculation, each tube in the model represents 
+  # 50 tubes in the actual receiver
+  tube_multiplier = 50
 
   # ID pressure history
   p_max = 1.0 # MPa
@@ -222,17 +222,14 @@ throughout the 24 hour cycle:
    # Time increments throughout the 24 hour day
    times = np.linspace(0,24,24*2+1)
 
-Similarly, the spatial information about the flux and convective boundary
+Similarly, the spatial information about the flux 
 conditions must be defined over discrete grid points in cylindrical coordinates.
 srlife uses the `"ij"` indexing scheme defined in `numpy <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html>`_, where the individual 
 coordinate arrays are indexed with a matrix scheme:
 
 .. code:: python
    
-  # Various meshes needed to define the boundary conditions
-  # 1) A mesh over the times and height (for the fluid temperatures)
-  time_h, z_h = np.meshgrid(times, np.linspace(0,height,nz), indexing='ij')
-  # 2) A surface mesh over the outer surface (for the flux)
+  # A surface mesh over the outer surface (for the flux)
   time_s, theta_s, z_s = np.meshgrid(times, np.linspace(0,2*np.pi,nt+1)[:nt],
       np.linspace(0,height,nz), indexing = 'ij')
 
@@ -241,48 +238,44 @@ discretization, and boundary conditions.  The first tube is defined like this:
 
 .. code:: python
 
-  # Setup each tube in turn and assign it to the correct panel
-  # Tube 0
-  tube_0 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-  tube_0.set_times(times)
-  tube_0.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-    height, nz, times, fluid_temp(time_h,z_h)), "inner")
-  tube_0.set_bc(receiver.HeatFluxBC(r_outer, height,
-    nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_0), "outer")
-  tube_0.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+   # Setup each tube in turn and assign it to the correct panel
+   # Tube 0
+   tube_0 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
+   tube_0.set_times(times)
+   tube_0.set_bc(receiver.HeatFluxBC(r_outer, height,
+       nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_0), "outer")
+   tube_0.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+   tube_0.multiplier_val = tube_multiplier
 
 The remainder of the tubes are defined similarly:
 
 .. code:: python
    
-  # Tube 1
-  tube_1 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-  tube_1.set_times(times)
-  tube_1.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-    height, nz, times, fluid_temp(time_h,z_h)), "inner")
-  tube_1.set_bc(receiver.HeatFluxBC(r_outer, height,
-    nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_1), "outer")
-  tube_1.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    # Tube 1
+    tube_1 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
+    tube_1.set_times(times)
+    tube_1.set_bc(receiver.HeatFluxBC(r_outer, height,
+        nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_1), "outer")
+    tube_1.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    tube_1.multiplier_val = tube_multiplier
 
-  # Tube 2
-  tube_2 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-  tube_2.set_times(times)
-  tube_2.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-    height, nz, times, fluid_temp(time_h,z_h)), "inner")
-  tube_2.set_bc(receiver.HeatFluxBC(r_outer, height,
-    nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_2), "outer")
-  tube_2.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    # Tube 2
+    tube_2 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
+    tube_2.set_times(times)
+    tube_2.set_bc(receiver.HeatFluxBC(r_outer, height,
+        nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_2), "outer")
+    tube_2.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    tube_2.multiplier_val = tube_multiplier
 
-  # Tube 3
-  tube_3 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-  tube_3.set_times(times)
-  tube_3.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-    height, nz, times, fluid_temp(time_h,z_h)), "inner")
-  tube_3.set_bc(receiver.HeatFluxBC(r_outer, height,
-    nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_3), "outer")
-  tube_3.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    # Tube 3
+    tube_3 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
+    tube_3.set_times(times)
+    tube_3.set_bc(receiver.HeatFluxBC(r_outer, height,
+        nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_3), "outer")
+    tube_3.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
+    tube_3.multiplier_val = tube_multiplier
 
-Finally, each tube must be added to the relevant panel and the panels
+Each tube must be added to the relevant panel and the panels
 to the receiver:
 
 .. code:: python
@@ -298,6 +291,17 @@ to the receiver:
   # Assign the panels to the receiver
   model.add_panel(panel_0, "panel0")
   model.add_panel(panel_1, "panel1")
+
+Finally, the single flow path through both panels must be defined
+
+.. code:: python
+
+    # Assign each panel to the flow path with the appropriate inlet temperatures
+    # and mass flow rates
+    model.add_flowpath(["panel0", "panel1"],
+                       times,
+                       np.ones_like(times) * mass_flow,
+                       np.ones_like(times) * inlet_temp)
 
 At this point the :any:`srlife.receiver.Receiver` object is fully-defined
 and ready to be used in a life assessment.  However, for this tutorial
@@ -320,7 +324,7 @@ described above for later use.
 The key point of this rather lengthy script is that *actual users of the srlife
 should never have to write a script like this explictly defining the receiver
 boundary conditions.*  Instead this information should be obtained from some
-upstream thermohydraulic and (ultimately) heliostat analysis system.  The
+upstream plant and heliostat analysis systems.  The
 user would then write interface code either directly in Python or using the
 HDF5 file format as an intermediary to transfer the information into srlife.
 
@@ -359,7 +363,7 @@ be loaded from the this library for use in the analysis
 .. code:: python
 
   # Choose the material models
-  fluid_mat = library.load_fluid("salt", "base") # Generic chloride salt  model
+  fluid_mat = library.load_thermal_fluid("32MgCl2-68KCl", "base") 
   # Base 316H thermal and damage models, a simplified deformation model to 
   # cut down on the run time of the 3D analysis
   thermal_mat, deformation_mat, damage_mat = library.load_material("316H", "base", "elastic_creep", "base")
@@ -383,32 +387,27 @@ to make the resulting thermal/structural analysis run essentially instantaneousl
     for tube in panel.tubes.values():
       tube.make_1D(tube.h/2, 0)
 
-For now, srlife only provides a 
-single solver of each type and all the solution parameters have sensible 
-default values.  However, the following code could be changed to use
-a custom thermal, structural, or damage solver or to change how the module
-solves the thermal and structural subproblems:
+The follow then defines numerical solver parameters and the actual thermohydraulic,
+structural, and damage solvers to use in the problem.
 
 .. code:: python
 
-  # Setup some solver parameters
-  params = solverparams.ParameterSet()
-  params['progress_bars'] = True # Print a progress bar to the screen as we solve
-  params['nthreads'] = 1 # Solve will run in multithreaded mode, set to number of available cores
-  params['system']['atol'] = 1.0e-4 # During the standby very little happens, lower the atol to accept this result
+    # Setup some solver parameters
+    params = solverparams.ParameterSet()
+    params['progress_bars'] = True # Print a progress bar to the screen as we solve
+    params['nthreads'] = 4 # Solve will run in multithreaded mode, set to number of available cores
+    params['system']['atol'] = 1.0e-4 # During the standby very little happens, lower the atol to accept this result
 
-  # Choose the solvers, i.e. how we are going to solve the thermal,
-  # single tube, structural system, and damage calculation problems.
-  # Right now there is only one option for each
-  # Define the thermal solver to use in solving the heat transfer problem
-  thermal_solver = thermal.FiniteDifferenceImplicitThermalSolver(
-      params["thermal"])
-  # Define the structural solver to use in solving the individual tube problems
-  structural_solver = structural.PythonTubeSolver(params["structural"])
-  # Define the system solver to use in solving the coupled structural system
-  system_solver = system.SpringSystemSolver(params["system"])
-  # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
+    # Choose the solvers, i.e. how we are going to solve the thermal,
+    # single tube, structural system, and damage calculation problems.
+    # Define the thermal solver to use in solving the heat transfer problem
+    thermal_solver = thermal.ThermohydraulicsThermalSolver(params["thermal"])
+    # Define the structural solver to use in solving the individual tube problems
+    structural_solver = structural.PythonTubeSolver(params["structural"])
+    # Define the system solver to use in solving the coupled structural system
+    system_solver = system.SpringSystemSolver(params["system"])
+    # Damage model to use in calculating life
+    damage_model = damage.TimeFractionInteractionDamage(params["damage"])
 
 The user might consider changing the `params['nthreads']` parameter to match
 the number of cores on their machine, to speed up the analysis.
@@ -422,14 +421,14 @@ Finally, the analysis can be run and the life of the receiver estimated:
 
 .. code:: python
 
-  # The solution manager
-  solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat, structural_solver, deformation_mat, damage_mat, system_solver, damage_model, pset = params)
+    # The solution manager
+    solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat,
+            structural_solver, deformation_mat, damage_mat,
+            system_solver, damage_model, pset = params)
 
-  # Actually solve for life
-  life = solver.solve_life()
-  print("Best estimate life: %f daily cycles" % life)
-
-*This solution will take a long time (up to an hour on some machines) to complete because it is using a full 3D analysis of each tube.*  Running the problem with multiple threads will help decrease the required solution time.
+    # Actually solve for life
+    life = solver.solve_life()
+    print("Best estimate life: %f daily cycles" % life)
 
 If the `params['progress_bars']` parameter is kept as `True` then the program
 will print a status bar representing its progress along each individual step
@@ -437,10 +436,10 @@ will print a status bar representing its progress along each individual step
 
 .. code:: console
 
-   Best estimate life: 9062.849331 daily cycles
+   Best estimate life: 7077.239061 daily cycles
 
 indicating that the module predicts this receiver to have a structural life of
-9062 repetitions of the daily cycle, or about 25 years. 
+around 7000 repetitions of the daily cycle, or about 20 years. 
 
 Visualizing tube results
 ------------------------
@@ -458,183 +457,3 @@ to a VTK file for additional postprocessing:
 This command produces a series of `VTK <https://vtk.org/>`_ files (one per tube per time step) containing the full
 thermal, structural, and damage results.  These files can be visualized
 with a program like `ParaView <https://www.paraview.org/>`_.
-
-Complete example scripts
-------------------------
-
-`setup_problem.py`
-
-.. code:: python
-
-   import numpy as np
-
-   from srlife import receiver
-
-   # Setup the base receiver
-   period = 24.0 # Loading cycle period, hours
-   days = 1 # Number of cycles represented in the problem 
-   panel_stiffness = "disconnect" # Panels are disconnected from one another
-
-   model = receiver.Receiver(period, days, panel_stiffness)
-
-   # Setup each of the two panels
-   tube_stiffness = "rigid"
-   panel_0 = receiver.Panel(tube_stiffness)
-   panel_1 = receiver.Panel(tube_stiffness)
-
-   # Basic receiver geometry
-   r_outer = 12.7 # mm
-   thickness = 1.0 # mm
-   height = 5000.0 # mm
-
-   # Tube discretization
-   nr = 12
-   nt = 20
-   nz = 10
-
-   # Mathematical definition of the tube boundary conditions
-   # Function used to define daily operating cycle 
-   onoff_base = lambda t: np.sin(np.pi*t/12.0)
-   onoff = lambda t: (1+np.sign(onoff_base(t)))/2 * onoff_base(t)
-   # Max flux
-   h_max = 0.6 # W/mm^2 (which is also MW/m^2)
-   # Flux circumferential component
-   h_circ = lambda theta: np.cos(theta)
-   # Flux axial component
-   h_axial = lambda z: (1+np.sin(np.pi*z/height))/2
-   # Total flux function
-   h_flux = lambda time, theta, z: onoff(time) * h_max * h_circ(theta) * h_axial(z)
-  
-   # Flux multipliers for each tube
-   h_tube_0 = 1.0
-   h_tube_1 = 0.8
-   h_tube_2 = 0.6
-   h_tube_3 = 0.4
-
-   # ID fluid temperature histories for each tube
-   delta_T = 50 # K
-   T_base = 550 + 273.15 # K
-   fluid_temp = lambda t, z: delta_T * onoff(t) * z/height + T_base
-
-   # ID pressure history
-   p_max = 1.0 # MPa
-   pressure = lambda t: p_max * onoff(t)
-
-   # Time increments throughout the 24 hour day
-   times = np.linspace(0,24,24*2+1)
-
-   # Various meshes needed to define the boundary conditions
-   # 1) A mesh over the times and height (for the fluid temperatures)
-   time_h, z_h = np.meshgrid(times, np.linspace(0,height,nz), indexing='ij')
-   # 2) A surface mesh over the outer surface (for the flux)
-   time_s, theta_s, z_s = np.meshgrid(times, np.linspace(0,2*np.pi,nt+1)[:nt],
-       np.linspace(0,height,nz), indexing = 'ij')
-
-   # Setup each tube in turn and assign it to the correct panel
-   # Tube 0
-   tube_0 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-   tube_0.set_times(times)
-   tube_0.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-     height, nz, times, fluid_temp(time_h,z_h)), "inner")
-   tube_0.set_bc(receiver.HeatFluxBC(r_outer, height,
-     nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_0), "outer")
-   tube_0.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
-
-   # Tube 1
-   tube_1 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-   tube_1.set_times(times)
-   tube_1.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-     height, nz, times, fluid_temp(time_h,z_h)), "inner")
-   tube_1.set_bc(receiver.HeatFluxBC(r_outer, height,
-     nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_1), "outer")
-   tube_1.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
-
-   # Tube 2
-   tube_2 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-   tube_2.set_times(times)
-   tube_2.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-     height, nz, times, fluid_temp(time_h,z_h)), "inner")
-   tube_2.set_bc(receiver.HeatFluxBC(r_outer, height,
-     nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_2), "outer")
-   tube_2.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
-
-   # Tube 3
-   tube_3 = receiver.Tube(r_outer, thickness, height, nr, nt, nz, T0 = T_base)
-   tube_3.set_times(times)
-   tube_3.set_bc(receiver.ConvectiveBC(r_outer-thickness,
-     height, nz, times, fluid_temp(time_h,z_h)), "inner")
-   tube_3.set_bc(receiver.HeatFluxBC(r_outer, height,
-     nt, nz, times, h_flux(time_s, theta_s, z_s) * h_tube_3), "outer")
-   tube_3.set_pressure_bc(receiver.PressureBC(times, pressure(times)))
-
-   # Assign to panel 0
-   panel_0.add_tube(tube_0, "tube0")
-   panel_0.add_tube(tube_1, "tube1")
-
-   # Assign to panel 1
-   panel_1.add_tube(tube_2, "tube2")
-   panel_1.add_tube(tube_3, "tube3")
-
-   # Assign the panels to the receiver
-   model.add_panel(panel_0, "panel0")
-   model.add_panel(panel_1, "panel1")
-
-   # Save the receiver to an HDF5 file
-   model.save("model.hdf5")
-
-`run_problem.py`
-
-.. code:: python
-
-  import numpy as np
-
-  from srlife import receiver, solverparams, library, thermal, structural, system, damage, managers
-
-  # Load the receiver we previously saved
-  model = receiver.Receiver.load("model.hdf5")
-
-  # Choose the material models
-  fluid_mat = library.load_fluid("salt", "base") # Generic chloride salt  model
-  # Base 316H thermal and damage models, a simplified deformation model to 
-  # cut down on the run time of the 3D analysis
-  thermal_mat, deformation_mat, damage_mat = library.load_material("316H", "base", 
-      "base", "base")
-
-  # Cut down on run time for now by making the tube analyses 1D
-  # This is not recommended for actual design evaluation
-  for panel in model.panels.values():
-    for tube in panel.tubes.values():
-      tube.make_1D(tube.h/2, 0)
-
-  # Setup some solver parameters
-  params = solverparams.ParameterSet()
-  params['progress_bars'] = True # Print a progress bar to the screen as we solve
-  params['nthreads'] = 4 # Solve will run in multithreaded mode, set to number of available cores
-  params['system']['atol'] = 1.0e-4 # During the standby very little happens, lower the atol to accept this result
-
-  # Choose the solvers, i.e. how we are going to solve the thermal,
-  # single tube, structural system, and damage calculation problems.
-  # Right now there is only one option for each
-  # Define the thermal solver to use in solving the heat transfer problem
-  thermal_solver = thermal.FiniteDifferenceImplicitThermalSolver(
-      params["thermal"])
-  # Define the structural solver to use in solving the individual tube problems
-  structural_solver = structural.PythonTubeSolver(params["structural"])
-  # Define the system solver to use in solving the coupled structural system
-  system_solver = system.SpringSystemSolver(params["system"])
-  # Damage model to use in calculating life
-  damage_model = damage.TimeFractionInteractionDamage(params["damage"])
-
-  # The solution manager
-  solver = managers.SolutionManager(model, thermal_solver, thermal_mat, fluid_mat,
-      structural_solver, deformation_mat, damage_mat,
-      system_solver, damage_model, pset = params)
-
-  # Actually solve for life
-  life = solver.solve_life()
-  print("Best estimate life: %f daily cycles" % life)
-  
-  # Save the tube data out for additional visualization
-  for pi, panel in model.panels.items():
-    for ti, tube in panel.tubes.items():
-      tube.write_vtk("tube-%s-%s" % (pi, ti))

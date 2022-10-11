@@ -24,7 +24,7 @@ copyright = '2022, Argonne National Laboratory'
 author = 'Argonne National Laboratory'
 
 # The full version, including alpha/beta/rc tags
-release = '1.3.0'
+release = '2.0.0'
 
 
 # -- General configuration ---------------------------------------------------
