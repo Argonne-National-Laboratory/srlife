@@ -83,8 +83,7 @@ class WeibullFailureModel:
             results = list(
                 decorator(
                     p.imap(
-                        lambda x: self.tube_log_reliability(
-                            x, material, receiver),
+                        lambda x: self.tube_log_reliability(x, material, receiver),
                         receiver.tubes,
                     ),
                     receiver.ntubes,
@@ -357,8 +356,7 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Time dependent equivalent stress
         sigma_e_0 = (
-            ((time_integral * self.tot_time) / self.Bv) +
-            (sigma_e_max ** (self.Nv - 2))
+            ((time_integral * self.tot_time) / self.Bv) + (sigma_e_max ** (self.Nv - 2))
         ) ** (1 / (self.Nv - 2))
 
         # Suppressing warning given when negative numbers are raised to rational numbers
@@ -493,8 +491,7 @@ class PIAModel(CrackShapeIndependent):
 
         # Time dependent principal stress
         pstress_0 = (
-            (time_integral * self.tot_time) /
-            self.Bv + (pstress_max ** (self.Nv - 2))
+            (time_integral * self.tot_time) / self.Bv + (pstress_max ** (self.Nv - 2))
         ) ** (1 / (self.Nv - 2))
 
         return -kvals * np.nansum(pstress_0 ** mvals[..., None], axis=-1) * volumes
@@ -573,13 +570,11 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
-            self.calculate_avg_normal_stress(
-                mandel_stress, temperatures, nf, material)
+            self.calculate_avg_normal_stress(mandel_stress, temperatures, nf, material)
         ) ** (1 / mvals[..., None, None])
 
         return (
-            -kpvals[..., None] *
-            (avg_nstress ** mvals[..., None]) * volumes[..., None]
+            -kpvals[..., None] * (avg_nstress ** mvals[..., None]) * volumes[..., None]
         )
 
 
@@ -749,8 +744,7 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
 
         # Projected equivalent stress
         return 0.5 * (
-            sigma_n + np.sqrt((sigma_n**2) +
-                              ((4 * tau / (cbar * (2 - nu))) ** 2))
+            sigma_n + np.sqrt((sigma_n**2) + ((4 * tau / (cbar * (2 - nu))) ** 2))
         )
 
 
@@ -883,8 +877,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
             return np.inf
 
         return opt.brentq(
-            lambda N: material.inside_envelope(
-                "cfinteraction", Df(N), Dc(N)) - 0.5,
+            lambda N: material.inside_envelope("cfinteraction", Df(N), Dc(N)) - 0.5,
             rep_min,
             rep_max,
         )
@@ -937,7 +930,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
 
         cycle_dmg = np.array(
             [
-                np.sum(time_dmg[inds[i]: inds[i + 1]], axis=0)
+                np.sum(time_dmg[inds[i] : inds[i + 1]], axis=0)
                 for i in range(receiver.days)
             ]
         )
@@ -972,12 +965,11 @@ class TimeFractionInteractionDamage(DamageCalculator):
                 self.cycle_fatigue(
                     np.array(
                         [
-                            ef *
-                            tube.quadrature_results[en][inds[i]: inds[i + 1]]
+                            ef * tube.quadrature_results[en][inds[i] : inds[i + 1]]
                             for en, ef in zip(strain_names, strain_factors)
                         ]
                     ),
-                    tube.quadrature_results["temperature"][inds[i]                                                           : inds[i + 1]],
+                    tube.quadrature_results["temperature"][inds[i] : inds[i + 1]],
                     material,
                 )
                 for i in range(receiver.days)
@@ -1031,8 +1023,7 @@ class TimeFractionInteractionDamage(DamageCalculator):
                         (de[0] - de[1]) ** 2
                         + (de[1] - de[2]) ** 2
                         + (de[2] - de[0]) ** 2.0
-                        + 3.0 / 2.0 * (de[3] ** 2.0 + de[4]
-                                       ** 2.0 + de[5] ** 2.0)
+                        + 3.0 / 2.0 * (de[3] ** 2.0 + de[4] ** 2.0 + de[5] ** 2.0)
                     )
                 )
                 pt_eranges = np.maximum(pt_eranges, eq)
