@@ -223,8 +223,8 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         # self.model = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
-        k = self.s0 ** (-self.m)
-        kp = (self.m + 1) * k
+        # k = self.s0 ** (-self.m)
+        # kp = (self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
             self.stress, self.temperatures, self.volumes, self.nf, self.material
@@ -279,8 +279,8 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         )
 
     def test_definition(self):
-        k = self.s0 ** (-self.m)
-        kp = (self.m + 1) * k
+        # k = self.s0 ** (-self.m)
+        # kp = (self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
             self.stress, self.temperatures, self.volumes, self.nf, self.material
@@ -334,8 +334,8 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         )
 
     def test_definition(self):
-        k = self.s0 ** (-self.m)
-        kp = (2.99) * k
+        # k = self.s0 ** (-self.m)
+        # kp = (2.99) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
             self.stress, self.temperatures, self.volumes, self.nf, self.material
@@ -388,8 +388,8 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         )
 
     def test_definition(self):
-        k = self.s0 ** (-self.m)
-        kp = (2.99) * k
+        # k = self.s0 ** (-self.m)
+        # kp = (2.99) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
             self.stress, self.temperatures, self.volumes, self.nf, self.material

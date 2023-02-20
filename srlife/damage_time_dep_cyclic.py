@@ -5,7 +5,8 @@
   damage material properties
 """
 from scipy import integrate
-from scipy.integrate import fixed_quad, quadrature
+
+# from scipy.integrate import fixed_quad, quadrature
 from srlife import receiver
 
 import numpy as np
@@ -399,7 +400,7 @@ class CrackShapeDependent(WeibullFailureModel):
         self.mandel_stress = mandel_stress
 
         # Principal stresses
-        pstress = self.calculate_principal_stress(mandel_stress)
+        # pstress = self.calculate_principal_stress(mandel_stress)
 
         # Material parameters
         svals = self.material.strength(temperatures)
