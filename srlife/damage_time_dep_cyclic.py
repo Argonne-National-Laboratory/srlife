@@ -342,7 +342,7 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Defining total time
         self.period = 0.01  # in hours replace with period from receiver
-        print("number of cycles to failure =", nf)
+        # print("number of cycles to failure =", nf)
         self.period_array = np.linspace(0, self.period, pstress.shape[0])
 
         # Calculate g using an integration method
