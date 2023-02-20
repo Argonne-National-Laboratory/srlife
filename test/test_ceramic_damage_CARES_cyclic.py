@@ -1,14 +1,15 @@
 import unittest
 
 import numpy as np
-import csv
+
+# import csv
 import matplotlib.pyplot as plt
-import os.path
+
+# import os.path
 
 from srlife import (
     materials,
     damage,
-    damage_time_dep,
     damage_time_dep_cyclic,
     solverparams,
 )
@@ -165,7 +166,7 @@ class TestPIAModel(unittest.TestCase):
         )
 
     def test_definition(self):
-        k = self.s0 ** (-self.m)
+        # k = self.s0 ** (-self.m)
         # kp = (2 * self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
