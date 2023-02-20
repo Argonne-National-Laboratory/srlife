@@ -5,7 +5,7 @@ import numpy as np
 # import csv
 import matplotlib.pyplot as plt
 
-# import os.path
+import os.path
 
 from srlife import (
     materials,
@@ -130,13 +130,23 @@ class TestPIAModel(unittest.TestCase):
         # )
 
         # data = np.loadtxt("Spinning_disk_cyclic_60000_70000.txt")
-        data = np.loadtxt("Spinning_disk_cyclic_60000_80000.txt")
+        data = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_cyclic_60000_80000.txt",
+            )
+        )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 1
-        self.volumes = np.loadtxt("Spinning_disk_volumes.txt")
+        self.volumes = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_volumes.txt",
+            )
+        )
         self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
             data.shape[0], 8
         )
@@ -185,13 +195,23 @@ class TestPIAModel(unittest.TestCase):
 class TestCSEModelGriffithFlaw(unittest.TestCase):
     def setUp(self):
         # data = np.loadtxt("Spinning_disk_cyclic_60000_70000.txt")
-        data = np.loadtxt("Spinning_disk_cyclic_60000_80000.txt")
+        data = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_cyclic_60000_80000.txt",
+            )
+        )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 1
-        self.volumes = np.loadtxt("Spinning_disk_volumes.txt")
+        self.volumes = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_volumes.txt",
+            )
+        )
         self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
             data.shape[0], 8
         )
@@ -243,13 +263,23 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
 class TestCSEModelPennyShapedFlaw(unittest.TestCase):
     def setUp(self):
         # data = np.loadtxt("Spinning_disk_cyclic_60000_70000.txt")
-        data = np.loadtxt("Spinning_disk_cyclic_60000_80000.txt")
+        data = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_cyclic_60000_80000.txt",
+            )
+        )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 1
-        self.volumes = np.loadtxt("Spinning_disk_volumes.txt")
+        self.volumes = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_volumes.txt",
+            )
+        )
         self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
             data.shape[0], 8
         )
@@ -299,13 +329,23 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
 class TestSMMModelGriffithFlaw(unittest.TestCase):
     def setUp(self):
         # data = np.loadtxt("Spinning_disk_cyclic_60000_70000.txt")
-        data = np.loadtxt("Spinning_disk_cyclic_60000_80000.txt")
+        data = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_cyclic_60000_80000.txt",
+            )
+        )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 1
-        self.volumes = np.loadtxt("Spinning_disk_volumes.txt")
+        self.volumes = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_volumes.txt",
+            )
+        )
         self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
             data.shape[0], 8
         )
@@ -352,13 +392,23 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
 class TestSMMModelPennyShapedFlaw(unittest.TestCase):
     def setUp(self):
         # data = np.loadtxt("Spinning_disk_cyclic_60000_70000.txt")
-        data = np.loadtxt("Spinning_disk_cyclic_60000_80000.txt")
+        data = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_cyclic_60000_80000.txt",
+            )
+        )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 1
-        self.volumes = np.loadtxt("Spinning_disk_volumes.txt")
+        self.volumes = np.loadtxt(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "Spinning_disk_volumes.txt",
+            )
+        )
         self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
             data.shape[0], 8
         )
