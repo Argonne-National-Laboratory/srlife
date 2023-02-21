@@ -155,12 +155,15 @@ class TestPIAModel(unittest.TestCase):
 
         # Number of cycles to failure
         self.nf = 1
+        self.period = 0.01
 
         # Material properties
         self.m = 7.65
         self.s0 = 74.79 * ((1000) ** (3 / self.m))  # in mm  74.79 in m
         self.c_bar = 0.82
         self.nu = 0.219
+        self.Nv = 30
+        self.Bv = 320
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -169,6 +172,8 @@ class TestPIAModel(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
+            self.Nv,
+            self.Bv,
         )
 
         self.model_time_dep = damage_time_dep_cyclic.PIAModel(
@@ -180,7 +185,12 @@ class TestPIAModel(unittest.TestCase):
         # kp = (2 * self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
-            self.stress, self.temperatures, self.volumes, self.nf, self.material
+            self.stress,
+            self.temperatures,
+            self.volumes,
+            self.nf,
+            self.period,
+            self.material,
         )
 
         # Summing up log probabilities over nelem and taking the value of one
@@ -220,12 +230,18 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
 
         # Number of cycles to failure
         self.nf = 1
+        self.period = 0.01
 
         # Material properties
         self.m = 7.65
         self.s0 = 74.79 * ((1000) ** (3 / self.m))  # in mm  74.79 in m
         self.c_bar = 0.82
         self.nu = 0.219
+        self.Nv = 30
+        self.Bv = 320
+
+        # Model specific property
+        self.kbar = self.m + 1
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -234,6 +250,8 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
+            self.Nv,
+            self.Bv,
         )
 
         # self.model_time_indep = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
@@ -247,7 +265,13 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         # kp = (self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
-            self.stress, self.temperatures, self.volumes, self.nf, self.material
+            self.stress,
+            self.temperatures,
+            self.volumes,
+            self.nf,
+            self.period,
+            self.kbar,
+            self.material,
         )
 
         # Summing up log probabilities over nelem and taking the value of one
@@ -288,12 +312,18 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
 
         # Number of cycles to failure
         self.nf = 1
+        self.period = 0.01
 
         # Material properties
         self.m = 7.65
         self.s0 = 74.79 * ((1000) ** (3 / self.m))  # in mm  74.79 in m
         self.c_bar = 0.82
         self.nu = 0.219
+        self.Nv = 30
+        self.Bv = 320
+
+        # Model specific property
+        self.kbar = self.m + 1
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -302,6 +332,8 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
+            self.Nv,
+            self.Bv,
         )
 
         self.model_time_dep = damage_time_dep_cyclic.CSEModelPennyShapedFlaw(
@@ -313,7 +345,13 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         # kp = (self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
-            self.stress, self.temperatures, self.volumes, self.nf, self.material
+            self.stress,
+            self.temperatures,
+            self.volumes,
+            self.nf,
+            self.period,
+            self.kbar,
+            self.material,
         )
 
         # Summing up log probabilities over nelem and taking the value of one
@@ -351,14 +389,21 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         )
 
         self.temperatures = np.ones((data.shape[0], 8))
+
         # Number of cycles to failure
         self.nf = 1
+        self.period = 0.01
 
         # Material properties
         self.m = 7.65
         self.s0 = 74.79 * ((1000) ** (3 / self.m))  # in mm  74.79 in m
         self.c_bar = 0.82
         self.nu = 0.219
+        self.Nv = 30
+        self.Bv = 320
+
+        # Model specific property
+        self.kbar = 2.99
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -367,6 +412,8 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
+            self.Nv,
+            self.Bv,
         )
 
         self.model_time_dep = damage_time_dep_cyclic.SMMModelGriffithFlaw(
@@ -378,11 +425,18 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         # kp = (2.99) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
-            self.stress, self.temperatures, self.volumes, self.nf, self.material
+            self.stress,
+            self.temperatures,
+            self.volumes,
+            self.nf,
+            self.period,
+            self.kbar,
+            self.material,
         )
 
         # Summing up log probabilities over nelem and taking the value of one
         R_SMM_GF = np.exp(np.sum(actual, axis=1))[0]
+        print("Time dep Reliability SMM_GF = ", R_SMM_GF)
 
         # Evaluating Probability of Failure
         Pf_SMM_GF = 1 - R_SMM_GF
@@ -417,12 +471,18 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
 
         # Number of cycles to failure
         self.nf = 1
+        self.period = 0.01
 
         # Material properties
         self.m = 7.65
         self.s0 = 74.79 * ((1000) ** (3 / self.m))  # in mm  74.79 in m
         self.c_bar = 0.82
         self.nu = 0.219
+        self.Nv = 30
+        self.Bv = 320
+
+        # Model specific property
+        self.kbar = 2.99
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -431,8 +491,9 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
+            self.Nv,
+            self.Bv,
         )
-
         self.model_time_dep = damage_time_dep_cyclic.SMMModelPennyShapedFlaw(
             solverparams.ParameterSet()
         )
@@ -442,9 +503,15 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         # kp = (2.99) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
-            self.stress, self.temperatures, self.volumes, self.nf, self.material
+            self.stress,
+            self.temperatures,
+            self.volumes,
+            self.nf,
+            self.period,
+            self.kbar,
+            self.material,
         )
-        print("actual shape =", actual.shape)
+        # print("actual shape =", actual.shape)
 
         # Summing up log probabilities over nelem and taking the value of one
         R_SMM_PSF = np.exp(np.sum(actual, axis=1))[0]

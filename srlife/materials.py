@@ -498,7 +498,7 @@ class StructuralMaterial:
                 polysum = 0.0
                 if erange <= cutoff[i]:
                     erange = cutoff[i][0][0]
-                for (b, m) in zip(a[i][0], n[i][0]):
+                for b, m in zip(a[i][0], n[i][0]):
                     polysum += b * np.log10(erange) ** m
                 break
 
@@ -529,7 +529,7 @@ class StructuralMaterial:
         not_zeros = np.logical_not(zeros)
 
         res = np.zeros(stress.shape)
-        for (b, m) in zip(a, n):
+        for b, m in zip(a, n):
             res[not_zeros] += b * np.log10(stress[not_zeros]) ** m
         res[not_zeros] = 10.0 ** (res[not_zeros] / temp[not_zeros] - C)
         res[zeros] = np.inf
@@ -702,6 +702,8 @@ class StandardCeramicMaterial:
     2) Weibull modulus depends on temperature
     3) Constant c_bar parameter
     4) Constant Poisson's ratio
+    5) Constant fatigue exponent parameter Nv
+    6) Constant faitgue parameter Bv
     """
 
     def __init__(
@@ -712,6 +714,8 @@ class StandardCeramicMaterial:
         modulus,
         c_bar,
         nu,
+        Nv,
+        Bv,
         *args,
         **kwargs
     ):
@@ -725,6 +729,8 @@ class StandardCeramicMaterial:
         self.m = inter.interp1d(m_temperatures, modulus)
         self.C = c_bar
         self.nu_val = nu
+        self.Nv_val = Nv
+        self.Bv_val = Bv
 
     def strength(self, T):
         """
@@ -756,6 +762,24 @@ class StandardCeramicMaterial:
         else:
             return self.nu_val * np.ones(T.shape)
 
+    def Nv(self, T):
+        """
+        Fatigue exponent parameter as a function of temperature
+        """
+        # if np.isscalar(T):
+        return self.Nv_val
+        # else:
+        # return self.Nv_val * np.ones(T.shape)
+
+    def Bv(self, T):
+        """
+        Fatigue parameter as a function of temperature
+        """
+        # if np.isscalar(T):
+        return self.Bv_val
+        # else:
+        # return self.Bv_val * np.ones(T.shape)
+
     @classmethod
     def load(cls, node):
         """
@@ -772,6 +796,8 @@ class StandardCeramicMaterial:
         m_temps = m.find("temperatures")
         mvals = m.find("values")
         nu = node.find("nu")
+        Nv = node.find("Nv")
+        Bv = node.find("Bv")
 
         return StandardCeramicMaterial(
             np.array(list(map(float, s_temps.text.strip().split()))),
@@ -780,6 +806,8 @@ class StandardCeramicMaterial:
             np.array(list(map(float, mvals.text.strip().split()))),
             float(c_bar.text),
             float(nu.text),
+            float(Nv.text),
+            float(Bv.text),
         )
 
     def save(self, fname, modelname):
@@ -806,6 +834,12 @@ class StandardCeramicMaterial:
 
         nu = ET.SubElement(base, "nu")
         nu.text = str(self.nu_val)
+
+        Nv = ET.SubElement(base, "Nv")
+        Nv.text = str(self.Nv_val)
+
+        Bv = ET.SubElement(base, "Bv")
+        Bv.text = str(self.Bv_val)
 
         tree = ET.ElementTree(element=root)
         tree.write(fname)

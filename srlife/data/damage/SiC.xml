@@ -11,5 +11,7 @@
     </modulus>
     <c_bar>1.5</c_bar>
     <nu>0.16</nu>
+    <Nv>30</Nv>
+    <Bv>320</Bv>
   </base>
 </models>

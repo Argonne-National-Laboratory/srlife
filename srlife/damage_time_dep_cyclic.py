@@ -177,8 +177,8 @@ class CrackShapeIndependent(WeibullFailureModel):
         # limits and number of segments for angles
         self.nalpha = pset.get_default("nalpha", 21)
         self.nbeta = pset.get_default("nbeta", 31)
-        self.Nv = pset.get_default("Nv", 30)
-        self.Bv = pset.get_default("Bv", 320)
+        # self.Nv = pset.get_default("Nv", 30)
+        # self.Bv = pset.get_default("Bv", 320)
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -235,8 +235,6 @@ class CrackShapeDependent(WeibullFailureModel):
         # limits and number of segments for angles
         self.nalpha = pset.get_default("nalpha", 121)
         self.nbeta = pset.get_default("nbeta", 121)
-        self.Nv = pset.get_default("Nv", 30)
-        self.Bv = pset.get_default("Bv", 320)
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -298,7 +296,7 @@ class CrackShapeDependent(WeibullFailureModel):
             return np.sqrt(sigma**2 - sigma_n**2)
 
     def calculate_flattened_eq_stress(
-        self, mandel_stress, nf, temperatures, material, A, dalpha, dbeta
+        self, mandel_stress, nf, period, temperatures, material, A, dalpha, dbeta
     ):
         """
         Calculate the integral of equivalent stresses given the material
@@ -323,6 +321,8 @@ class CrackShapeDependent(WeibullFailureModel):
         self.material = material
         self.mandel_stress = mandel_stress
         self.mvals = self.material.modulus(temperatures)
+        Nv = material.Nv(temperatures)
+        Bv = material.Bv(temperatures)
 
         # Projected equivalent stresses
         sigma_e = self.calculate_eq_stress(
@@ -338,27 +338,26 @@ class CrackShapeDependent(WeibullFailureModel):
         # g integral for calculating total time and g
         # Suppressing warning given when negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
-            g_integral = (sigma_e / sigma_e_max) ** self.Nv
+            g_integral = (sigma_e / sigma_e_max) ** Nv
 
-        # Defining total time
-        self.period = 0.01  # in hours replace with period from receiver
+        # Defining dt (period_array) for integration in g using period (in hours) Note: replace period with period from receiver
         # print("number of cycles to failure =", nf)
-        self.period_array = np.linspace(0, self.period, pstress.shape[0])
+        self.period_array = np.linspace(0, period, pstress.shape[0])
 
         # Calculate g using an integration method
-        g = (np.trapz(g_integral, self.period_array, axis=0)) / (self.period)
+        g = (np.trapz(g_integral, self.period_array, axis=0)) / (period)
 
         # Calculating time integral
-        time_integral = (sigma_e_max**self.Nv) * g
+        time_integral = (sigma_e_max**Nv) * g
 
         # Defining tf
-        self.tot_time = nf * self.period  # replace with period from receiver
+        self.tot_time = nf * period  # replace with period from receiver
         print("total time =", self.tot_time)
 
         # Time dependent equivalent stress
         sigma_e_0 = (
-            ((time_integral * self.tot_time) / self.Bv) + (sigma_e_max ** (self.Nv - 2))
-        ) ** (1 / (self.Nv - 2))
+            ((time_integral * self.tot_time) / Bv) + (sigma_e_max ** (Nv - 2))
+        ) ** (1 / (Nv - 2))
 
         # Suppressing warning given when negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
@@ -384,7 +383,7 @@ class CrackShapeDependent(WeibullFailureModel):
         return flat
 
     def calculate_element_log_reliability(
-        self, mandel_stress, temperatures, volumes, nf, material
+        self, mandel_stress, temperatures, volumes, nf, period, kbar, material
     ):
         """
         Calculate the element log reliability given the equivalent stress
@@ -406,13 +405,15 @@ class CrackShapeDependent(WeibullFailureModel):
         svals = self.material.strength(temperatures)
         mvals = self.material.modulus(temperatures)
         kvals = svals ** (-mvals)
+        kpvals = kbar * kvals
 
-        # Shear-insensitive case
+        # For shear-insensitive case
         # kpvals = (2 * mvals + 1) * kvals
-        # CSE model
-        kpvals = (mvals + 1) * kvals
 
-        # Shear sensitive case
+        # For CSE model
+        # kpvals = kbar * kvals
+
+        # For shear sensitive case
         # kpvals = (2.99) * kvals
 
         # Equivalent stress raied to exponent mv
@@ -420,6 +421,7 @@ class CrackShapeDependent(WeibullFailureModel):
             self.calculate_flattened_eq_stress(
                 mandel_stress,
                 nf,
+                period,
                 self.temperatures,
                 self.material,
                 self.A,
@@ -440,7 +442,7 @@ class PIAModel(CrackShapeIndependent):
     """
 
     def calculate_element_log_reliability(
-        self, mandel_stress, temperatures, volumes, nf, material
+        self, mandel_stress, temperatures, volumes, nf, period, material
     ):
         """
         Calculate the element log reliability
@@ -460,6 +462,8 @@ class PIAModel(CrackShapeIndependent):
         svals = material.strength(temperatures)
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
+        Nv = material.Nv(temperatures)
+        Bv = material.Bv(temperatures)
 
         # Only tension
         pstress[pstress < 0] = 0
@@ -472,28 +476,26 @@ class PIAModel(CrackShapeIndependent):
 
         # g integral for calculating total time and g
         with np.errstate(invalid="ignore"):
-            g_integral = (pstress / pstress_max) ** self.Nv
+            g_integral = (pstress / (pstress_max + 1e-14)) ** Nv
 
-        # Defining dt for integration in g
-        self.period = 0.01  # in hours replace with period from receiver
+        # Defining dt (period_array) for integration in g using period (in hours) Note: replace period with period from receiver
         print("number of cycles to failure =", nf)
-        self.period_array = np.linspace(0, self.period, pstress.shape[0])
-        # self.period_array = self.period_array.reshape(1,-1)
+        self.period_array = np.linspace(0, period, pstress.shape[0])
 
-        # Calculate g using an integration method
-        g = (np.trapz(g_integral, self.period_array, axis=0)) / self.period
-
+        # Calculate g using an trapezoidal integration method
+        g = np.max((np.trapz(g_integral, self.period_array, axis=0)) / period)
+        print("g =", g)
         # Calculating time integral
-        time_integral = (pstress_max**self.Nv) * g
+        time_integral = (pstress_max**Nv) * g
 
         # Defining tf
-        self.tot_time = nf * self.period  # replace with period from receiver
+        self.tot_time = nf * period  # replace with period from receiver
         print("service time =", self.tot_time)
 
         # Time dependent principal stress
         pstress_0 = (
-            (time_integral * self.tot_time) / self.Bv + (pstress_max ** (self.Nv - 2))
-        ) ** (1 / (self.Nv - 2))
+            (time_integral * self.tot_time) / Bv + (pstress_max ** (Nv - 2))
+        ) ** (1 / (Nv - 2))
 
         return -kvals * np.nansum(pstress_0 ** mvals[..., None], axis=-1) * volumes
 
