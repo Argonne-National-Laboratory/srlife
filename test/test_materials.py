@@ -190,10 +190,10 @@ class TestStructuralMaterial(unittest.TestCase):
         cutoff = 1.5e-3
         sum = 0
         if self.erange <= cutoff:
-            for (b, m) in zip(a, n):
+            for b, m in zip(a, n):
                 sum += b * np.log10(cutoff) ** m
         else:
-            for (b, m) in zip(a, n):
+            for b, m in zip(a, n):
                 sum += b * np.log10(self.erange) ** m
         return 10**sum
 
@@ -208,7 +208,7 @@ class TestStructuralMaterial(unittest.TestCase):
         a = np.array([-1475.23, 7289.41, -16642.64, 35684.60])
         n = np.array([3, 2, 1, 0])
         sum = 0
-        for (b, m) in zip(a, n):
+        for b, m in zip(a, n):
             sum += b * np.log10(self.stress) ** m
         sum = 10 ** (sum / self.T - C)
 
@@ -248,9 +248,11 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         self.ms = np.array([10.7, 9.2])
         self.c_bar = 1.5
         self.nu = 0.17
+        self.Nv = 30
+        self.Bv = 320
 
         self.mat = materials.StandardCeramicMaterial(
-            self.Ts, self.s0s, self.mTs, self.ms, self.c_bar, self.nu
+            self.Ts, self.s0s, self.mTs, self.ms, self.c_bar, self.nu, self.Nv, self.Bv
         )
 
     def test_strength(self):
