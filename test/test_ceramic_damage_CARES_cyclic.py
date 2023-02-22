@@ -133,14 +133,15 @@ class TestPIAModel(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "Spinning_disk_cyclic_60000_80000.txt",
+                "Spinning_disk_cyclic_60000_70000.txt",
+                # "Spinning_disk_cyclic_60000_80000.txt",
             )
         )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
 
         self.stress = data.reshape(data.shape[0], 8, -1)
 
-        vol_factor = 1
+        vol_factor = 360 / 360
         self.volumes = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
@@ -208,7 +209,8 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "Spinning_disk_cyclic_60000_80000.txt",
+                "Spinning_disk_cyclic_60000_70000.txt",
+                # "Spinning_disk_cyclic_60000_80000.txt",
             )
         )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
@@ -290,7 +292,8 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "Spinning_disk_cyclic_60000_80000.txt",
+                "Spinning_disk_cyclic_60000_70000.txt",
+                # "Spinning_disk_cyclic_60000_80000.txt",
             )
         )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
@@ -323,7 +326,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         self.Bv = 320
 
         # Model specific property
-        self.kbar = self.m + 1
+        self.kbar = 7.13
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -370,7 +373,8 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "Spinning_disk_cyclic_60000_80000.txt",
+                "Spinning_disk_cyclic_60000_70000.txt",
+                # "Spinning_disk_cyclic_60000_80000.txt",
             )
         )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
@@ -403,7 +407,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         self.Bv = 320
 
         # Model specific property
-        self.kbar = 2.99
+        self.kbar = 2.92
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),
@@ -449,7 +453,8 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "Spinning_disk_cyclic_60000_80000.txt",
+                "Spinning_disk_cyclic_60000_70000.txt",
+                # "Spinning_disk_cyclic_60000_80000.txt",
             )
         )
         # data = np.loadtxt("Spinning_disk_static_60000.txt")
@@ -482,7 +487,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         self.Bv = 320
 
         # Model specific property
-        self.kbar = 2.99
+        self.kbar = 1.96
 
         self.material = materials.StandardCeramicMaterial(
             np.array([0, 1000.0]),

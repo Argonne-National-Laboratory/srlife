@@ -405,6 +405,16 @@ class CrackShapeDependent(WeibullFailureModel):
         svals = self.material.strength(temperatures)
         mvals = self.material.modulus(temperatures)
         kvals = svals ** (-mvals)
+
+        shear_sensitive = True
+
+        if shear_sensitive == True:
+            kbar = self.calculate_kbar(
+                self.temperatures, self.material, self.A, self.dalpha, self.dbeta
+            )
+        else:
+            kbar = 2 * mvals + 1
+
         kpvals = kbar * kvals
 
         # For shear-insensitive case
@@ -413,7 +423,7 @@ class CrackShapeDependent(WeibullFailureModel):
         # For CSE model
         # kpvals = kbar * kvals
 
-        # For shear sensitive case
+        # For hear sensitive case
         # kpvals = (2.99) * kvals
 
         # Equivalent stress raied to exponent mv
@@ -602,6 +612,47 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         # Projected equivalent stress
         return 0.5 * (sigma_n + np.sqrt((sigma_n**2) + (tau**2)))
 
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                (
+                    (
+                        0.5
+                        * (
+                            ((np.cos(self.A)) ** 2)
+                            + np.sqrt(
+                                ((np.cos(self.A)) ** 4)
+                                + (((np.sin(self.A)) ** 2) * ((np.cos(self.A)) ** 2))
+                            )
+                        )
+                    )
+                    ** mvals
+                )
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
+
 
 class MTSModelPennyShapedFlaw(CrackShapeDependent):
     """
@@ -633,6 +684,47 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
             sigma_n + np.sqrt((sigma_n**2) + ((tau / (1 - (0.5 * nu))) ** 2))
         )
 
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                (
+                    (
+                        0.5
+                        * (
+                            ((np.cos(self.A)) ** 2)
+                            + np.sqrt(
+                                ((np.cos(self.A)) ** 4)
+                                + (((np.sin(2 * self.A)) ** 2) / (2 - (nu**2)))
+                            )
+                        )
+                    )
+                    ** mvals
+                )
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
+
 
 class CSEModelGriffithFlaw(CrackShapeDependent):
     """
@@ -655,6 +747,32 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
 
         # Projected equivalent stress
         return np.sqrt((sigma_n**2) + (tau**2))
+
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                ((np.cos(self.A)) ** mvals) * np.sin(self.A) * self.dalpha * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
 
 
 class CSEModelPennyShapedFlaw(CrackShapeDependent):
@@ -686,6 +804,43 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         # Projected equivalent stress
         return np.sqrt((sigma_n**2) + (tau / (1 - (0.5 * nu))) ** 2)
 
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                (
+                    (
+                        np.sqrt(
+                            ((np.cos(self.A)) ** 4)
+                            + (((np.sin(2 * self.A)) ** 2) / ((2 - nu) ** 2))
+                        )
+                    )
+                    ** mvals
+                )
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
+
 
 class SMMModelGriffithFlaw(CrackShapeDependent):
     """
@@ -715,6 +870,47 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
 
         # Projected equivalent stress
         return 0.5 * (sigma_n + np.sqrt((sigma_n**2) + ((2 * tau / cbar) ** 2)))
+
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                (
+                    (
+                        0.5
+                        * (
+                            ((np.cos(self.A)) ** 2)
+                            + np.sqrt(
+                                ((np.cos(self.A)) ** 4)
+                                + (((np.sin(2 * self.A)) ** 2) / (cbar**2))
+                            )
+                        )
+                    )
+                    ** mvals
+                )
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
 
 
 class SMMModelPennyShapedFlaw(CrackShapeDependent):
@@ -749,6 +945,50 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         return 0.5 * (
             sigma_n + np.sqrt((sigma_n**2) + ((4 * tau / (cbar * (2 - nu))) ** 2))
         )
+
+    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the kbar from the Weibull modulus and material parameters
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus(temperatures).flat[0]
+
+        # Material parameters
+        nu = material.nu(temperatures).flat[0]
+        cbar = material.c_bar(temperatures).flat[0]
+
+        # Calculating kbar
+        with np.errstate(invalid="ignore"):
+            integral2 = 2 * (
+                (
+                    (
+                        0.5
+                        * (
+                            ((np.cos(self.A)) ** 2)
+                            + np.sqrt(
+                                ((np.cos(self.A)) ** 4)
+                                + (
+                                    (4 * ((np.sin(2 * self.A)) ** 2))
+                                    / ((cbar**2) * ((nu - 2) ** 2))
+                                )
+                            )
+                        )
+                    )
+                    ** mvals
+                )
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
+            )
+        kbar = np.pi / np.sum(integral2)
+
+        print("kbar =", kbar)
+
+        return kbar
 
 
 class DamageCalculator:
