@@ -9,7 +9,6 @@ import os.path
 
 from srlife import (
     materials,
-    damage,
     damage_time_dep_cyclic,
     solverparams,
 )
