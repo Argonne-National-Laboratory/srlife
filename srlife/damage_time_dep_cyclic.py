@@ -484,32 +484,25 @@ class PIAModel(CrackShapeIndependent):
 
         # Only tension
         pstress[pstress < 0] = 0
-
-        # Max principal stress over each element in time
-        # pstress_elem_max = np.max(pstress, axis=2)
-
-        # Max principal stresss over all time steps for each element
-        pstress_max = np.max(pstress, axis=0)
-
-        # g integral for calculating total time and g
-        with np.errstate(invalid="ignore"):
-            g_integral = (pstress / (pstress_max + 1e-14)) ** Nv
-
-        # Calculate g using an trapezoidal integration method
-        g = np.max((np.trapz(g_integral, time, axis=0)) / time[-1])
-        print("g =", g)
-        # Calculating time integral
-        time_integral = (pstress_max**Nv) * g
-
+        
+        # Max value
+        eff_max = np.max(pstress, axis = 0)
+        
+        # g
+        g = np.trapz((pstress / (eff_max + 1.0e-14)) ** Nv, time, axis = 0) / time[-1]
+        
         # Defining tf
         print("service time =", tot_time)
 
         # Time dependent principal stress
         pstress_0 = (
-            (time_integral * tot_time) / Bv + (pstress_max ** (Nv - 2))
+            (eff_max**Nv * g * tot_time) / Bv + (eff_max ** (Nv - 2))
         ) ** (1 / (Nv - 2))
 
-        return -kvals * np.nansum(pstress_0 ** mvals[..., None], axis=-1) * volumes
+        mavg = np.mean(mvals, axis = 0)
+        kavg = np.mean(kvals, axis = 0)
+
+        return -kavg * np.sum(pstress_0 ** mavg[...,None], axis=-1) * volumes
 
 
 class WNTSAModel(CrackShapeIndependent):

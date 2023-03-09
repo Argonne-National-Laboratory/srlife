@@ -147,14 +147,12 @@ class TestPIAModel(unittest.TestCase):
                 "Spinning_disk_volumes.txt",
             )
         )
-        self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
-            data.shape[0], 8
-        )
+        self.volumes = vol_factor * self.volumes
 
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -195,7 +193,7 @@ class TestPIAModel(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_PIA = np.exp(np.sum(actual, axis=1))[0]
+        R_PIA = np.exp(np.sum(actual))
         print("Time dep Reliability PIA = ", R_PIA)
 
         # Evaluating Probability of Failure
