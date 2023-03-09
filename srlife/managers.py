@@ -137,11 +137,14 @@ class SolutionManager:
             decorator=self.progress_decorator,
         )
 
-    def solve_reliability(self):
+    def solve_reliability(self, time):
         """User interface: solve everything and return receiver reliability
 
         The trigger for everything: solve the complete problem and report the
         best-estimate reliability.
+        
+        Args:
+            time (float): time at which to report reliability
 
         Returns:
           float:  Reliability between 0 and 1
@@ -149,10 +152,13 @@ class SolutionManager:
         self.solve_heat_transfer()
         self.solve_structural()
 
-        return self.calculate_reliability()
+        return self.calculate_reliability(time)
 
-    def calculate_reliability(self):
+    def calculate_reliability(self, time):
         """Calculate reliability from the results
+
+        Args:
+            time (float): time at which to report reliability
 
         Returns:
           float:    Reliability between 0 and 1
@@ -162,6 +168,7 @@ class SolutionManager:
         return self.damage_model.determine_reliability(
             self.receiver,
             self.damage_material,
+            time,
             nthreads=self.nthreads,
             decorator=self.progress_decorator,
         )

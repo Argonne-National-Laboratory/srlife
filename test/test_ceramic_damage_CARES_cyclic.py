@@ -156,6 +156,7 @@ class TestPIAModel(unittest.TestCase):
         # Number of cycles to failure
         self.nf = 1
         self.period = 0.01
+        self.time = np.linspace(0, self.period, self.stress.shape[0])
 
         # Material properties
         self.m = 7.65
@@ -185,12 +186,12 @@ class TestPIAModel(unittest.TestCase):
         # kp = (2 * self.m + 1) * k
 
         actual = self.model_time_dep.calculate_element_log_reliability(
+            self.time,
             self.stress,
             self.temperatures,
             self.volumes,
-            self.nf,
-            self.period,
             self.material,
+            self.nf * self.period
         )
 
         # Summing up log probabilities over nelem and taking the value of one

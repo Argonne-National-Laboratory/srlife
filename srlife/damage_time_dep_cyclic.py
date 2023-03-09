@@ -66,7 +66,7 @@ class WeibullFailureModel:
         return la.eigvalsh(tensor)
 
     def determine_reliability(
-        self, receiver, material, nthreads=1, decorator=lambda x, n: x
+        self, receiver, material, time, nthreads=1, decorator=lambda x, n: x
     ):
         """
         Determine the reliability of the tubes in the receiver by calculating individual
@@ -75,6 +75,7 @@ class WeibullFailureModel:
         Parameters:
           receiver        fully-solved receiver object
           material        material model to use
+          time (float):   time in service
 
         Additional Parameters:
           nthreads        number of threads
@@ -84,7 +85,7 @@ class WeibullFailureModel:
             results = list(
                 decorator(
                     p.imap(
-                        lambda x: self.tube_log_reliability(x, material, receiver),
+                        lambda x: self.tube_log_reliability(x, material, receiver, time),
                         receiver.tubes,
                     ),
                     receiver.ntubes,
@@ -110,7 +111,7 @@ class WeibullFailureModel:
             "overall_reliability": np.exp(overall),
         }
 
-    def tube_log_reliability(self, tube, material, receiver):
+    def tube_log_reliability(self, tube, material, receiver, time):
         """
         Calculate the log reliability of a single tube
         """
@@ -135,9 +136,13 @@ class WeibullFailureModel:
 
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
+        # Figure out the number of repetitions of the load cycle
+        if receiver.days != 1:
+            raise RuntimeError("Time dependent reliability requires the load cycle be a single, representative cycle")
+
         # Do it this way so we can vectorize
         inc_prob = self.calculate_element_log_reliability(
-            stresses, temperatures, volumes, material
+            tube.times, stresses, temperatures, volumes, material, time
         )
 
         # CARES/LIFE cutoff
@@ -452,17 +457,19 @@ class PIAModel(CrackShapeIndependent):
     """
 
     def calculate_element_log_reliability(
-        self, mandel_stress, temperatures, volumes, nf, period, material
+        self, time, mandel_stress, temperatures, volumes, material, tot_time
     ):
         """
         Calculate the element log reliability
 
         Parameters:
+          time:           time for each stress/temperature
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
           volumes:        element volumes
           material:       material model object with required data that includes
                           Weibull scale parameter (svals) and Weibull modulus (mvals)
+          tot_time:       total time at which to calculate reliability
         """
 
         # Principal stresses
@@ -488,23 +495,18 @@ class PIAModel(CrackShapeIndependent):
         with np.errstate(invalid="ignore"):
             g_integral = (pstress / (pstress_max + 1e-14)) ** Nv
 
-        # Defining dt (period_array) for integration in g using period (in hours) Note: replace period with period from receiver
-        print("number of cycles to failure =", nf)
-        self.period_array = np.linspace(0, period, pstress.shape[0])
-
         # Calculate g using an trapezoidal integration method
-        g = np.max((np.trapz(g_integral, self.period_array, axis=0)) / period)
+        g = np.max((np.trapz(g_integral, time, axis=0)) / time[-1])
         print("g =", g)
         # Calculating time integral
         time_integral = (pstress_max**Nv) * g
 
         # Defining tf
-        self.tot_time = nf * period  # replace with period from receiver
-        print("service time =", self.tot_time)
+        print("service time =", tot_time)
 
         # Time dependent principal stress
         pstress_0 = (
-            (time_integral * self.tot_time) / Bv + (pstress_max ** (Nv - 2))
+            (time_integral * tot_time) / Bv + (pstress_max ** (Nv - 2))
         ) ** (1 / (Nv - 2))
 
         return -kvals * np.nansum(pstress_0 ** mvals[..., None], axis=-1) * volumes
