@@ -365,17 +365,15 @@ class CrackShapeDependent(WeibullFailureModel):
 
         g = (np.trapz(g_integral, time, axis=0)) / time[-1]
         # print("g =", g)
-        # Calculating time integral
-        time_integral = (sigma_e_max**Nv) * g
 
         # Defining tf
         # self.tot_time = nf * period  # replace with period from receiver
         print("service time =", tot_time)
 
         # Time dependent equivalent stress
-        sigma_e_0 = (((time_integral * tot_time) / Bv) + (sigma_e_max ** (Nv - 2))) ** (
-            1 / (Nv - 2)
-        )
+        sigma_e_0 = (
+            (((sigma_e_max**Nv) * g * tot_time) / Bv) + (sigma_e_max ** (Nv - 2))
+        ) ** (1 / (Nv - 2))
 
         # Suppressing warning given when negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
@@ -497,25 +495,26 @@ class PIAModel(CrackShapeIndependent):
 
         # Only tension
         pstress[pstress < 0] = 0
-        
+
         # Max value
-        eff_max = np.max(pstress, axis = 0)
-        
+        eff_max = np.max(pstress, axis=0)
+
         # g
-        g = np.trapz((pstress / (eff_max + 1.0e-14)) ** Nv, time, axis = 0) / time[-1]
-        
+        g = np.trapz((pstress / (eff_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
+
         # Defining tf
         print("service time =", tot_time)
 
         # Time dependent principal stress
-        pstress_0 = (
-            (eff_max**Nv * g * tot_time) / Bv + (eff_max ** (Nv - 2))
-        ) ** (1 / (Nv - 2))
+        pstress_0 = ((eff_max**Nv * g * tot_time) / Bv + (eff_max ** (Nv - 2))) ** (
+            1 / (Nv - 2)
+        )
 
-        mavg = np.mean(mvals, axis = 0)
-        kavg = np.mean(kvals, axis = 0)
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
+        kavg = np.mean(kvals, axis=0)
 
-        return -kavg * np.sum(pstress_0 ** mavg[...,None], axis=-1) * volumes
+        return -kavg * np.sum(pstress_0 ** mavg[..., None], axis=-1) * volumes
 
 
 class WNTSAModel(CrackShapeIndependent):

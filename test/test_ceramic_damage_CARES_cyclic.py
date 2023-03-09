@@ -222,9 +222,10 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
                 "Spinning_disk_volumes.txt",
             )
         )
-        self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
-            data.shape[0], 8
-        )
+        self.volumes = vol_factor * self.volumes
+        # self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
+        #     data.shape[0], 8
+        # )
 
         self.temperatures = np.ones((data.shape[0], 8))
 
@@ -305,9 +306,10 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
                 "Spinning_disk_volumes.txt",
             )
         )
-        self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
-            data.shape[0], 8
-        )
+        self.volumes = vol_factor * self.volumes
+        # self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
+        #     data.shape[0], 8
+        # )
 
         self.temperatures = np.ones((data.shape[0], 8))
 
@@ -386,9 +388,10 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
                 "Spinning_disk_volumes.txt",
             )
         )
-        self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
-            data.shape[0], 8
-        )
+        self.volumes = vol_factor * self.volumes
+        # self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
+        #     data.shape[0], 8
+        # )
 
         self.temperatures = np.ones((data.shape[0], 8))
 
@@ -466,14 +469,15 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
                 "Spinning_disk_volumes.txt",
             )
         )
-        self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
-            data.shape[0], 8
-        )
+        self.volumes = vol_factor * self.volumes
+        # self.volumes = vol_factor * (np.tile(self.volumes, data.shape[0])).reshape(
+        #     data.shape[0], 8
+        # )
 
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1000
+        self.nf = 1
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
