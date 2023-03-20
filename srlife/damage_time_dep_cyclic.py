@@ -357,17 +357,11 @@ class CrackShapeDependent(WeibullFailureModel):
         with np.errstate(invalid="ignore"):
             g_integral = (sigma_e / sigma_e_max) ** Nv
 
-        # Defining dt (period_array) for integration in g using period (in hours) Note: replace period with period from receiver
-        # print("number of cycles to failure =", nf)
-        # self.period_array = np.linspace(0, period, pstress.shape[0])
-
+        # Defining time based on period of one cycle and number of time steps
         # Calculate g using an integration method
-
         g = (np.trapz(g_integral, time, axis=0)) / time[-1]
-        # print("g =", g)
 
-        # Defining tf
-        # self.tot_time = nf * period  # replace with period from receiver
+        # Defining tot_time as nf * period
         print("service time =", tot_time)
 
         # Time dependent equivalent stress
@@ -496,19 +490,19 @@ class PIAModel(CrackShapeIndependent):
         # Only tension
         pstress[pstress < 0] = 0
 
-        # Max value
-        eff_max = np.max(pstress, axis=0)
+        # Max principal stresss over all time steps for each element
+        pstress_max = np.max(pstress, axis=0)
 
         # g
-        g = np.trapz((pstress / (eff_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
+        g = np.trapz((pstress / (pstress_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
 
         # Defining tf
         print("service time =", tot_time)
 
         # Time dependent principal stress
-        pstress_0 = ((eff_max**Nv * g * tot_time) / Bv + (eff_max ** (Nv - 2))) ** (
-            1 / (Nv - 2)
-        )
+        pstress_0 = (
+            (pstress_max**Nv * g * tot_time) / Bv + (pstress_max ** (Nv - 2))
+        ) ** (1 / (Nv - 2))
 
         # Use temperature average values?
         mavg = np.mean(mvals, axis=0)
@@ -525,7 +519,9 @@ class WNTSAModel(CrackShapeIndependent):
     area of a sphere, and uses it to calculate the element reliability
     """
 
-    def calculate_avg_normal_stress(self, mandel_stress, temperatures, nf, material):
+    def calculate_avg_normal_stress(
+        self, time, mandel_stress, temperatures, material, tot_time
+    ):
         """
         Calculate the average normal tensile stresses from the pricipal stresses
 
@@ -537,8 +533,14 @@ class WNTSAModel(CrackShapeIndependent):
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
 
+        # mvals = material.modulus(temperatures)[: pstress.shape[1]]
         # Material parameters
-        mvals = material.modulus(temperatures)[: pstress.shape[1]]
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+        self.mvals = self.material.modulus(temperatures)
+        Nv = material.Nv(temperatures)
+        Bv = material.Bv(temperatures)
 
         # Time dependent Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -546,31 +548,43 @@ class WNTSAModel(CrackShapeIndependent):
         # Considering only tensile stresses
         sigma_n[sigma_n < 0] = 0
 
+        # Max normal stresss over all time steps for each element
+        sigma_n_max = np.max(sigma_n, axis=0)
+
+        # Defining time based on period of one cycle and number of time steps
+        # Calculate g using an integration method
+        g = np.trapz((sigma_n / (sigma_n_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
+
+        # Defining tot_time as nf * period
+        print("service time =", tot_time)
+
+        # Time dependent equivalent stress
+        sigma_n_0 = (
+            (((sigma_n_max**Nv) * g * tot_time) / Bv) + (sigma_n_max ** (Nv - 2))
+        ) ** (1 / (Nv - 2))
+
         with np.errstate(invalid="ignore"):
             integral = (
-                (sigma_n ** mvals[..., None, None, None])
-                * np.sin(self.A)[..., None]
-                * self.dalpha[..., None]
-                * self.dbeta[..., None]
+                (sigma_n_0 ** self.mvals[..., None, None])
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
             ) / (4 * np.pi)
 
         # Flatten the last axis and calculate the mean of the positive values along that axis
+        # slicing the shape of integral and reshaping it with a new size (to flatten) based on the last size element of integral
         if pstress.ndim == 2:
-            flat = integral.reshape(
-                integral.shape[:3] + (-1,)
-            )  # when no time steps involved
+            flat = integral.reshape(integral.shape[:1] + (-1,))
         elif pstress.ndim == 3:
-            flat = integral.reshape(
-                integral.shape[:4] + (-1,)
-            )  # when time steps involved
+            flat = integral.reshape(integral.shape[:2] + (-1,))
 
-            # Suppressing warning to ignoring initial NaN values
+        # Suppressing warning to ignoring initial NaN values
         with np.errstate(invalid="ignore"):
             # Average stress
-            return np.nansum(np.where(flat >= 0.0, flat, np.nan), axis=-2)
+            return np.nansum(np.where(flat >= 0.0, flat, np.nan), axis=-1)
 
     def calculate_element_log_reliability(
-        self, mandel_stress, temperatures, volumes, nf, material
+        self, time, mandel_stress, temperatures, volumes, material, tot_time
     ):
         """
         Calculate the element log reliability
@@ -579,23 +593,34 @@ class WNTSAModel(CrackShapeIndependent):
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
           volumes:        element volumes
-          material:       material model  object with required data
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals) and Weibull modulus (mvals)
+          tot_time:       total time at which to calculate reliability
         """
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
 
         # Material parameters
         svals = material.strength(temperatures)
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
         kpvals = (2 * mvals + 1) * kvals
+        Nv = material.Nv(temperatures)
+        Bv = material.Bv(temperatures)
 
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
-            self.calculate_avg_normal_stress(mandel_stress, temperatures, nf, material)
-        ) ** (1 / mvals[..., None, None])
+            self.calculate_avg_normal_stress(
+                time,
+                mandel_stress,
+                self.temperatures,
+                self.material,
+                tot_time,
+            )
+        ) ** (1 / mvals)
 
-        return (
-            -kpvals[..., None] * (avg_nstress ** mvals[..., None]) * volumes[..., None]
-        )
+        return -kpvals * (avg_nstress**mvals) * volumes
 
 
 class MTSModelGriffithFlaw(CrackShapeDependent):
@@ -678,7 +703,7 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         """
 
         # Material parameters
-        nu = material.nu(temperatures)[0]
+        nu = material.nu(temperatures).flat[0]
 
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
