@@ -15,3 +15,4 @@ dill
 parameterized
 black
 jax[cpu]
+abs-py
