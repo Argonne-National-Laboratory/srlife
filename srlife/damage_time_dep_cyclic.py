@@ -562,7 +562,7 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Max normal stresss over all time steps for each element
         sigma_n_max = np.max(sigma_n, axis=0)
-        print("time -", time)
+
         # Defining time based on period of one cycle and number of time steps
         # Calculate g using an integration method
         if np.all(time == 0):
@@ -642,9 +642,6 @@ class WNTSAModel(CrackShapeIndependent):
             )
         ) ** (1 / mavg)
 
-        print("avg_nstress", avg_nstress)
-        print("avg_nstress", avg_nstress.shape)
-
         return -kpvals * (avg_nstress**mavg) * volumes
 
 
@@ -708,8 +705,6 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
                 * self.dbeta
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
-
-        # print("kbar =", kbar)
 
         return kbar
 
@@ -788,8 +783,6 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        # print("kbar =", kbar)
-
         return kbar
 
 
@@ -842,8 +835,6 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
                 * self.dbeta
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
-
-        # print("kbar =", kbar)
 
         return kbar
 
@@ -915,8 +906,6 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
                 * self.dbeta
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
-
-        # print("kbar =", kbar)
 
         return kbar
 
@@ -994,8 +983,6 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
                 * self.dbeta
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
-
-        # print("kbar =", kbar)
 
         return kbar
 
@@ -1082,8 +1069,6 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
                 * self.dbeta
             )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
-
-        # print("kbar =", kbar)
 
         return kbar
 
