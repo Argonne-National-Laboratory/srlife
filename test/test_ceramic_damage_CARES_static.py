@@ -9,7 +9,7 @@ import os.path
 
 from srlife import (
     materials,
-    damage_time_dep_cyclic,
+    damage,
     solverparams,
 )
 
@@ -81,9 +81,7 @@ class TestPIAModel(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.PIAModel(
-            solverparams.ParameterSet()
-        )
+        self.model_time_dep = damage.PIAModel(solverparams.ParameterSet())
 
     def test_definition(self):
         # k = self.s0 ** (-self.m)
@@ -98,6 +96,7 @@ class TestPIAModel(unittest.TestCase):
             self.nf * self.period,
         )
 
+        print("actual shape =", actual.shape)
         # Summing up log probabilities over nelem and taking the value of one
         R_PIA = np.exp(np.sum(actual))
         print("Time dep Reliability PIA = ", R_PIA)
@@ -161,9 +160,7 @@ class TestWNTSAModel(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.WNTSAModel(
-            solverparams.ParameterSet()
-        )
+        self.model_time_dep = damage.WNTSAModel(solverparams.ParameterSet())
 
     def test_definition(self):
         # k = self.s0 ** (-self.m)
@@ -242,9 +239,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.MTSModelGriffithFlaw(
-            solverparams.ParameterSet()
-        )
+        self.model_time_dep = damage.MTSModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         actual = self.model_time_dep.calculate_element_log_reliability(
@@ -257,7 +252,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_MTS_GF = np.exp(np.sum(actual, axis=1))[0]
+        R_MTS_GF = np.exp(np.sum(actual))
         # R_MTS_GF = np.exp(np.sum(actual,axis=tuple(range(actual.ndim))[1:]))[-1]
         print("Time dep Reliability MTS GF = ", R_MTS_GF)
 
@@ -321,7 +316,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.MTSModelPennyShapedFlaw(
+        self.model_time_dep = damage.MTSModelPennyShapedFlaw(
             solverparams.ParameterSet()
         )
 
@@ -336,7 +331,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_MTS_PSF = np.exp(np.sum(actual, axis=1))[0]
+        R_MTS_PSF = np.exp(np.sum(actual))
         # R_MTS_PSF = np.exp(np.sum(actual,axis=tuple(range(actual.ndim))[1:]))[-1]
         print("Time dep Reliability MTS_PSF = ", R_MTS_PSF)
 
@@ -377,7 +372,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 0
+        self.nf = 10
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -400,9 +395,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.CSEModelGriffithFlaw(
-            solverparams.ParameterSet()
-        )
+        self.model_time_dep = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         actual = self.model_time_dep.calculate_element_log_reliability(
@@ -414,8 +407,9 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             self.nf * self.period,
         )
 
+        print("actual shape=", actual.shape)
         # Summing up log probabilities over nelem and taking the value of one
-        R_CSE_GF = np.exp(np.sum(actual, axis=1))[0]
+        R_CSE_GF = np.exp(np.sum(actual))
         # R_CSE_GF = np.exp(np.sum(actual,axis=tuple(range(actual.ndim))[1:]))[-1]
         print("Time dep Reliability CSE GF = ", R_CSE_GF)
 
@@ -479,7 +473,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.CSEModelPennyShapedFlaw(
+        self.model_time_dep = damage.CSEModelPennyShapedFlaw(
             solverparams.ParameterSet()
         )
 
@@ -494,7 +488,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_CSE_PSF = np.exp(np.sum(actual, axis=1))[0]
+        R_CSE_PSF = np.exp(np.sum(actual))
         # R_CSE_PSF = np.exp(np.sum(actual,axis=tuple(range(actual.ndim))[1:]))[-1]
         print("Time dep Reliability CSE_PSF = ", R_CSE_PSF)
 
@@ -558,9 +552,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             self.Bv,
         )
 
-        self.model_time_dep = damage_time_dep_cyclic.SMMModelGriffithFlaw(
-            solverparams.ParameterSet()
-        )
+        self.model_time_dep = damage.SMMModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         actual = self.model_time_dep.calculate_element_log_reliability(
@@ -573,7 +565,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_SMM_GF = np.exp(np.sum(actual, axis=1))[0]
+        R_SMM_GF = np.exp(np.sum(actual))
         print("Time dep Reliability SMM_GF = ", R_SMM_GF)
 
         # Evaluating Probability of Failure
@@ -635,7 +627,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             self.Nv,
             self.Bv,
         )
-        self.model_time_dep = damage_time_dep_cyclic.SMMModelPennyShapedFlaw(
+        self.model_time_dep = damage.SMMModelPennyShapedFlaw(
             solverparams.ParameterSet()
         )
 
@@ -654,7 +646,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         # print("actual shape =", actual.shape)
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_SMM_PSF = np.exp(np.sum(actual, axis=1))[0]
+        R_SMM_PSF = np.exp(np.sum(actual))
         print("Time dep Reliability SMM_PSF = ", R_SMM_PSF)
 
         # Evaluating Probability of Failure

@@ -186,8 +186,6 @@ class CrackShapeIndependent(WeibullFailureModel):
         # limits and number of segments for angles
         self.nalpha = pset.get_default("nalpha", 21)
         self.nbeta = pset.get_default("nbeta", 31)
-        # self.Nv = pset.get_default("Nv", 30)
-        # self.Bv = pset.get_default("Bv", 320)
 
         # Mesh grid of the vectorized angle values
         self.A, self.B = np.meshgrid(
@@ -337,43 +335,44 @@ class CrackShapeDependent(WeibullFailureModel):
         self.temperatures = temperatures
         self.material = material
         self.mandel_stress = mandel_stress
-        self.mvals = self.material.modulus(temperatures)
+        self.mvals = material.modulus(temperatures)
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(self.mvals, axis=0)
 
         # Projected equivalent stresses
         sigma_e = self.calculate_eq_stress(
             mandel_stress, self.temperatures, self.material
         )
 
-        # Max equivalent stress over each element in time
-        # sigma_e_elem_max = np.max(sigma_e,axis =(2,3))
-
         # Max principal stresss over all time steps for each element
         sigma_e_max = np.max(sigma_e, axis=0)
 
-        # g integral for calculating total time and g
         # Suppressing warning given when negative numbers are raised to rational numbers
-        with np.errstate(invalid="ignore"):
-            g_integral = (sigma_e / sigma_e_max) ** Nv
-
         # Defining time based on period of one cycle and number of time steps
         # Calculate g using an integration method
-        g = (np.trapz(g_integral, time, axis=0)) / time[-1]
-
-        # Defining tot_time as nf * period
-        print("service time =", tot_time)
-
-        # Time dependent equivalent stress
-        sigma_e_0 = (
-            (((sigma_e_max**Nv) * g * tot_time) / Bv) + (sigma_e_max ** (Nv - 2))
-        ) ** (1 / (Nv - 2))
+        if np.all(time == 0):
+            sigma_e_0 = sigma_e
+        else:
+            with np.errstate(invalid="ignore"):
+                g = (
+                    np.trapz((sigma_e / sigma_e_max + 1.0e-14) ** Nv, time, axis=0)
+                    / time[-1]
+                )
+            # Defining tf or tot_time as nf * period
+            print("service time =", tot_time)
+            # Time dependent equivalent stress
+            sigma_e_0 = (
+                (((sigma_e_max**Nv) * g * tot_time) / Bv) + (sigma_e_max ** (Nv - 2))
+            ) ** (1 / (Nv - 2))
 
         # Suppressing warning given when negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             # Defining area integral element wise
             integral = (
-                (sigma_e_0 ** self.mvals[..., None, None])
+                (sigma_e_0 ** mavg[..., None, None])
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
@@ -381,10 +380,10 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Flatten the last axis and calculate the mean of the positive values along that axis
         # slicing the shape of integral and reshaping it with a new size (to flatten) based on the last size element of integral
-        if pstress.ndim == 2:
-            flat = integral.reshape(integral.shape[:1] + (-1,))
-        elif pstress.ndim == 3:
-            flat = integral.reshape(integral.shape[:2] + (-1,))
+        # if pstress.ndim == 2:
+        # flat = integral.reshape(-1,)
+        # elif pstress.ndim == 3:
+        flat = integral.reshape(integral.shape[:-2] + (-1,))
 
         # Suppressing warning to ignoring initial NaN values
         with np.errstate(invalid="ignore"):
@@ -416,16 +415,20 @@ class CrackShapeDependent(WeibullFailureModel):
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
 
-        shear_sensitive = True
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
+        kavg = np.mean(kvals, axis=0)
+
+        shear_sensitive = False
 
         if shear_sensitive == True:
             kbar = self.calculate_kbar(
                 self.temperatures, self.material, self.A, self.dalpha, self.dbeta
             )
         else:
-            kbar = 2 * mvals + 1
+            kbar = 2 * mavg + 1
 
-        kpvals = kbar * kvals
+        kpvals = kbar * kavg
 
         # For shear-insensitive case
         # kpvals = (2 * mvals + 1) * kvals
@@ -448,9 +451,9 @@ class CrackShapeDependent(WeibullFailureModel):
                 self.dalpha,
                 self.dbeta,
             )
-        ) ** (1 / mvals)
+        ) ** (1 / mavg)
 
-        return -(2 * kpvals / np.pi) * (flat**mvals) * volumes
+        return -(2 * kpvals / np.pi) * (flat**mavg) * volumes
 
 
 class PIAModel(CrackShapeIndependent):
@@ -494,15 +497,20 @@ class PIAModel(CrackShapeIndependent):
         pstress_max = np.max(pstress, axis=0)
 
         # g
-        g = np.trapz((pstress / (pstress_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
-
-        # Defining tf
-        print("service time =", tot_time)
-
-        # Time dependent principal stress
-        pstress_0 = (
-            (pstress_max**Nv * g * tot_time) / Bv + (pstress_max ** (Nv - 2))
-        ) ** (1 / (Nv - 2))
+        if np.all(time == 0):
+            g = 0
+            pstress_0 = pstress
+        else:
+            g = (
+                np.trapz((pstress / (pstress_max + 1.0e-14)) ** Nv, time, axis=0)
+                / time[-1]
+            )
+            # Defining tf
+            print("service time =", tot_time)
+            # Time dependent principal stress
+            pstress_0 = (
+                (pstress_max**Nv * g * tot_time) / Bv + (pstress_max ** (Nv - 2))
+            ) ** (1 / (Nv - 2))
 
         # Use temperature average values?
         mavg = np.mean(mvals, axis=0)
@@ -538,9 +546,13 @@ class WNTSAModel(CrackShapeIndependent):
         self.temperatures = temperatures
         self.material = material
         self.mandel_stress = mandel_stress
-        self.mvals = self.material.modulus(temperatures)
+
+        mvals = material.modulus(temperatures)
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Time dependent Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -550,22 +562,26 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Max normal stresss over all time steps for each element
         sigma_n_max = np.max(sigma_n, axis=0)
-
+        print("time -", time)
         # Defining time based on period of one cycle and number of time steps
         # Calculate g using an integration method
-        g = np.trapz((sigma_n / (sigma_n_max + 1.0e-14)) ** Nv, time, axis=0) / time[-1]
-
-        # Defining tot_time as nf * period
-        print("service time =", tot_time)
-
-        # Time dependent equivalent stress
-        sigma_n_0 = (
-            (((sigma_n_max**Nv) * g * tot_time) / Bv) + (sigma_n_max ** (Nv - 2))
-        ) ** (1 / (Nv - 2))
+        if np.all(time == 0):
+            sigma_n_0 = sigma_n
+        else:
+            g = (
+                np.trapz((sigma_n / (sigma_n_max + 1.0e-14)) ** Nv, time, axis=0)
+                / time[-1]
+            )
+            # Defining tot_time as nf * period
+            print("service time =", tot_time)
+            # Time dependent equivalent stress
+            sigma_n_0 = (
+                (((sigma_n_max**Nv) * g * tot_time) / Bv) + (sigma_n_max ** (Nv - 2))
+            ) ** (1 / (Nv - 2))
 
         with np.errstate(invalid="ignore"):
             integral = (
-                (sigma_n_0 ** self.mvals[..., None, None])
+                (sigma_n_0 ** mavg[..., None, None])
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
@@ -573,10 +589,10 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Flatten the last axis and calculate the mean of the positive values along that axis
         # slicing the shape of integral and reshaping it with a new size (to flatten) based on the last size element of integral
-        if pstress.ndim == 2:
-            flat = integral.reshape(integral.shape[:1] + (-1,))
-        elif pstress.ndim == 3:
-            flat = integral.reshape(integral.shape[:2] + (-1,))
+        # if pstress.ndim == 2:
+        # flat = integral.reshape(-1,)
+        # elif pstress.ndim == 3:
+        flat = integral.reshape(integral.shape[:-2] + (-1,))
 
         # Suppressing warning to ignoring initial NaN values
         with np.errstate(invalid="ignore"):
@@ -605,7 +621,13 @@ class WNTSAModel(CrackShapeIndependent):
         svals = material.strength(temperatures)
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
-        kpvals = (2 * mvals + 1) * kvals
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
+        kavg = np.mean(kvals, axis=0)
+
+        kpvals = (2 * mavg + 1) * kavg
+
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
 
@@ -618,9 +640,12 @@ class WNTSAModel(CrackShapeIndependent):
                 self.material,
                 tot_time,
             )
-        ) ** (1 / mvals)
+        ) ** (1 / mavg)
 
-        return -kpvals * (avg_nstress**mvals) * volumes
+        print("avg_nstress", avg_nstress)
+        print("avg_nstress", avg_nstress.shape)
+
+        return -kpvals * (avg_nstress**mavg) * volumes
 
 
 class MTSModelGriffithFlaw(CrackShapeDependent):
@@ -653,11 +678,14 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -673,15 +701,15 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
                             )
                         )
                     )
-                    ** mvals
+                    ** mavg[..., None, None]
                 )
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
@@ -703,7 +731,7 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         """
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
 
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -713,7 +741,8 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
 
         # Projected equivalent stress
         return 0.5 * (
-            sigma_n + np.sqrt((sigma_n**2) + ((tau / (1 - (0.5 * nu))) ** 2))
+            sigma_n
+            + np.sqrt((sigma_n**2) + ((tau / (1 - (0.5 * nu[..., None, None]))) ** 2))
         )
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
@@ -725,11 +754,14 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -741,19 +773,22 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
                             ((np.cos(self.A)) ** 2)
                             + np.sqrt(
                                 ((np.cos(self.A)) ** 4)
-                                + (((np.sin(2 * self.A)) ** 2) / (2 - (nu**2)))
+                                + (
+                                    ((np.sin(2 * self.A)) ** 2)
+                                    / (2 - (nu[..., None, None] ** 2))
+                                )
                             )
                         )
                     )
-                    ** mvals
+                    ** mavg[..., None, None]
                 )
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
@@ -789,20 +824,26 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
-                ((np.cos(self.A)) ** mvals) * np.sin(self.A) * self.dalpha * self.dbeta
+                ((np.cos(self.A)) ** mavg[..., None, None])
+                * np.sin(self.A)
+                * self.dalpha
+                * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
@@ -825,7 +866,7 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         """
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
 
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -834,7 +875,7 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         tau = self.calculate_shear_stress(mandel_stress)
 
         # Projected equivalent stress
-        return np.sqrt((sigma_n**2) + (tau / (1 - (0.5 * nu))) ** 2)
+        return np.sqrt((sigma_n**2) + (tau / (1 - (0.5 * nu[..., None, None]))) ** 2)
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
@@ -845,11 +886,14 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -858,18 +902,21 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
                     (
                         np.sqrt(
                             ((np.cos(self.A)) ** 4)
-                            + (((np.sin(2 * self.A)) ** 2) / ((2 - nu) ** 2))
+                            + (
+                                ((np.sin(2 * self.A)) ** 2)
+                                / ((2 - nu[..., None, None]) ** 2)
+                            )
                         )
                     )
-                    ** mvals
+                    ** mavg[..., None, None]
                 )
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
@@ -892,7 +939,7 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         """
 
         # Material parameters
-        cbar = material.c_bar(temperatures).flat[0]
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -901,7 +948,9 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         tau = self.calculate_shear_stress(mandel_stress)
 
         # Projected equivalent stress
-        return 0.5 * (sigma_n + np.sqrt((sigma_n**2) + ((2 * tau / cbar) ** 2)))
+        return 0.5 * (
+            sigma_n + np.sqrt((sigma_n**2) + ((2 * tau / cbar[..., None, None]) ** 2))
+        )
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
@@ -912,11 +961,14 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -928,19 +980,22 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
                             ((np.cos(self.A)) ** 2)
                             + np.sqrt(
                                 ((np.cos(self.A)) ** 4)
-                                + (((np.sin(2 * self.A)) ** 2) / (cbar**2))
+                                + (
+                                    ((np.sin(2 * self.A)) ** 2)
+                                    / (cbar[..., None, None] ** 2)
+                                )
                             )
                         )
                     )
-                    ** mvals
+                    ** mavg[..., None, None]
                 )
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
@@ -964,8 +1019,8 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         """
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -975,7 +1030,11 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
 
         # Projected equivalent stress
         return 0.5 * (
-            sigma_n + np.sqrt((sigma_n**2) + ((4 * tau / (cbar * (2 - nu))) ** 2))
+            sigma_n
+            + np.sqrt(
+                (sigma_n**2)
+                + ((4 * tau / (cbar[..., None, None] * (2 - nu[..., None, None]))) ** 2)
+            )
         )
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
@@ -987,11 +1046,14 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures).flat[0]
+        mvals = self.material.modulus(temperatures)
+
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = material.nu(temperatures).flat[0]
-        cbar = material.c_bar(temperatures).flat[0]
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -1005,20 +1067,23 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
                                 ((np.cos(self.A)) ** 4)
                                 + (
                                     (4 * ((np.sin(2 * self.A)) ** 2))
-                                    / ((cbar**2) * ((nu - 2) ** 2))
+                                    / (
+                                        (cbar[..., None, None] ** 2)
+                                        * ((nu[..., None, None] - 2) ** 2)
+                                    )
                                 )
                             )
                         )
                     )
-                    ** mvals
+                    ** mavg[..., None, None]
                 )
                 * np.sin(self.A)
                 * self.dalpha
                 * self.dbeta
             )
-        kbar = np.pi / np.sum(integral2)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
-        print("kbar =", kbar)
+        # print("kbar =", kbar)
 
         return kbar
 
