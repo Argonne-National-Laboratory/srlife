@@ -94,23 +94,29 @@ class WeibullFailureModel:
                 )
             )
 
-        p_tube = np.array([res[0] for res in results])
-        tube_fields = [res[1] for res in results]
+        tube_multiplier = receiver.panels["0"].tubes["0"].multiplier_val
+        # p_tube = np.array([res[0] for res in results])
+        # tube_fields = [res[1] for res in results]
 
         # Tube reliability is the minimum of all the time steps
-        tube = np.min(p_tube, axis=1)
+        # tube = np.min(p_tube, axis=1)
 
         # Overall reliability is the minimum of the sum
-        overall = np.min(np.sum(p_tube, axis=0))
+        # overall = np.min(np.sum(p_tube, axis=0))
 
         # Add the field to the tubes
-        for tubei, field in zip(receiver.tubes, tube_fields):
-            tubei.add_quadrature_results("log_reliability", field)
+        # for tubei, field in zip(receiver.tubes, tube_fields):
+        # tubei.add_quadrature_results("log_reliability", field)
 
         # Convert back from log-prob as we go
+        # return {
+        # "tube_reliability": np.exp(tube),
+        # "overall_reliability": np.exp(overall),
+        # }
         return {
-            "tube_reliability": np.exp(tube),
-            "overall_reliability": np.exp(overall),
+            "tube_reliability": np.exp(results),
+            "panel_reliability": np.exp(results) ** tube_multiplier,
+            "overall_reliability": np.exp(np.sum(results) * tube_multiplier),
         }
 
     def tube_log_reliability(self, tube, material, receiver, time):
@@ -166,9 +172,11 @@ class WeibullFailureModel:
         #     inc_prob = mod_prob.reshape(inc_prob.shape)
 
         # Return the sums as a function of time along with the field itself
-        return np.sum(inc_prob, axis=1), np.transpose(
-            np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
-        )
+        # return np.sum(inc_prob, axis=1), np.transpose(
+        #     np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
+        # )
+        print(np.exp(np.sum(inc_prob)))
+        return np.sum(inc_prob)
 
 
 class CrackShapeIndependent(WeibullFailureModel):
