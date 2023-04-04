@@ -766,13 +766,13 @@ class StandardCeramicMaterial:
         """
         Fatigue exponent parameter as a function of temperature
         """
-        return self.Nv_val(T)
+        return self.Nv(T)
 
     def Bv(self, T):
         """
         Fatigue parameter as a function of temperature
         """
-        return self.Bv_val(T)
+        return self.Bv(T)
 
     @classmethod
     def load(cls, node):
