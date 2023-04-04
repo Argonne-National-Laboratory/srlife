@@ -27,7 +27,7 @@
     </elastic>
     <alpha type="PiecewiseLinearInterpolate">
       <points>293 473 673 873 1073 1273 1473 1673 1773</points>
-      <values>3.05 3.05 3.03 3.02 3.02 3.04 3.11 3.25 3.35</values>
+      <values>3.05e-06 3.05e-06 3.03e-06 3.02e-06 3.02e-06 3.04e-06 3.11e-06 3.25e-06 3.35e-06</values>
     </alpha>
   </cares>
 </materials>

@@ -766,19 +766,13 @@ class StandardCeramicMaterial:
         """
         Fatigue exponent parameter as a function of temperature
         """
-        if np.isscalar(T):
-            return self.Nv_val
-        else:
-            return self.Nv_val * np.ones(T.shape)
+        return self.Nv_val(T)
 
     def Bv(self, T):
         """
         Fatigue parameter as a function of temperature
         """
-        if np.isscalar(T):
-            return self.Bv_val
-        else:
-            return self.Bv_val * np.ones(T.shape)
+        return self.Bv_val(T)
 
     @classmethod
     def load(cls, node):
@@ -806,8 +800,10 @@ class StandardCeramicMaterial:
             np.array(list(map(float, mvals.text.strip().split()))),
             float(c_bar.text),
             float(nu.text),
-            float(Nv.text),
-            float(Bv.text),
+            np.array(list(map(float, Nv.text.strip().split()))),
+            np.array(list(map(float, Bv.text.strip().split()))),
+            # float(Nv.text),
+            # float(Bv.text),
         )
 
     def save(self, fname, modelname):

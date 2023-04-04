@@ -142,7 +142,7 @@ class SolutionManager:
 
         The trigger for everything: solve the complete problem and report the
         best-estimate reliability.
-        
+
         Args:
             time (float): time at which to report reliability
 
