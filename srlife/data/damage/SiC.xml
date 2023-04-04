@@ -14,4 +14,24 @@
     <Nv>30</Nv>
     <Bv>320</Bv>
   </base>
+  <cares type="StandardModel">
+    <strength>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>552.94 552.94 552.94 552.94</values>
+    </strength>
+    <modulus>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>8.6 8.6 8.6 8.6</values>
+    </modulus>
+    <c_bar>0.82</c_bar>
+    <nu>0.16</nu>
+    <Nv>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>56 56 47 38</values>
+    </Nv>
+    <Bv>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>1275 1275 1850 520</values>
+    </Bv>
+  </cares>
 </models>

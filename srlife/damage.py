@@ -94,29 +94,33 @@ class WeibullFailureModel:
                 )
             )
 
-        tube_multiplier = receiver.panels["0"].tubes["0"].multiplier_val
-        # p_tube = np.array([res[0] for res in results])
-        # tube_fields = [res[1] for res in results]
+        p_tube = np.array([res[0] for res in results])
+        tube_fields = [res[1] for res in results]
 
         # Tube reliability is the minimum of all the time steps
-        # tube = np.min(p_tube, axis=1)
+        tube = np.min(p_tube, axis=1)
 
-        # Overall reliability is the minimum of the sum
-        # overall = np.min(np.sum(p_tube, axis=0))
+        # Panel reliability
+        tube_multipliers = np.array(
+            [
+                [t.multiplier_val for (ti, t) in p.tubes.items()]
+                for (pi, p) in receiver.panels.items()
+            ]
+        )
+        panel = np.sum(tube.reshape(receiver.npanels, -1) * tube_multipliers, axis=1)
+
+        # Overall reliability
+        overall = np.sum(panel)
 
         # Add the field to the tubes
-        # for tubei, field in zip(receiver.tubes, tube_fields):
-        # tubei.add_quadrature_results("log_reliability", field)
+        for tubei, field in zip(receiver.tubes, tube_fields):
+            tubei.add_quadrature_results("log_reliability", field)
 
         # Convert back from log-prob as we go
-        # return {
-        # "tube_reliability": np.exp(tube),
-        # "overall_reliability": np.exp(overall),
-        # }
         return {
-            "tube_reliability": np.exp(results),
-            "panel_reliability": np.exp(results) ** tube_multiplier,
-            "overall_reliability": np.exp(np.sum(results) * tube_multiplier),
+            "tube_reliability": np.exp(tube),
+            "panel_reliability": np.exp(panel),
+            "overall_reliability": np.exp(overall),
         }
 
     def tube_log_reliability(self, tube, material, receiver, time):
@@ -172,11 +176,13 @@ class WeibullFailureModel:
         #     inc_prob = mod_prob.reshape(inc_prob.shape)
 
         # Return the sums as a function of time along with the field itself
-        # return np.sum(inc_prob, axis=1), np.transpose(
-        #     np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
-        # )
-        print(np.exp(np.sum(inc_prob)))
-        return np.sum(inc_prob)
+        inc_prob = np.array(list(inc_prob) * len(tube.times)).reshape(
+            len(tube.times), -1
+        )
+
+        return np.sum(inc_prob, axis=1), np.transpose(
+            np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
+        )
 
 
 class CrackShapeIndependent(WeibullFailureModel):
@@ -369,6 +375,8 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Use temperature average values?
         mavg = np.mean(self.mvals, axis=0)
+        Nvavg = np.mean(Nv, axis=0)
+        Bvavg = np.mean(Bv, axis=0)
 
         # Projected equivalent stresses
         sigma_e = self.calculate_eq_stress(
@@ -386,15 +394,23 @@ class CrackShapeDependent(WeibullFailureModel):
         else:
             with np.errstate(invalid="ignore"):
                 g = (
-                    np.trapz((sigma_e / sigma_e_max + 1.0e-14) ** Nv, time, axis=0)
+                    np.trapz(
+                        (sigma_e / sigma_e_max + 1.0e-14) ** Nvavg[..., None, None],
+                        time,
+                        axis=0,
+                    )
                     / time[-1]
                 )
             # Defining tf or tot_time as nf * period
             print("service time =", tot_time)
             # Time dependent equivalent stress
             sigma_e_0 = (
-                (((sigma_e_max**Nv) * g * tot_time) / Bv) + (sigma_e_max ** (Nv - 2))
-            ) ** (1 / (Nv - 2))
+                (
+                    ((sigma_e_max ** Nvavg[..., None, None]) * g * tot_time)
+                    / Bvavg[..., None, None]
+                )
+                + (sigma_e_max ** (Nvavg[..., None, None] - 2))
+            ) ** (1 / (Nvavg[..., None, None] - 2))
 
         # Suppressing warning given when negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
@@ -444,7 +460,7 @@ class CrackShapeDependent(WeibullFailureModel):
         mavg = np.mean(mvals, axis=0)
         kavg = np.mean(kvals, axis=0)
 
-        shear_sensitive = False
+        shear_sensitive = True
 
         if shear_sensitive == True:
             kbar = self.calculate_kbar(
@@ -522,6 +538,12 @@ class PIAModel(CrackShapeIndependent):
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
 
+        # Use temperature average values?
+        mavg = np.mean(mvals, axis=0)
+        kavg = np.mean(kvals, axis=0)
+        Nvavg = np.mean(Nv, axis=0)
+        Bvavg = np.mean(Bv, axis=0)
+
         # Only tension
         pstress[pstress < 0] = 0
 
@@ -533,19 +555,20 @@ class PIAModel(CrackShapeIndependent):
             pstress_0 = pstress
         else:
             g = (
-                np.trapz((pstress / (pstress_max + 1.0e-14)) ** Nv, time, axis=0)
+                np.trapz(
+                    (pstress / (pstress_max + 1.0e-14)) ** Nvavg[..., None],
+                    time,
+                    axis=0,
+                )
                 / time[-1]
             )
             # Defining tf
             print("service time =", tot_time)
             # Time dependent principal stress
             pstress_0 = (
-                (pstress_max**Nv * g * tot_time) / Bv + (pstress_max ** (Nv - 2))
-            ) ** (1 / (Nv - 2))
-
-        # Use temperature average values?
-        mavg = np.mean(mvals, axis=0)
-        kavg = np.mean(kvals, axis=0)
+                (pstress_max ** Nvavg[..., None] * g * tot_time) / Bvavg[..., None]
+                + (pstress_max ** (Nvavg[..., None] - 2))
+            ) ** (1 / (Nvavg[..., None] - 2))
 
         return -kavg * np.sum(pstress_0 ** mavg[..., None], axis=-1) * volumes
 
@@ -591,6 +614,8 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Use temperature average values?
         mavg = np.mean(mvals, axis=0)
+        Nvavg = np.mean(Nv, axis=0)
+        Bvavg = np.mean(Bv, axis=0)
 
         # Time dependent Normal stress
         sigma_n = self.calculate_normal_stress(mandel_stress)
@@ -607,15 +632,23 @@ class WNTSAModel(CrackShapeIndependent):
             sigma_n_0 = sigma_n
         else:
             g = (
-                np.trapz((sigma_n / (sigma_n_max + 1.0e-14)) ** Nv, time, axis=0)
+                np.trapz(
+                    (sigma_n / (sigma_n_max + 1.0e-14)) ** Nvavg[..., None, None],
+                    time,
+                    axis=0,
+                )
                 / time[-1]
             )
             # Defining tot_time as nf * period
             print("service time =", tot_time)
             # Time dependent equivalent stress
             sigma_n_0 = (
-                (((sigma_n_max**Nv) * g * tot_time) / Bv) + (sigma_n_max ** (Nv - 2))
-            ) ** (1 / (Nv - 2))
+                (
+                    ((sigma_n_max ** Nvavg[..., None, None]) * g * tot_time)
+                    / Bvavg[..., None, None]
+                )
+                + (sigma_n_max ** (Nvavg[..., None, None] - 2))
+            ) ** (1 / (Nvavg[..., None, None] - 2))
 
         with np.errstate(invalid="ignore"):
             integral = (

@@ -137,7 +137,7 @@ class TestWNTSAModel(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 0
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -293,7 +293,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 100000
+        self.nf = 0
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -450,7 +450,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 0
+        self.nf = 1
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -529,7 +529,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 100
+        self.nf = 1
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -605,7 +605,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 100
+        self.nf = 1
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
