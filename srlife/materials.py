@@ -702,8 +702,8 @@ class StandardCeramicMaterial:
     2) Weibull modulus depends on temperature
     3) Constant c_bar parameter
     4) Constant Poisson's ratio
-    5) Constant fatigue exponent parameter Nv
-    6) Constant faitgue parameter Bv
+    5) Fatigue exponent parameter Nv depends on temperature
+    6) Faitgue parameter Bv depends on temperature
     """
 
     def __init__(
@@ -714,8 +714,10 @@ class StandardCeramicMaterial:
         modulus,
         c_bar,
         nu,
-        Nv,
-        Bv,
+        Nv_temperatures,
+        Nvs,
+        Bv_temperatures,
+        Bvs,
         *args,
         **kwargs
     ):
@@ -729,8 +731,8 @@ class StandardCeramicMaterial:
         self.m = inter.interp1d(m_temperatures, modulus)
         self.C = c_bar
         self.nu_val = nu
-        self.Nv_val = Nv
-        self.Bv_val = Bv
+        self.Nv = inter.interp1d(Nv_temperatures, Nvs)
+        self.Bv = inter.interp1d(Bv_temperatures, Bvs)
 
     def strength(self, T):
         """
@@ -791,7 +793,11 @@ class StandardCeramicMaterial:
         mvals = m.find("values")
         nu = node.find("nu")
         Nv = node.find("Nv")
+        Nv_temps = Nv.find("temperatures")
+        Nvvals = Nv.find("values")
         Bv = node.find("Bv")
+        Bv_temps = Bv.find("temperatures")
+        Bvvals = Bv.find("values")
 
         return StandardCeramicMaterial(
             np.array(list(map(float, s_temps.text.strip().split()))),
@@ -800,8 +806,10 @@ class StandardCeramicMaterial:
             np.array(list(map(float, mvals.text.strip().split()))),
             float(c_bar.text),
             float(nu.text),
-            np.array(list(map(float, Nv.text.strip().split()))),
-            np.array(list(map(float, Bv.text.strip().split()))),
+            np.array(list(map(float, Nv_temps.text.strip().split()))),
+            np.array(list(map(float, Nvvals.text.strip().split()))),
+            np.array(list(map(float, Bv_temps.text.strip().split()))),
+            np.array(list(map(float, Bvvals.text.strip().split()))),
             # float(Nv.text),
             # float(Bv.text),
         )

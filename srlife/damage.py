@@ -470,7 +470,7 @@ class CrackShapeDependent(WeibullFailureModel):
             kbar = 2 * mavg + 1
 
         kpvals = kbar * kavg
-
+        # print("kbar =", kbar)
         # For shear-insensitive case
         # kpvals = (2 * mvals + 1) * kvals
 
@@ -698,9 +698,6 @@ class WNTSAModel(CrackShapeIndependent):
         kavg = np.mean(kvals, axis=0)
 
         kpvals = (2 * mavg + 1) * kavg
-
-        Nv = material.Nv(temperatures)
-        Bv = material.Bv(temperatures)
 
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
