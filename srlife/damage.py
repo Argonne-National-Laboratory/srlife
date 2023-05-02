@@ -162,16 +162,10 @@ class WeibullFailureModel:
         # CARES/LIFE cutoff moved to each model
         # if self.cares_cutoff:
         #     pstress = self.calculate_principal_stress(stresses)
-        #     print("pstress shape =", pstress.shape)
-        #     pstress = self.calculate_principal_stress(stresses).reshape(-1, 3)
-        #     pmax = np.max(pstress, axis=1)
-        #     pmin = np.min(pstress, axis=1)
-        #     print("pstress shape =", pstress.shape)
+        #     pmax = np.max(pstress, axis=2)
+        #     pmin = np.min(pstress, axis=2)
         #     remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
         #     mod_prob = inc_prob.flatten()
-        #     print("inc_prob =", inc_prob.shape)
-        #     print("mod_prob =", mod_prob.shape)
-        #     print("remove =", remove)
         #     mod_prob[remove] = 0.0
         #     inc_prob = mod_prob.reshape(inc_prob.shape)
 
@@ -230,6 +224,13 @@ class CrackShapeIndependent(WeibullFailureModel):
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
+
+        # CARES/LIFE cutoff
+        if self.cares_cutoff:
+            pmax = np.max(pstress, axis=2)
+            pmin = np.min(pstress, axis=2)
+            remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
+            pstress[remove] = 0.0
 
         # Normal stress
         return (
@@ -352,9 +353,13 @@ class CrackShapeDependent(WeibullFailureModel):
         properties and integration limits
 
         Parameters:
+          time:           time instance variable for each stress/temperature
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
-          material        material model to use
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals) and Weibull modulus (mvals)
+                          and fatigue parameters Bv and Nv
+          tot_time:       total service time used as input to calculate reliability
 
         Additional Parameters:
           A:              mesh grid of vectorized angle values
@@ -373,7 +378,7 @@ class CrackShapeDependent(WeibullFailureModel):
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(self.mvals, axis=0)
         Nvavg = np.mean(Nv, axis=0)
         Bvavg = np.mean(Bv, axis=0)
@@ -386,12 +391,12 @@ class CrackShapeDependent(WeibullFailureModel):
         # Max principal stresss over all time steps for each element
         sigma_e_max = np.max(sigma_e, axis=0)
 
-        # Suppressing warning given when negative numbers are raised to rational numbers
-        # Defining time based on period of one cycle and number of time steps
-        # Calculate g using an integration method
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
         if np.all(time == 0):
             sigma_e_0 = sigma_e
         else:
+            # Suppressing warning given when negative numbers are raised to rational numbers
             with np.errstate(invalid="ignore"):
                 g = (
                     np.trapz(
@@ -401,8 +406,7 @@ class CrackShapeDependent(WeibullFailureModel):
                     )
                     / time[-1]
                 )
-            # Defining tf or tot_time as nf * period
-            print("service time =", tot_time)
+
             # Time dependent equivalent stress
             sigma_e_0 = (
                 (
@@ -423,10 +427,6 @@ class CrackShapeDependent(WeibullFailureModel):
             )
 
         # Flatten the last axis and calculate the mean of the positive values along that axis
-        # slicing the shape of integral and reshaping it with a new size (to flatten) based on the last size element of integral
-        # if pstress.ndim == 2:
-        # flat = integral.reshape(-1,)
-        # elif pstress.ndim == 3:
         flat = integral.reshape(integral.shape[:-2] + (-1,))
 
         # Suppressing warning to ignoring initial NaN values
@@ -442,10 +442,15 @@ class CrackShapeDependent(WeibullFailureModel):
         Calculate the element log reliability given the equivalent stress
 
         Parameters:
-          mandel_stress:  element stresses in Mandel convention
-          temperatures:   element temperatures
-          volumes:        element volumes
-          material:       material model  object with required data
+          mandel_stress:    element stresses in Mandel convention
+          temperatures:     element temperatures
+          volumes:          element volumes
+          material:         material model object with required data that includes
+                            Weibull scale parameter (svals), Weibull modulus (mvals)
+                            and uniaxial and polyaxial crack density coefficient (kvals,kpvals)
+          shear_sensitive:  shear sensitivity condition for evaluating normalized
+                            crack density coefficient (kbar) using a
+                            numerically (when True) or using a fixed expression (when False)
         """
         self.temperatures = temperatures
         self.material = material
@@ -456,7 +461,7 @@ class CrackShapeDependent(WeibullFailureModel):
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
         kavg = np.mean(kvals, axis=0)
 
@@ -470,15 +475,6 @@ class CrackShapeDependent(WeibullFailureModel):
             kbar = 2 * mavg + 1
 
         kpvals = kbar * kavg
-        # print("kbar =", kbar)
-        # For shear-insensitive case
-        # kpvals = (2 * mvals + 1) * kvals
-
-        # For CSE model
-        # kpvals = kbar * kvals
-
-        # For hear sensitive case
-        # kpvals = (2.99) * kvals
 
         # Equivalent stress raied to exponent mv
         flat = (
@@ -512,13 +508,14 @@ class PIAModel(CrackShapeIndependent):
         Calculate the element log reliability
 
         Parameters:
-          time:           time for each stress/temperature
+          time:           time instance variable for each stress/temperature
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
           volumes:        element volumes
           material:       material model object with required data that includes
-                          Weibull scale parameter (svals) and Weibull modulus (mvals)
-          tot_time:       total time at which to calculate reliability
+                          Weibull scale parameter (svals), Weibull modulus (mvals)
+                          and fatigue parameters (Bv,Nv)
+          tot_time:       total service time used as input to calculate reliability
         """
 
         # Principal stresses
@@ -538,7 +535,7 @@ class PIAModel(CrackShapeIndependent):
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
         kavg = np.mean(kvals, axis=0)
         Nvavg = np.mean(Nv, axis=0)
@@ -550,7 +547,8 @@ class PIAModel(CrackShapeIndependent):
         # Max principal stresss over all time steps for each element
         pstress_max = np.max(pstress, axis=0)
 
-        # g
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
         if np.all(time == 0):
             pstress_0 = pstress
         else:
@@ -562,8 +560,7 @@ class PIAModel(CrackShapeIndependent):
                 )
                 / time[-1]
             )
-            # Defining tf
-            print("service time =", tot_time)
+
             # Time dependent principal stress
             pstress_0 = (
                 (pstress_max ** Nvavg[..., None] * g * tot_time) / Bvavg[..., None]
@@ -590,7 +587,10 @@ class WNTSAModel(CrackShapeIndependent):
         Parameters:
           mandel_stress:  element stresses in Mandel convention
           temperatures:   element temperatures
-          material:       material model object with required data
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals), Weibull modulus (mvals)
+                          and fatigue parameters (Bv,Nv)
+          tot_time:       total service time used as input to calculate reliability
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
@@ -602,7 +602,6 @@ class WNTSAModel(CrackShapeIndependent):
             remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
             pstress[remove] = 0.0
 
-        # mvals = material.modulus(temperatures)[: pstress.shape[1]]
         # Material parameters
         self.temperatures = temperatures
         self.material = material
@@ -612,7 +611,7 @@ class WNTSAModel(CrackShapeIndependent):
         Nv = material.Nv(temperatures)
         Bv = material.Bv(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
         Nvavg = np.mean(Nv, axis=0)
         Bvavg = np.mean(Bv, axis=0)
@@ -626,8 +625,8 @@ class WNTSAModel(CrackShapeIndependent):
         # Max normal stresss over all time steps for each element
         sigma_n_max = np.max(sigma_n, axis=0)
 
-        # Defining time based on period of one cycle and number of time steps
-        # Calculate g using an integration method
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
         if np.all(time == 0):
             sigma_n_0 = sigma_n
         else:
@@ -639,8 +638,7 @@ class WNTSAModel(CrackShapeIndependent):
                 )
                 / time[-1]
             )
-            # Defining tot_time as nf * period
-            print("service time =", tot_time)
+
             # Time dependent equivalent stress
             sigma_n_0 = (
                 (
@@ -659,15 +657,11 @@ class WNTSAModel(CrackShapeIndependent):
             ) / (4 * np.pi)
 
         # Flatten the last axis and calculate the mean of the positive values along that axis
-        # slicing the shape of integral and reshaping it with a new size (to flatten) based on the last size element of integral
-        # if pstress.ndim == 2:
-        # flat = integral.reshape(-1,)
-        # elif pstress.ndim == 3:
         flat = integral.reshape(integral.shape[:-2] + (-1,))
 
         # Suppressing warning to ignoring initial NaN values
         with np.errstate(invalid="ignore"):
-            # Average stress
+            # Average stress from summing while ignoring NaN values
             return np.nansum(np.where(flat >= 0.0, flat, np.nan), axis=-1)
 
     def calculate_element_log_reliability(
@@ -677,11 +671,12 @@ class WNTSAModel(CrackShapeIndependent):
         Calculate the element log reliability
 
         Parameters:
-          mandel_stress:  element stresses in Mandel convention
-          temperatures:   element temperatures
-          volumes:        element volumes
-          material:       material model object with required data that includes
-                          Weibull scale parameter (svals) and Weibull modulus (mvals)
+          mandel_stress:    element stresses in Mandel convention
+          temperatures:     element temperatures
+          volumes:          element volumes
+          material:         material model object with required data that includes
+                            Weibull scale parameter (svals), Weibull modulus (mvals)
+                            and uniaxial and polyaxial crack density coefficient (kvals,kpvals)
           tot_time:       total time at which to calculate reliability
         """
         self.temperatures = temperatures
@@ -693,7 +688,7 @@ class WNTSAModel(CrackShapeIndependent):
         mvals = material.modulus(temperatures)
         kvals = svals ** (-mvals)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
         kavg = np.mean(kvals, axis=0)
 
@@ -736,7 +731,9 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu)
         """
 
         self.temperatures = temperatures
@@ -745,14 +742,14 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
-        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
-        # Calculating kbar
+        # Evaluating integral for kbar while suppressing warning given when
+        # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
                 (
@@ -810,7 +807,9 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu)
         """
 
         self.temperatures = temperatures
@@ -819,14 +818,14 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
-        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
-        # Calculating kbar
+        # Evaluating integral for kbar while suppressing warning given when
+        # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
                 (
@@ -878,7 +877,9 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu)
         """
 
         self.temperatures = temperatures
@@ -887,12 +888,11 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
-        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Calculating kbar
         with np.errstate(invalid="ignore"):
@@ -938,7 +938,9 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu)
         """
 
         self.temperatures = temperatures
@@ -947,14 +949,15 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
         cbar = np.mean(material.c_bar(temperatures), axis=0)
 
-        # Calculating kbar
+        # Evaluating integral for kbar while suppressing warning given when
+        # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
                 (
@@ -992,7 +995,7 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         Calculate the equivalent stresses from the normal and shear stresses
 
         Additional parameters:
-        cbar:   Emperical constant
+        cbar:   Shetty model emperical constant (cbar)
         """
 
         # Material parameters
@@ -1011,7 +1014,9 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu) and Shetty model emperical constant (cbar)
         """
 
         self.temperatures = temperatures
@@ -1020,14 +1025,15 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
         cbar = np.mean(material.c_bar(temperatures), axis=0)
 
-        # Calculating kbar
+        # Evaluating integral for kbar while suppressing warning given when
+        # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
                 (
@@ -1070,7 +1076,7 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
 
         Additional parameters:
         nu:     Poisson ratio
-        cbar:   Emperical constant
+        cbar:   Shetty model emperical constant (cbar)
         """
 
         # Material parameters
@@ -1094,7 +1100,9 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
 
     def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
-        Calculate the kbar from the Weibull modulus and material parameters
+        Calculate the evaluating normalized crack density coefficient (kbar)
+        using the Weibull scale parameter (svals), Weibull modulus (mvals),
+        poisson ratio (nu) and Shetty model emperical constant (cbar)
         """
 
         self.temperatures = temperatures
@@ -1103,14 +1111,15 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         # Weibull modulus
         mvals = self.material.modulus(temperatures)
 
-        # Use temperature average values?
+        # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
         cbar = np.mean(material.c_bar(temperatures), axis=0)
 
-        # Calculating kbar
+        # Evaluating integral for kbar while suppressing warning given when
+        # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
                 (

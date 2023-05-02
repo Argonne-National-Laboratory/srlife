@@ -19,8 +19,8 @@ class TestPIAModel(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -30,12 +30,6 @@ class TestPIAModel(unittest.TestCase):
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 360 / 15
-        # self.volumes = np.loadtxt(
-        #     os.path.join(
-        #         os.path.dirname(os.path.abspath(__file__)),
-        #         "Spinning_disk_volumes.txt",
-        #     )
-        # )
 
         self.volumes = np.loadtxt(
             os.path.join(
@@ -43,14 +37,12 @@ class TestPIAModel(unittest.TestCase):
                 "volumes_8.csv",
             ),
             delimiter=",",
-            # skiprows=1,
-            # usecols=list(range(1, 55)),
         )
         self.volumes = vol_factor * self.volumes
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -69,16 +61,15 @@ class TestPIAModel(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.PIAModel(solverparams.ParameterSet())
 
     def test_definition(self):
-        # k = self.s0 ** (-self.m)
-        # kp = (2 * self.m + 1) * k
-
         actual = self.model_time_dep.calculate_element_log_reliability(
             self.time,
             self.stress,
@@ -106,8 +97,8 @@ class TestWNTSAModel(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -129,7 +120,7 @@ class TestWNTSAModel(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -148,8 +139,10 @@ class TestWNTSAModel(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.WNTSAModel(solverparams.ParameterSet())
@@ -182,8 +175,8 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -206,7 +199,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -225,8 +218,10 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.MTSModelGriffithFlaw(solverparams.ParameterSet())
@@ -260,8 +255,8 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -284,7 +279,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -303,8 +298,10 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.MTSModelPennyShapedFlaw(
@@ -340,8 +337,8 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -364,7 +361,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -383,13 +380,13 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
-        # self.model_time_indep = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
         self.model_time_dep = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
-        # self.model = damage.CSEModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
         actual = self.model_time_dep.calculate_element_log_reliability(
@@ -420,8 +417,8 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -444,7 +441,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -463,8 +460,10 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.CSEModelPennyShapedFlaw(
@@ -500,8 +499,8 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -524,7 +523,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -543,8 +542,10 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
 
         self.model_time_dep = damage.SMMModelGriffithFlaw(solverparams.ParameterSet())
@@ -577,8 +578,8 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         data = np.loadtxt(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                # "Spinning_disk_60k_70k.csv",
-                "Spinning_disk_60k_80k.csv",
+                "Spinning_disk_60k_70k.csv",
+                # "Spinning_disk_60k_80k.csv",
             ),
             delimiter=",",
             skiprows=1,
@@ -601,7 +602,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
         self.temperatures = np.ones((data.shape[0], 8))
 
         # Number of cycles to failure
-        self.nf = 1
+        self.nf = 100000
         self.period = 0.01
         self.time = np.linspace(0, self.period, self.stress.shape[0])
 
@@ -620,8 +621,10 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             np.array([self.m, self.m]),
             self.c_bar,
             self.nu,
-            self.Nv,
-            self.Bv,
+            np.array([0, 1000.0]),
+            np.array([self.Nv, self.Nv]),
+            np.array([0, 1000.0]),
+            np.array([self.Bv, self.Bv]),
         )
         self.model_time_dep = damage.SMMModelPennyShapedFlaw(
             solverparams.ParameterSet()

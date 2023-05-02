@@ -248,11 +248,22 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         self.ms = np.array([10.7, 9.2])
         self.c_bar = 1.5
         self.nu = 0.17
-        self.Nv = 30
-        self.Bv = 320
+        self.NvTs = np.array([25, 1500])
+        self.Nvs = np.array([30, 30])
+        self.BvTs = np.array([25, 1500])
+        self.Bvs = np.array([320, 320])
 
         self.mat = materials.StandardCeramicMaterial(
-            self.Ts, self.s0s, self.mTs, self.ms, self.c_bar, self.nu, self.Nv, self.Bv
+            self.Ts,
+            self.s0s,
+            self.mTs,
+            self.ms,
+            self.c_bar,
+            self.nu,
+            self.NvTs,
+            self.Nvs,
+            self.BvTs,
+            self.Bvs,
         )
 
     def test_strength(self):
