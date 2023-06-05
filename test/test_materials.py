@@ -299,6 +299,24 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         b = self.nu
         self.assertAlmostEqual(a, b)
 
+    def test_Nv(self):
+        ifn = inter.interp1d(self.NvTs, self.Nvs)
+        T = 1099.1
+
+        a = self.mat.fatigue_Nv(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
+
+    def test_Bv(self):
+        ifn = inter.interp1d(self.BvTs, self.Bvs)
+        T = 1099.1
+
+        a = self.mat.fatigue_Bv(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
+
     def test_store_receover(self):
         tfile = tempfile.mktemp()
         self.mat.save(tfile, "blah")
@@ -312,3 +330,9 @@ class TestStandardCeramicMaterial(unittest.TestCase):
 
         self.assertTrue(np.isclose(test.C, self.c_bar))
         self.assertTrue(np.isclose(test.nu_val, self.nu))
+
+        self.assertTrue(np.allclose(test.Nv_temperatures, self.NvTs))
+        self.assertTrue(np.allclose(test.Nvvals, self.Nvs))
+
+        self.assertTrue(np.allclose(test.Bv_temperatures, self.BvTs))
+        self.assertTrue(np.allclose(test.Bvvals, self.Bvs))
