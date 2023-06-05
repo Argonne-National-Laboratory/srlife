@@ -715,9 +715,9 @@ class StandardCeramicMaterial:
         c_bar,
         nu,
         Nv_temperatures,
-        fatigue_Nv,
+        Nv,
         Bv_temperatures,
-        fatigue_Bv,
+        Bv,
         *args,
         **kwargs
     ):
@@ -732,11 +732,11 @@ class StandardCeramicMaterial:
         self.C = c_bar
         self.nu_val = nu
         self.Nv_temperatures = Nv_temperatures
-        self.Nvvals = fatigue_Nv
-        self.Nv = inter.interp1d(Nv_temperatures, fatigue_Nv)
+        self.Nvvals = Nv
+        self.Nv = inter.interp1d(Nv_temperatures, Nv)
         self.Bv_temperatures = Bv_temperatures
-        self.Bvvals = fatigue_Bv
-        self.Bv = inter.interp1d(Bv_temperatures, fatigue_Bv)
+        self.Bvvals = Bv
+        self.Bv = inter.interp1d(Bv_temperatures, Bv)
 
     def strength(self, T):
         """
@@ -816,10 +816,8 @@ class StandardCeramicMaterial:
             float(nu.text),
             np.array(list(map(float, Nv_temps.text.strip().split()))),
             np.array(list(map(float, Nvvals.text.strip().split()))),
-            np.array(list(map(float, Bv_temps.text.strip().split()))),
+            np.array(list(map(float, Bv_temps.strip().split()))),
             np.array(list(map(float, Bvvals.text.strip().split()))),
-            # float(Nv.text),
-            # float(Bv.text),
         )
 
     def save(self, fname, modelname):
