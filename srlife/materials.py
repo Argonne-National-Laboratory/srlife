@@ -802,6 +802,7 @@ class StandardCeramicMaterial:
         Bv = node.find("fatigue_Bv")
         Bv_temps = Bv.find("temperatures")
         Bvvals = Bv.find("values")
+        print(Bv_temps.text)
 
         return StandardCeramicMaterial(
             np.array(list(map(float, s_temps.text.strip().split()))),
