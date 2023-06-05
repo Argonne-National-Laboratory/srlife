@@ -11,8 +11,8 @@
     </modulus>
     <c_bar>1.5</c_bar>
     <nu>0.16</nu>
-    <Nv>30</Nv>
-    <Bv>320</Bv>
+    <fatigue_Nv>30</fatigue_Nv>
+    <fatigue_Bv>320</fatigue_Bv>
   </base>
   <cares type="StandardModel">
     <strength>
@@ -25,13 +25,13 @@
     </modulus>
     <c_bar>0.82</c_bar>
     <nu>0.16</nu>
-    <Nv>
+    <fatigue_Nv>
       <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
       <values>56 56 47 38</values>
-    </Nv>
-    <Bv>
+    </fatigue_Nv>
+    <fatigue_Bv>
       <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
       <values>1275 1275 1850 520</values>
-    </Bv>
+    </fatigue_Bv>
   </cares>
 </models>
