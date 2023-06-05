@@ -791,18 +791,21 @@ class StandardCeramicMaterial:
         strength = node.find("strength")
         s_temps = strength.find("temperatures")
         svals = strength.find("values")
+
         m = node.find("modulus")
         m_temps = m.find("temperatures")
         mvals = m.find("values")
+
         c_bar = node.find("c_bar")
         nu = node.find("nu")
+
         Nv = node.find("fatigue_Nv")
         Nv_temps = Nv.find("temperatures")
         Nvvals = Nv.find("values")
+
         Bv = node.find("fatigue_Bv")
         Bv_temps = Bv.find("temperatures")
         Bvvals = Bv.find("values")
-        print(Bv_temps.text)
 
         return StandardCeramicMaterial(
             np.array(list(map(float, s_temps.text.strip().split()))),
