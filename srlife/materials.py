@@ -803,7 +803,7 @@ class StandardCeramicMaterial:
         Nv_temps = Nv.find("temperatures")
         Nvvals = Nv.find("values")
 
-        Bv = node.find("fatigue_Nv")
+        Bv = node.find("fatigue_Bv")
         Bv_temps = Bv.find("temperatures")
         Bvvals = Bv.find("values")
 
