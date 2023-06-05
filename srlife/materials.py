@@ -848,13 +848,13 @@ class StandardCeramicMaterial:
         Nvtemps = ET.SubElement(Nv, "temperatures")
         Nvtemps.text = " ".join(map(str, self.Nv_temperatures))
         Nvvals = ET.SubElement(Nv, "values")
-        Nvvals.text = str(self.Nvvals)
+        Nvvals.text = " ".join(map(str(self.Nvvals)))
 
         Bv = ET.SubElement(base, "fatigue_Bv")
         Bvtemps = ET.SubElement(Nv, "temperatures")
         Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
         Bvvals = ET.SubElement(base, "Bv")
-        Bvvals.text = str(self.BvvalS)
+        Bvvals.text = " ".join(map(str(self.Bvvals)))
 
         tree = ET.ElementTree(element=root)
         tree.write(fname)
