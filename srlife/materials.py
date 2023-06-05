@@ -732,10 +732,10 @@ class StandardCeramicMaterial:
         self.C = c_bar
         self.nu_val = nu
         self.Nv_temperatures = Nv_temperatures
-        self.fatigue_Nv = fatigue_Nv
+        self.Nvvals = fatigue_Nv
         self.Nv = inter.interp1d(Nv_temperatures, fatigue_Nv)
         self.Bv_temperatures = Bv_temperatures
-        self.fatigue_Bv = fatigue_Bv
+        self.Bvvals = fatigue_Bv
         self.Bv = inter.interp1d(Bv_temperatures, fatigue_Bv)
 
     def strength(self, T):
