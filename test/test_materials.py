@@ -303,7 +303,7 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         ifn = inter.interp1d(self.NvTs, self.Nvs)
         T = 1099.1
 
-        a = self.mat.fatigue_Nv(T)
+        a = self.mat.Nv(T)
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
@@ -312,7 +312,7 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         ifn = inter.interp1d(self.BvTs, self.Bvs)
         T = 1099.1
 
-        a = self.mat.fatigue_Bv(T)
+        a = self.mat.Bv(T)
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
