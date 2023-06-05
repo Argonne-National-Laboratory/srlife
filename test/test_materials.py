@@ -248,10 +248,10 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         self.ms = np.array([10.7, 9.2])
         self.c_bar = 1.5
         self.nu = 0.17
-        self.NvTs = np.array([25, 1500])
-        self.Nvs = np.array([30, 30])
-        self.BvTs = np.array([25, 1500])
-        self.Bvs = np.array([320, 320])
+        self.NvTs = np.array([25.0, 1000.0, 1500.0])
+        self.Nvs = np.array([30.0, 30.0, 30.0])
+        self.BvTs = np.array([25.0, 1000.0, 1500.0])
+        self.Bvs = np.array([320.0, 320.0, 320.0])
 
         self.mat = materials.StandardCeramicMaterial(
             self.Ts,
