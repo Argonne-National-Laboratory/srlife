@@ -816,7 +816,7 @@ class StandardCeramicMaterial:
             float(nu.text),
             np.array(list(map(float, Nv_temps.text.strip().split()))),
             np.array(list(map(float, Nvvals.text.strip().split()))),
-            np.array(list(map(float, Bv_temps.strip().split()))),
+            np.array(list(map(float, Bv_temps.text.strip().split()))),
             np.array(list(map(float, Bvvals.text.strip().split()))),
         )
 
