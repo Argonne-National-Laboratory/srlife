@@ -4,9 +4,6 @@
   creep-fatigue damage given completely-solved tube results and
   damage material properties
 """
-from scipy import integrate
-
-# from scipy.integrate import fixed_quad, quadrature
 from srlife import receiver
 
 import numpy as np
@@ -151,7 +148,8 @@ class WeibullFailureModel:
         # Figure out the number of repetitions of the load cycle
         if receiver.days != 1:
             raise RuntimeError(
-                "Time dependent reliability requires the load cycle be a single, representative cycle"
+                "Time dependent reliability requires the load cycle"
+                "be a single, representative cycle"
             )
 
         # Do it this way so we can vectorize
@@ -366,9 +364,6 @@ class CrackShapeDependent(WeibullFailureModel):
           dalpha:         increment of angle alpha to be used in evaluating integral
           dbeta:          increment of angle beta to be used in evaluating integral
         """
-
-        # Principal stresses
-        pstress = self.calculate_principal_stress(mandel_stress)
 
         # Material parameters
         self.temperatures = temperatures
@@ -745,9 +740,6 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
-        # Material parameters
-        nu = np.mean(material.nu(temperatures), axis=0)
-
         # Evaluating integral for kbar while suppressing warning given when
         # negative numbers are raised to rational numbers
         with np.errstate(invalid="ignore"):
@@ -891,9 +883,6 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
 
-        # Material parameters
-        nu = np.mean(material.nu(temperatures), axis=0)
-
         # Calculating kbar
         with np.errstate(invalid="ignore"):
             integral2 = 2 * (
@@ -954,7 +943,6 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)
-        cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Evaluating integral for kbar while suppressing warning given when
         # negative numbers are raised to rational numbers
@@ -1029,7 +1017,6 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         mavg = np.mean(mvals, axis=0)
 
         # Material parameters
-        nu = np.mean(material.nu(temperatures), axis=0)
         cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Evaluating integral for kbar while suppressing warning given when
