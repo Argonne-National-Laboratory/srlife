@@ -4,12 +4,12 @@
   creep-fatigue damage given completely-solved tube results and
   damage material properties
 """
-from srlife import receiver
-
 import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
 import multiprocess
+
+from srlife import receiver
 
 
 class WeibullFailureModel:
