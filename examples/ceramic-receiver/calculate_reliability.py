@@ -48,6 +48,8 @@ def sample_parameters():
     params["system"]["miter"] = 10
     params["system"]["verbose"] = False
 
+    params["damage"]["shear_sensitive"] = True
+
     # How to extrapolate damage forward in time based on the cycles provided
     # Options:
     #     "lump" = D_future = sum(D_simulated) / N * days
@@ -76,12 +78,14 @@ if __name__ == "__main__":
     # Damage model to use in calculating life
     # damage_model = damage.SMMModelPennyShapedFlaw(params["damage"])
     damage_models = [
-        # damage.PIAModel(params["damage"]),
-        # damage.WNTSAModel(params["damage"]),
-        # damage.MTSModelGriffithFlaw(params["damage"]), damage.MTSModelPennyShapedFlaw(params["damage"]),
-        # damage.CSEModelGriffithFlaw(params["damage"]), damage.CSEModelPennyShapedFlaw(params["damage"]),
+        damage.PIAModel(params["damage"]),
+        damage.WNTSAModel(params["damage"]),
+        damage.MTSModelGriffithFlaw(params["damage"]),
+        damage.MTSModelPennyShapedFlaw(params["damage"]),
+        damage.CSEModelGriffithFlaw(params["damage"]),
+        damage.CSEModelPennyShapedFlaw(params["damage"]),
         damage.SMMModelGriffithFlaw(params["damage"]),
-        # damage.SMMModelPennyShapedFlaw(params["damage"])
+        damage.SMMModelPennyShapedFlaw(params["damage"]),
     ]
 
     # Load the materials

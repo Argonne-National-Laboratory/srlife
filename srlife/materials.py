@@ -703,7 +703,7 @@ class StandardCeramicMaterial:
     3) Constant c_bar parameter
     4) Constant Poisson's ratio
     5) Fatigue exponent parameter Nv depends on temperature
-    6) Faitgue parameter Bv depends on temperature
+    6) Fatigue parameter Bv depends on temperature
     """
 
     def __init__(
