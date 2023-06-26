@@ -594,8 +594,6 @@ class WNTSAModel(CrackShapeIndependent):
                           and fatigue parameters (Bv,Nv)
           tot_time:       total service time used as input to calculate reliability
         """
-        # Principal stresses
-        pstress = self.calculate_principal_stress(mandel_stress)
 
         # CARES/LIFE cutoff
         # if self.cares_cutoff:
