@@ -715,9 +715,9 @@ class StandardCeramicMaterial:
         c_bar,
         nu,
         Nv_temperatures,
-        Nv,
+        Nvvals,
         Bv_temperatures,
-        Bv,
+        Bvvals,
         *args,
         **kwargs
     ):
