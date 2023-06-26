@@ -75,7 +75,7 @@ class WeibullFailureModel:
         return pstress
 
     def determine_reliability(
-        self, receiver, material, time, nthreads=1, decorator=lambda x, n: x
+        self, self.receiver, material, time, nthreads=1, decorator=lambda x, n: x
     ):
         """
         Determine the reliability of the tubes in the receiver by calculating individual
