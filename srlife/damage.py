@@ -9,9 +9,6 @@ import numpy.linalg as la
 import scipy.optimize as opt
 import multiprocess
 
-from srlife import receiver
-
-
 class WeibullFailureModel:
     """Parent class for time independent Weibull failure models
 
