@@ -7,5 +7,5 @@ jobs:
             - uses: actions/checkout@v2
             - run: sudo apt-get install python3-setuptools python3-pip
             - run: pip3 install --user -r requirements.txt
-            # - run: pylint srlife
+            - run: pylint srlife
             - run: black --check srlife test
