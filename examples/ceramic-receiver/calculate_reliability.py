@@ -76,7 +76,6 @@ if __name__ == "__main__":
     # Define the system solver to use in solving the coupled structural system
     system_solver = system.SpringSystemSolver(params["system"])
     # Damage model to use in calculating life
-    # damage_model = damage.SMMModelPennyShapedFlaw(params["damage"])
     damage_models = [
         damage.PIAModel(params["damage"]),
         damage.WNTSAModel(params["damage"]),
@@ -129,9 +128,6 @@ if __name__ == "__main__":
         print(reliability["overall_reliability"])
         print("Minimum tube reliabilities:")
         print(min(reliability["tube_reliability"]))
-
-        # print("Overall structure reliability:")
-        # print(reliability["overall_reliability"])
 
         file.write("model = %s \n" % (damage_model))
         file.write(
