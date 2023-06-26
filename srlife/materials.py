@@ -768,13 +768,13 @@ class StandardCeramicMaterial:
         else:
             return self.nu_val * np.ones(T.shape)
 
-    def Nv(self, T):
+    def fatigue_Nv(self, T):
         """
         Fatigue exponent parameter as a function of temperature
         """
         return self.Nv(T)
 
-    def Bv(self, T):
+    def fatigue_Bv(self, T):
         """
         Fatigue parameter as a function of temperature
         """
