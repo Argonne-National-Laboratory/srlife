@@ -498,7 +498,7 @@ class StructuralMaterial:
                 polysum = 0.0
                 if erange <= cutoff[i]:
                     erange = cutoff[i][0][0]
-                for (b, m) in zip(a[i][0], n[i][0]):
+                for b, m in zip(a[i][0], n[i][0]):
                     polysum += b * np.log10(erange) ** m
                 break
 
@@ -529,7 +529,7 @@ class StructuralMaterial:
         not_zeros = np.logical_not(zeros)
 
         res = np.zeros(stress.shape)
-        for (b, m) in zip(a, n):
+        for b, m in zip(a, n):
             res[not_zeros] += b * np.log10(stress[not_zeros]) ** m
         res[not_zeros] = 10.0 ** (res[not_zeros] / temp[not_zeros] - C)
         res[zeros] = np.inf
@@ -702,6 +702,8 @@ class StandardCeramicMaterial:
     2) Weibull modulus depends on temperature
     3) Constant c_bar parameter
     4) Constant Poisson's ratio
+    5) Fatigue exponent parameter Nv depends on temperature
+    6) Faitgue parameter Bv depends on temperature
     """
 
     def __init__(
@@ -712,19 +714,29 @@ class StandardCeramicMaterial:
         modulus,
         c_bar,
         nu,
+        Nv_temperatures,
+        Nvvals,
+        Bv_temperatures,
+        Bvvals,
         *args,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
 
-        self.s0 = inter.interp1d(s_temperatures, strengths)
         self.s_temperatures = s_temperatures
         self.strengths = strengths
+        self.s0 = inter.interp1d(s_temperatures, strengths)
         self.m_temperatures = m_temperatures
         self.mvals = modulus
         self.m = inter.interp1d(m_temperatures, modulus)
         self.C = c_bar
         self.nu_val = nu
+        self.Nv_temperatures = Nv_temperatures
+        self.Nvvals = Nvvals
+        self.Nv = inter.interp1d(Nv_temperatures, Nvvals)
+        self.Bv_temperatures = Bv_temperatures
+        self.Bvvals = Bvvals
+        self.Bv = inter.interp1d(Bv_temperatures, Bvvals)
 
     def strength(self, T):
         """
@@ -756,6 +768,18 @@ class StandardCeramicMaterial:
         else:
             return self.nu_val * np.ones(T.shape)
 
+    def fatigue_Nv(self, T):
+        """
+        Fatigue exponent parameter as a function of temperature
+        """
+        return self.Nv(T)
+
+    def fatigue_Bv(self, T):
+        """
+        Fatigue parameter as a function of temperature
+        """
+        return self.Bv(T)
+
     @classmethod
     def load(cls, node):
         """
@@ -765,13 +789,23 @@ class StandardCeramicMaterial:
           node:    node with model
         """
         strength = node.find("strength")
-        c_bar = node.find("c_bar")
         s_temps = strength.find("temperatures")
         svals = strength.find("values")
+
         m = node.find("modulus")
         m_temps = m.find("temperatures")
         mvals = m.find("values")
+
+        c_bar = node.find("c_bar")
         nu = node.find("nu")
+
+        Nv = node.find("fatigue_Nv")
+        Nv_temps = Nv.find("temperatures")
+        Nvvals = Nv.find("values")
+
+        Bv = node.find("fatigue_Bv")
+        Bv_temps = Bv.find("temperatures")
+        Bvvals = Bv.find("values")
 
         return StandardCeramicMaterial(
             np.array(list(map(float, s_temps.text.strip().split()))),
@@ -780,6 +814,10 @@ class StandardCeramicMaterial:
             np.array(list(map(float, mvals.text.strip().split()))),
             float(c_bar.text),
             float(nu.text),
+            np.array(list(map(float, Nv_temps.text.strip().split()))),
+            np.array(list(map(float, Nvvals.text.strip().split()))),
+            np.array(list(map(float, Bv_temps.text.strip().split()))),
+            np.array(list(map(float, Bvvals.text.strip().split()))),
         )
 
     def save(self, fname, modelname):
@@ -789,6 +827,7 @@ class StandardCeramicMaterial:
         root = ET.Element("models")
 
         base = ET.SubElement(root, modelname, {"type": "StandardModel"})
+
         strength = ET.SubElement(base, "strength")
         temps = ET.SubElement(strength, "temperatures")
         temps.text = " ".join(map(str, self.s_temperatures))
@@ -806,6 +845,18 @@ class StandardCeramicMaterial:
 
         nu = ET.SubElement(base, "nu")
         nu.text = str(self.nu_val)
+
+        Nv = ET.SubElement(base, "fatigue_Nv")
+        Nvtemps = ET.SubElement(Nv, "temperatures")
+        Nvtemps.text = " ".join(map(str, self.Nv_temperatures))
+        Nvvals = ET.SubElement(Nv, "values")
+        Nvvals.text = " ".join(map(str, self.Nvvals))
+
+        Bv = ET.SubElement(base, "fatigue_Bv")
+        Bvtemps = ET.SubElement(Bv, "temperatures")
+        Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
+        Bvvals = ET.SubElement(Bv, "values")
+        Bvvals.text = " ".join(map(str, self.Bvvals))
 
         tree = ET.ElementTree(element=root)
         tree.write(fname)

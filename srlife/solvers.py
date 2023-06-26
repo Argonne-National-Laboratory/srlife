@@ -5,6 +5,7 @@
 import numpy as np
 import numpy.linalg as la
 
+
 # pylint: disable=too-many-branches
 def newton(
     RJ,

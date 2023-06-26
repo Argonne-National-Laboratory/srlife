@@ -15,4 +15,19 @@
       <values>4.619e-06 4.619e-06 4.619e-06 5.139e-06 5.359e-06 5.465e-06 5.541e-06 5.622e-06 5.719e-06 5.834e-06 5.963e-06 6.104e-06 6.253e-06 6.408e-06 6.566e-06</values>
     </alpha>
   </elastic_model>
+  <cares type="SmallStrainElasticity">
+    <elastic type="IsotropicLinearElasticModel">
+      <m1 type="PiecewiseLinearInterpolate">
+        <points>293 473 673 873 1073 1273 1473 1673 1773</points>
+        <values>433000 429800 426200 422600 419000 415400 411800 408000 406400</values>
+      </m1>
+      <m1_type>youngs</m1_type>
+      <m2>0.16</m2>
+      <m2_type>poissons</m2_type>
+    </elastic>
+    <alpha type="PiecewiseLinearInterpolate">
+      <points>293 473 673 873 1073 1273 1473 1673 1773</points>
+      <values>3.05e-06 3.05e-06 3.03e-06 3.02e-06 3.02e-06 3.04e-06 3.11e-06 3.25e-06 3.35e-06</values>
+    </alpha>
+  </cares>
 </materials>

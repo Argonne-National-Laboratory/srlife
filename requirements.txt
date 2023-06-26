@@ -1,10 +1,10 @@
 numpy
-scipy
+scipy==1.9.2
 h5py
 vtk
 nose
 matplotlib
-pylint
+pylint==2.15.5
 neml
 scikit-fem
 meshio
@@ -15,3 +15,4 @@ dill
 parameterized
 black
 jax[cpu]
+absl-py
