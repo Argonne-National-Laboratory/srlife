@@ -469,7 +469,7 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # shear_sensitive = True
 
-        if self.shear_sensitive == True:
+        if self.shear_sensitive is True:
             kbar = self.calculate_kbar(
                 self.temperatures, self.material, self.A, self.dalpha, self.dbeta
             )
