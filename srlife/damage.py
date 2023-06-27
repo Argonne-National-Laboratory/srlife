@@ -159,9 +159,11 @@ class WeibullFailureModel:
             ),
             axes=(1, 2, 0),
         )
-        
+
         surface_elements, surface_normals = tube.surface_elements()
-        surface_stresses = self._calculate_surface_stresses(stresses, surface_elements, surface_normals)
+        surface_stresses = self._calculate_surface_stresses(
+            stresses, surface_elements, surface_normals
+        )
 
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
@@ -192,9 +194,9 @@ class WeibullFailureModel:
 
         Parameters:
             stresses (np.array): tube stress array in Mandel convention
-            surface_elements (np.array): boolean indexing array giving 
+            surface_elements (np.array): boolean indexing array giving
                 which elements are on the surface
-            surface_normals (np.array): surface normals, for those 
+            surface_normals (np.array): surface normals, for those
                 elements on the surface
 
         Returns:
@@ -204,18 +206,25 @@ class WeibullFailureModel:
 
         surf_stress = np.zeros_like(full_stress)
 
-        nx = surface_normals[...,0]
-        ny = surface_normals[...,1]
-        nz = surface_normals[...,2]
+        nx = surface_normals[..., 0]
+        ny = surface_normals[..., 1]
+        nz = surface_normals[..., 2]
 
-        P = np.array([
-            [1-nx**2, -nx*ny, -nx*nz],
-            [-nx*ny, 1-ny**2, -ny*nz],
-            [-nx*nz, -ny*nz, 1-nz**2]]).transpose(2,0,1)
+        P = np.array(
+            [
+                [1 - nx**2, -nx * ny, -nx * nz],
+                [-nx * ny, 1 - ny**2, -ny * nz],
+                [-nx * nz, -ny * nz, 1 - nz**2],
+            ]
+        ).transpose(2, 0, 1)
 
-        surf_stress[:,surface_elements] = np.einsum('eik, bekl, ejl->beij', P[surface_elements], 
-                full_stress[:,surface_elements], P[surface_elements])
-        
+        surf_stress[:, surface_elements] = np.einsum(
+            "eik, bekl, ejl->beij",
+            P[surface_elements],
+            full_stress[:, surface_elements],
+            P[surface_elements],
+        )
+
         return surf_stress
 
 

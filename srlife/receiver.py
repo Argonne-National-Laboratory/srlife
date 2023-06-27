@@ -538,39 +538,39 @@ class Tube:
             np.array of surface normals (zeros for solids)
         """
         if self.ndim == 1:
-            surface = np.zeros((self.nr-1,), dtype = bool)
+            surface = np.zeros((self.nr - 1,), dtype=bool)
             surface[0] = True
             surface[-1] = True
             n = np.array([1.0, 0, 0])
-            normals = np.zeros((self.nr-1, 3))
+            normals = np.zeros((self.nr - 1, 3))
             normals[0] = -n
             normals[-1] = n
         elif self.ndim == 2:
-            r = np.zeros((self.nr-1,), dtype = bool)
+            r = np.zeros((self.nr - 1,), dtype=bool)
             r[0] = True
             r[-1] = True
-            theta = np.ones((self.nt,), dtype = bool)
+            theta = np.ones((self.nt,), dtype=bool)
             surface = np.outer(r, theta).flatten()
-            t = np.linspace(0, 2* np.pi, self.nt)
+            t = np.linspace(0, 2 * np.pi, self.nt)
             ns = np.vstack([np.cos(t), np.sin(t), np.zeros_like(t)]).T
-            normals = np.zeros((self.nr-1, self.nt, 3))
+            normals = np.zeros((self.nr - 1, self.nt, 3))
             normals[0] = -ns
             normals[-1] = ns
-            normals = normals.reshape((-1,3))
+            normals = normals.reshape((-1, 3))
         elif self.ndim == 3:
-            r = np.zeros((self.nr-1,), dtype = bool)
+            r = np.zeros((self.nr - 1,), dtype=bool)
             r[0] = True
             r[-1] = True
-            theta = np.ones((self.nt,), dtype = bool)
-            z = np.ones((self.nz-1,), dtype = bool)
-            surface = np.outer(np.outer(r, theta),z).flatten()
+            theta = np.ones((self.nt,), dtype=bool)
+            z = np.ones((self.nz - 1,), dtype=bool)
+            surface = np.outer(np.outer(r, theta), z).flatten()
 
-            t = np.linspace(0, 2* np.pi, self.nt)
+            t = np.linspace(0, 2 * np.pi, self.nt)
             ns = np.vstack([np.cos(t), np.sin(t), np.zeros_like(t)]).T
-            normals = np.zeros((self.nr-1, self.nt, self.nz-1, 3))
-            normals[0] = -ns[:,None]
-            normals[-1] = ns[:,None]
-            normals = normals.reshape((-1,3))
+            normals = np.zeros((self.nr - 1, self.nt, self.nz - 1, 3))
+            normals[0] = -ns[:, None]
+            normals[-1] = ns[:, None]
+            normals = normals.reshape((-1, 3))
         else:
             raise ValueError("Internal error: tube dimension is %i" % self.ndim)
 
