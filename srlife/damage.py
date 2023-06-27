@@ -167,16 +167,6 @@ class WeibullFailureModel:
             tube.times, stresses, temperatures, volumes, material, time
         )
 
-        # CARES/LIFE cutoff moved to each model
-        # if self.cares_cutoff:
-        #     pstress = self.calculate_principal_stress(stresses)
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + 1.0e-16)) > 3.0
-        #     mod_prob = inc_prob.flatten()
-        #     mod_prob[remove] = 0.0
-        #     inc_prob = mod_prob.reshape(inc_prob.shape)
-
         # Return the sums as a function of time along with the field itself
         inc_prob = np.array(list(inc_prob) * len(tube.times)).reshape(
             len(tube.times), -1
@@ -232,13 +222,6 @@ class CrackShapeIndependent(WeibullFailureModel):
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
-
-        # CARES/LIFE cutoff
-        # if self.cares_cutoff:
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + self.tolerance)) > 3.0
-        #     pstress[remove] = 0.0
 
         # Normal stress
         return (
@@ -296,13 +279,6 @@ class CrackShapeDependent(WeibullFailureModel):
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
 
-        # CARES/LIFE cutoff
-        # if self.cares_cutoff:
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + self.tolerance)) > 3.0
-        #     pstress[remove] = 0.0
-
         # Normal stress
         return (
             pstress[..., 0, None, None] * (self.l**2)
@@ -316,13 +292,6 @@ class CrackShapeDependent(WeibullFailureModel):
         """
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
-
-        # CARES/LIFE cutoff
-        # if self.cares_cutoff:
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + self.tolerance)) > 3.0
-        #     pstress[remove] = 0.0
 
         # Total stress
         return np.sqrt(
@@ -521,13 +490,6 @@ class PIAModel(CrackShapeIndependent):
         # Principal stresses
         pstress = self.calculate_principal_stress(mandel_stress)
 
-        # CARES/LIFE cutoff
-        # if self.cares_cutoff:
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + self.tolerance)) > 3.0
-        #     pstress[remove] = 0.0
-
         # Material parameters
         svals = material.strength(temperatures)
         mvals = material.modulus(temperatures)
@@ -592,13 +554,6 @@ class WNTSAModel(CrackShapeIndependent):
                           and fatigue parameters (Bv,Nv)
           tot_time:       total service time used as input to calculate reliability
         """
-
-        # CARES/LIFE cutoff
-        # if self.cares_cutoff:
-        #     pmax = np.max(pstress, axis=2)
-        #     pmin = np.min(pstress, axis=2)
-        #     remove = np.abs(pmin / (pmax + self.tolerance)) > 3.0
-        #     pstress[remove] = 0.0
 
         # Material parameters
         self.temperatures = temperatures
