@@ -31,10 +31,9 @@ class WeibullFailureModel:
         self.cares_cutoff = cares_cutoff
         self.shear_sensitive = pset.get_default("shear_sensitive", True)
 
-    def calculate_principal_stress(self, stress):
+    def _full_stress(self, stress):
         """
-        Calculate the principal stresses from Mandel vector and converts
-        to conventional notation
+        Calculate the full stress tensor for further processing
         """
         if stress.ndim == 2:
             tensor = np.zeros(
@@ -61,7 +60,15 @@ class WeibullFailureModel:
             for a, b in grp:
                 tensor[..., a, b] = stress[..., i] / m
 
-        # return la.eigvalsh(tensor)
+        return tensor
+
+    def calculate_principal_stress(self, stress):
+        """
+        Calculate the principal stresses from Mandel vector and converts
+        to conventional notation
+        """
+        tensor = self._full_stress(stress)
+
         pstress = la.eigvalsh(tensor)
 
         if self.cares_cutoff:
@@ -152,6 +159,9 @@ class WeibullFailureModel:
             ),
             axes=(1, 2, 0),
         )
+        
+        surface_elements, surface_normals = tube.surface_elements()
+        surface_stresses = self._calculate_surface_stresses(stresses, surface_elements, surface_normals)
 
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
@@ -175,6 +185,38 @@ class WeibullFailureModel:
         return np.sum(inc_prob, axis=1), np.transpose(
             np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
         )
+
+    def _calculate_surface_stresses(self, stresses, surface_elements, surface_normals):
+        """
+        Calculate the surface stresses (for those elements on the surface)
+
+        Parameters:
+            stresses (np.array): tube stress array in Mandel convention
+            surface_elements (np.array): boolean indexing array giving 
+                which elements are on the surface
+            surface_normals (np.array): surface normals, for those 
+                elements on the surface
+
+        Returns:
+            surface_stresses (np.array): (ntime, nelem, 6) array of surface stresses
+        """
+        full_stress = self._full_stress(stresses)
+
+        surf_stress = np.zeros_like(full_stress)
+
+        nx = surface_normals[...,0]
+        ny = surface_normals[...,1]
+        nz = surface_normals[...,2]
+
+        P = np.array([
+            [1-nx**2, -nx*ny, -nx*nz],
+            [-nx*ny, 1-ny**2, -ny*nz],
+            [-nx*nz, -ny*nz, 1-nz**2]]).transpose(2,0,1)
+
+        surf_stress[:,surface_elements] = np.einsum('eik, bekl, ejl->beij', P[surface_elements], 
+                full_stress[:,surface_elements], P[surface_elements])
+        
+        return surf_stress
 
 
 class CrackShapeIndependent(WeibullFailureModel):
