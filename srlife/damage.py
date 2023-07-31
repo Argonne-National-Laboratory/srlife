@@ -827,7 +827,7 @@ class CrackShapeDependent(WeibullFailureModel):
         B = material.Bs(temperatures)
 
         # Surface normals and surface elements
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -976,7 +976,7 @@ class CrackShapeDependent(WeibullFailureModel):
         # Surface normals and surface elements
         surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1116,7 +1116,7 @@ class PIAModel(CrackShapeIndependent):
         surface_normals = normals
         surface_elements = surface
         # surface_areas = areas
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1281,7 +1281,7 @@ class WNTSAModel(CrackShapeIndependent):
         # Surface normals and surface elements
         normals = surface_normals
         surface = surface_elements
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1411,7 +1411,7 @@ class WNTSAModel(CrackShapeIndependent):
         # Surface normals and surface elements
         surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1771,7 +1771,7 @@ class CSEModelGriffithNotch(CrackShapeDependent):
         # Surface normals and surface elements
         # surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
@@ -1922,7 +1922,7 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         # Surface normals and surface elements
         # surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Material parameters
         cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
@@ -2011,7 +2011,7 @@ class SMMModelGriffithNotch(CrackShapeDependent):
         # Surface normals and surface elements
         # surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Material parameters
         # nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
@@ -2191,9 +2191,9 @@ class SMMModelSemiCircularCrack(CrackShapeDependent):
         cbar:   Shetty model empirical constant (cbar)
         """
         # Surface normals and surface elements
-        surface_normals = normals
+        # surface_normals = normals
         surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements is True)
+        count_surface_elements = np.count_nonzero(surface_elements)
 
         # Material parameters
         # nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
