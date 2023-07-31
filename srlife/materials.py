@@ -846,7 +846,7 @@ class StandardCeramicMaterial:
         Nvvals = Nv.find("values")
 
         Ns = node.find("fatigue_Ns")
-        Nsvals = Nv.find("values")
+        Nsvals = Ns.find("values")
 
         Bv = node.find("fatigue_Bv")
         Bv_temps = Bv.find("temperatures")
@@ -880,17 +880,29 @@ class StandardCeramicMaterial:
 
         base = ET.SubElement(root, modelname, {"type": "StandardModel"})
 
-        strength = ET.SubElement(base, "strength")
-        temps = ET.SubElement(strength, "temperatures")
-        temps.text = " ".join(map(str, self.s_temperatures))
-        svals = ET.SubElement(strength, "values")
-        svals.text = " ".join(map(str, self.strengths))
+        strength_vol = ET.SubElement(base, "strength_vol")
+        s_temps = ET.SubElement(strength_vol, "temperatures")
+        s_temps.text = " ".join(map(str, self.s_temperatures))
+        svals_v = ET.SubElement(strength_vol, "values")
+        svals_v.text = " ".join(map(str, self.strengths_vol))
 
-        m = ET.SubElement(base, "modulus")
-        mtemps = ET.SubElement(m, "temperatures")
-        mtemps.text = " ".join(map(str, self.m_temperatures))
-        mvals = ET.SubElement(m, "values")
-        mvals.text = " ".join(map(str, self.mvals))
+        strength_surf = ET.SubElement(base, "strength_surf")
+        # s_temps = ET.SubElement(strength_vol, "temperatures")
+        # s_temps.text = " ".join(map(str, self.s_temperatures))
+        svals_s = ET.SubElement(strength_surf, "values")
+        svals_s.text = " ".join(map(str, self.strengths_surf))
+
+        m_v = ET.SubElement(base, "modulus_vol")
+        m_temps = ET.SubElement(m_v, "temperatures")
+        m_temps.text = " ".join(map(str, self.m_temperatures))
+        mvals_v = ET.SubElement(m_v, "values")
+        mvals_v.text = " ".join(map(str, self.mvals_v))
+
+        m_s = ET.SubElement(base, "modulus_surf")
+        # m_temps = ET.SubElement(m_v, "temperatures")
+        # m_temps.text = " ".join(map(str, self.m_temperatures))
+        mvals_s = ET.SubElement(m_s, "values")
+        mvals_s.text = " ".join(map(str, self.mvals_s))
 
         c_bar = ET.SubElement(base, "c_bar")
         c_bar.text = str(self.C)
@@ -904,11 +916,23 @@ class StandardCeramicMaterial:
         Nvvals = ET.SubElement(Nv, "values")
         Nvvals.text = " ".join(map(str, self.Nvvals))
 
+        Ns = ET.SubElement(base, "fatigue_Ns")
+        # Nvtemps = ET.SubElement(Nv, "temperatures")
+        # Nvtemps.text = " ".join(map(str, self.Nv_temperatures))
+        Nsvals = ET.SubElement(Ns, "values")
+        Nsvals.text = " ".join(map(str, self.Nsvals))
+
         Bv = ET.SubElement(base, "fatigue_Bv")
         Bvtemps = ET.SubElement(Bv, "temperatures")
         Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
         Bvvals = ET.SubElement(Bv, "values")
         Bvvals.text = " ".join(map(str, self.Bvvals))
 
+        Bs = ET.SubElement(base, "fatigue_Bs")
+        # Bvtemps = ET.SubElement(Bv, "temperatures")
+        # Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
+        Bsvals = ET.SubElement(Bs, "values")
+        Bsvals.text = " ".join(map(str, self.Bsvals))
+        
         tree = ET.ElementTree(element=root)
         tree.write(fname)
