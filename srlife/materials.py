@@ -880,17 +880,17 @@ class StandardCeramicMaterial:
 
         base = ET.SubElement(root, modelname, {"type": "StandardModel"})
 
-        strength_vol = ET.SubElement(base, "strength_vol")
-        s_temps = ET.SubElement(strength_vol, "temperatures")
+        strength_v = ET.SubElement(base, "strength_vol")
+        s_temps = ET.SubElement(strength_v, "temperatures")
         s_temps.text = " ".join(map(str, self.s_temperatures))
-        svals_v = ET.SubElement(strength_vol, "values")
-        svals_v.text = " ".join(map(str, self.strengths_vol))
+        svals_v = ET.SubElement(strength_v, "values")
+        svals_v.text = " ".join(map(str, self.strengths_v))
 
-        strength_surf = ET.SubElement(base, "strength_surf")
+        strength_s = ET.SubElement(base, "strength_surf")
         # s_temps = ET.SubElement(strength_vol, "temperatures")
         # s_temps.text = " ".join(map(str, self.s_temperatures))
-        svals_s = ET.SubElement(strength_surf, "values")
-        svals_s.text = " ".join(map(str, self.strengths_surf))
+        svals_s = ET.SubElement(strength_s, "values")
+        svals_s.text = " ".join(map(str, self.strengths_s))
 
         m_v = ET.SubElement(base, "modulus_vol")
         m_temps = ET.SubElement(m_v, "temperatures")
