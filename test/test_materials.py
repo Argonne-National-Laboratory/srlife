@@ -243,43 +243,69 @@ class TestStructuralMaterial(unittest.TestCase):
 class TestStandardCeramicMaterial(unittest.TestCase):
     def setUp(self):
         self.Ts = np.array([25.0, 800.0, 1000.0, 1200.0, 1400.0, 1500.0])
-        self.s0s = np.array([507.0, 467.0, 528.0, 570.0, 746.0, 461.0])
+        self.s0s_v = np.array([507.0, 467.0, 528.0, 570.0, 746.0, 461.0])
+        self.s0s_s = np.array([507.0, 467.0, 528.0, 570.0, 746.0, 461.0])
         self.mTs = np.array([25.0, 1500.0])
-        self.ms = np.array([10.7, 9.2])
+        self.ms_v = np.array([10.7, 9.2])
+        self.ms_s = np.array([10.7, 9.2])
         self.c_bar = 1.5
         self.nu = 0.17
         self.NvTs = np.array([25.0, 1000.0, 1500.0])
         self.Nvs = np.array([30.0, 30.0, 30.0])
+        self.Nss = np.array([30.0, 30.0, 30.0])
         self.BvTs = np.array([25.0, 1000.0, 1500.0])
         self.Bvs = np.array([320.0, 320.0, 320.0])
+        self.Bss = np.array([320.0, 320.0, 320.0])
 
         self.mat = materials.StandardCeramicMaterial(
             self.Ts,
-            self.s0s,
+            self.s0s_v,
+            self.s0s_s,
             self.mTs,
-            self.ms,
+            self.ms_v,
+            self.ms_s,
             self.c_bar,
             self.nu,
             self.NvTs,
             self.Nvs,
+            self.Nss,
             self.BvTs,
             self.Bvs,
+            self.Bss,
         )
 
-    def test_strength(self):
-        ifn = inter.interp1d(self.Ts, self.s0s)
+    def test_strength_vol(self):
+        ifn = inter.interp1d(self.Ts, self.s0s_v)
         T = 1099.1
 
-        a = self.mat.strength(T)
+        a = self.mat.strength_vol(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
+    
+    def test_strength_surf(self):
+        ifn = inter.interp1d(self.Ts, self.s0s_s)
+        T = 1099.1
+
+        a = self.mat.strength_surf(T)
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
 
-    def test_m(self):
-        ifn = inter.interp1d(self.mTs, self.ms)
+    def test_m_v(self):
+        ifn = inter.interp1d(self.mTs, self.ms_v)
         T = 1099.1
 
-        a = self.mat.modulus(T)
+        a = self.mat.modulus_vol(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
+    
+    def test_m_s(self):
+        ifn = inter.interp1d(self.mTs, self.ms_s)
+        T = 1099.1
+
+        a = self.mat.modulus_surf(T)
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
@@ -307,12 +333,30 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
+    
+    def test_Ns(self):
+        ifn = inter.interp1d(self.NvTs, self.Nss)
+        T = 1099.1
+
+        a = self.mat.Ns(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
 
     def test_Bv(self):
         ifn = inter.interp1d(self.BvTs, self.Bvs)
         T = 1099.1
 
         a = self.mat.Bv(T)
+        b = ifn(T)
+
+        self.assertAlmostEqual(a, b)
+    
+    def test_Bs(self):
+        ifn = inter.interp1d(self.BvTs, self.Bss)
+        T = 1099.1
+
+        a = self.mat.Bs(T)
         b = ifn(T)
 
         self.assertAlmostEqual(a, b)
@@ -323,16 +367,20 @@ class TestStandardCeramicMaterial(unittest.TestCase):
         test = materials.CeramicMaterial.load(tfile, "blah")
 
         self.assertTrue(np.allclose(test.s_temperatures, self.Ts))
-        self.assertTrue(np.allclose(test.strengths, self.s0s))
+        self.assertTrue(np.allclose(test.strengths_v, self.s0s_v))
+        self.assertTrue(np.allclose(test.strengths_s, self.s0s_s))
 
         self.assertTrue(np.allclose(test.m_temperatures, self.mTs))
-        self.assertTrue(np.allclose(test.mvals, self.ms))
+        self.assertTrue(np.allclose(test.mvals_v, self.ms_v))
+        self.assertTrue(np.allclose(test.mvals_s, self.ms_s))
 
         self.assertTrue(np.isclose(test.C, self.c_bar))
         self.assertTrue(np.isclose(test.nu_val, self.nu))
 
         self.assertTrue(np.allclose(test.Nv_temperatures, self.NvTs))
         self.assertTrue(np.allclose(test.Nvvals, self.Nvs))
+        self.assertTrue(np.allclose(test.Nsvals, self.Nss))
 
         self.assertTrue(np.allclose(test.Bv_temperatures, self.BvTs))
         self.assertTrue(np.allclose(test.Bvvals, self.Bvs))
+        self.assertTrue(np.allclose(test.Bsvals, self.Bss))
