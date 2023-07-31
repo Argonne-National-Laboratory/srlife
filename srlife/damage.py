@@ -8,6 +8,7 @@ import numpy as np
 import numpy.linalg as la
 import scipy.optimize as opt
 import multiprocess
+from scipy.special import gamma
 
 
 class WeibullFailureModel:
@@ -95,11 +96,13 @@ class WeibullFailureModel:
           nthreads        number of threads
           decorator       progress bar
         """
+
+        # Volume results
         with multiprocess.Pool(nthreads) as p:
-            results = list(
+            volume_results = list(
                 decorator(
                     p.imap(
-                        lambda x: self.tube_log_reliability(
+                        lambda x: self.tube_volume_log_reliability(
                             x, material, receiver, time
                         ),
                         receiver.tubes,
@@ -108,11 +111,39 @@ class WeibullFailureModel:
                 )
             )
 
-        p_tube = np.array([res[0] for res in results])
-        tube_fields = [res[1] for res in results]
+        # Surface results
+        with multiprocess.Pool(nthreads) as p:
+            surface_results = list(
+                decorator(
+                    p.imap(
+                        lambda x: self.tube_surface_log_reliability(
+                            x, material, receiver, time
+                        ),
+                        receiver.tubes,
+                    ),
+                    receiver.ntubes,
+                )
+            )
+        # Total results
+        with multiprocess.Pool(nthreads) as p:
+            total_results = list(
+                decorator(
+                    p.imap(
+                        lambda x: self.tube_total_log_reliability(
+                            x, material, receiver, time
+                        ),
+                        receiver.tubes,
+                    ),
+                    receiver.ntubes,
+                )
+            )
+
+        # Volume
+        p_tube_volume = np.array([res[0] for res in volume_results])
+        tube_fields_volume = [res[1] for res in volume_results]
 
         # Tube reliability is the minimum of all the time steps
-        tube = np.min(p_tube, axis=1)
+        tube_volume = np.min(p_tube_volume, axis=1)
 
         # Panel reliability
         tube_multipliers = np.array(
@@ -121,23 +152,81 @@ class WeibullFailureModel:
                 for (pi, p) in receiver.panels.items()
             ]
         )
-        panel = np.sum(tube.reshape(receiver.npanels, -1) * tube_multipliers, axis=1)
+        panel_volume = np.sum(
+            tube_volume.reshape(receiver.npanels, -1) * tube_multipliers, axis=1
+        )
 
         # Overall reliability
-        overall = np.sum(panel)
+        overall_volume = np.sum(panel_volume)
 
         # Add the field to the tubes
-        for tubei, field in zip(receiver.tubes, tube_fields):
+        for tubei, field in zip(receiver.tubes, tube_fields_volume):
+            tubei.add_quadrature_results("log_reliability", field)
+
+        # Surface
+        p_tube_surface = np.array([res[0] for res in surface_results])
+        tube_fields_surface = [res[1] for res in surface_results]
+
+        # Tube reliability is the minimum of all the time steps
+        tube_surface = np.min(p_tube_surface, axis=1)
+
+        # Panel reliability
+        tube_multipliers = np.array(
+            [
+                [t.multiplier_val for (ti, t) in p.tubes.items()]
+                for (pi, p) in receiver.panels.items()
+            ]
+        )
+        panel_surface = np.sum(
+            tube_surface.reshape(receiver.npanels, -1) * tube_multipliers, axis=1
+        )
+
+        # Overall reliability
+        overall_surface = np.sum(panel_surface)
+
+        # Add the field to the tubes
+        for tubei, field in zip(receiver.tubes, tube_fields_surface):
+            tubei.add_quadrature_results("log_reliability", field)
+
+        # Total
+        p_tube_total = np.array([res[0] for res in total_results])
+        tube_fields_total = [res[1] for res in total_results]
+
+        # Tube reliability is the minimum of all the time steps
+        tube_total = np.min(p_tube_total, axis=1)
+
+        # Panel reliability
+        tube_multipliers = np.array(
+            [
+                [t.multiplier_val for (ti, t) in p.tubes.items()]
+                for (pi, p) in receiver.panels.items()
+            ]
+        )
+        panel_total = np.sum(
+            tube_total.reshape(receiver.npanels, -1) * tube_multipliers, axis=1
+        )
+
+        # Overall reliability
+        overall_total = np.sum(panel_total)
+
+        # Add the field to the tubes
+        for tubei, field in zip(receiver.tubes, tube_fields_total):
             tubei.add_quadrature_results("log_reliability", field)
 
         # Convert back from log-prob as we go
         return {
-            "tube_reliability": np.exp(tube),
-            "panel_reliability": np.exp(panel),
-            "overall_reliability": np.exp(overall),
+            "tube_reliability_volume": np.exp(tube_volume),
+            "panel_reliability_volume": np.exp(panel_volume),
+            "overall_reliability_volume": np.exp(overall_volume),
+            "tube_reliability_surface": np.exp(tube_surface),
+            "panel_reliability_surface": np.exp(panel_surface),
+            "overall_reliability_surface": np.exp(overall_surface),
+            "tube_reliability_total": np.exp(tube_total),
+            "panel_reliability_total": np.exp(panel_total),
+            "overall_reliability_total": np.exp(overall_total),
         }
 
-    def tube_log_reliability(self, tube, material, receiver, time):
+    def tube_volume_log_reliability(self, tube, material, receiver, time):
         """
         Calculate the log reliability of a single tube
         """
@@ -160,11 +249,6 @@ class WeibullFailureModel:
             axes=(1, 2, 0),
         )
 
-        surface_elements, surface_normals = tube.surface_elements()
-        surface_stresses = self._calculate_surface_stresses(
-            stresses, surface_elements, surface_normals
-        )
-
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
         # Figure out the number of repetitions of the load cycle
@@ -174,9 +258,130 @@ class WeibullFailureModel:
                 "be a single, representative cycle"
             )
 
-        # Do it this way so we can vectorize
-        inc_prob = self.calculate_element_log_reliability(
+        # Volume element log reliability
+        inc_prob = self.calculate_volume_element_log_reliability(
             tube.times, stresses, temperatures, volumes, material, time
+        )
+
+        # Return the sums as a function of time along with the field itself
+        inc_prob = np.array(list(inc_prob) * len(tube.times)).reshape(
+            len(tube.times), -1
+        )
+
+        return np.sum(inc_prob, axis=1), np.transpose(
+            np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
+        )
+
+    def tube_surface_log_reliability(self, tube, material, receiver, time):
+        """
+        Calculate the log reliability of a single tube
+        """
+        # volumes = tube.element_volumes()
+
+        stresses = np.transpose(
+            np.mean(
+                np.stack(
+                    (
+                        tube.quadrature_results["stress_xx"],
+                        tube.quadrature_results["stress_yy"],
+                        tube.quadrature_results["stress_zz"],
+                        tube.quadrature_results["stress_yz"],
+                        tube.quadrature_results["stress_xz"],
+                        tube.quadrature_results["stress_xy"],
+                    )
+                ),
+                axis=-1,
+            ),
+            axes=(1, 2, 0),
+        )
+        # Getting surface elements, surface normals and surface areas from surface_elements function
+        surface_elements, surface_normals, surface_areas = tube.surface_elements()
+        surface_stresses = self._calculate_surface_stresses(
+            stresses, surface_elements, surface_normals
+        )
+        temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
+
+        # Figure out the number of repetitions of the load cycle
+        if receiver.days != 1:
+            raise RuntimeError(
+                "Time dependent reliability requires the load cycle"
+                "be a single, representative cycle"
+            )
+
+        # Surface element log reliability
+        # Write a condition here to check here for attribute calculate_surface_element_log_reliability
+        # present in damage_model
+        inc_prob = self.calculate_surface_element_log_reliability(
+            tube.times,
+            stresses,
+            surface_elements,
+            surface_normals,
+            temperatures,
+            surface_areas,
+            material,
+            time,
+        )
+
+        # Return the sums as a function of time along with the field itself
+        inc_prob = np.array(list(inc_prob) * len(tube.times)).reshape(
+            len(tube.times), -1
+        )
+
+        return np.sum(inc_prob, axis=1), np.transpose(
+            np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
+        )
+
+    def tube_total_log_reliability(self, tube, material, receiver, time):
+        """
+        Calculate the log reliability of a single tube
+        """
+        volumes = tube.element_volumes()
+
+        stresses = np.transpose(
+            np.mean(
+                np.stack(
+                    (
+                        tube.quadrature_results["stress_xx"],
+                        tube.quadrature_results["stress_yy"],
+                        tube.quadrature_results["stress_zz"],
+                        tube.quadrature_results["stress_yz"],
+                        tube.quadrature_results["stress_xz"],
+                        tube.quadrature_results["stress_xy"],
+                    )
+                ),
+                axis=-1,
+            ),
+            axes=(1, 2, 0),
+        )
+        # Getting surface elements, surface normals and surface areas from surface_elements function
+        surface_elements, surface_normals, surface_areas = tube.surface_elements()
+        surface_stresses = self._calculate_surface_stresses(
+            stresses, surface_elements, surface_normals
+        )
+        # Indices where surface elements is True
+        surface_indices = np.where(surface_elements)[0]
+        temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
+
+        # Figure out the number of repetitions of the load cycle
+        if receiver.days != 1:
+            raise RuntimeError(
+                "Time dependent reliability requires the load cycle"
+                "be a single, representative cycle"
+            )
+
+        # Total combined element log reliability
+        inc_prob = self.calculate_volume_element_log_reliability(
+            tube.times, stresses, temperatures, volumes, material, time
+        )
+        inc_prob[surface_indices] += self.calculate_surface_element_log_reliability(
+            tube.times,
+            stresses,
+            surface_elements,
+            surface_normals,
+            temperatures,
+            surface_areas,
+            material,
+            time,
         )
 
         # Return the sums as a function of time along with the field itself
@@ -206,9 +411,19 @@ class WeibullFailureModel:
 
         surf_stress = np.zeros_like(full_stress)
 
-        nx = surface_normals[..., 0]
-        ny = surface_normals[..., 1]
-        nz = surface_normals[..., 2]
+        # If surface stresses do no have the number of surfaces add a new axis for them
+        if surf_stress.ndim == 4:
+            surf_stress = surf_stress[..., np.newaxis, :]
+
+        # If surface normals do no have the number of surfaces add a new axis for them
+        if surface_normals.ndim == 2:
+            nx = surface_normals[..., np.newaxis, 0]
+            ny = surface_normals[..., np.newaxis, 1]
+            nz = surface_normals[..., np.newaxis, 2]
+        elif surface_normals.ndim == 3:
+            nx = surface_normals[..., 0]
+            ny = surface_normals[..., 1]
+            nz = surface_normals[..., 2]
 
         P = np.array(
             [
@@ -216,16 +431,37 @@ class WeibullFailureModel:
                 [-nx * ny, 1 - ny**2, -ny * nz],
                 [-nx * nz, -ny * nz, 1 - nz**2],
             ]
-        ).transpose(2, 0, 1)
+        ).transpose(2, 0, 1, 3)
 
-        surf_stress[:, surface_elements] = np.einsum(
-            "eik, bekl, ejl->beij",
+        surf_stress = np.einsum(
+            "esik, tekl, esjl->tesij",
             P[surface_elements],
             full_stress[:, surface_elements],
             P[surface_elements],
         )
 
         return surf_stress
+
+    def calculate_surface_principal_stress(
+        self, stresses, surface_elements, surface_normals
+    ):
+        """
+        Calculate the principal stresses from Mandel vector and converts
+        to conventional notation
+        """
+        surf_tensor = self._calculate_surface_stresses(
+            stresses, surface_elements, surface_normals
+        )
+
+        surf_pstress = la.eigvalsh(surf_tensor)
+
+        if self.cares_cutoff:
+            smax = np.max(surf_pstress, axis=-1)
+            smin = np.min(surf_pstress, axis=-1)
+            remove = np.abs(smin / (smax + self.tolerance)) > 3.0
+            surf_pstress[remove] = 0.0
+
+        return surf_pstress
 
 
 class CrackShapeIndependent(WeibullFailureModel):
@@ -250,23 +486,33 @@ class CrackShapeIndependent(WeibullFailureModel):
         self.nalpha = pset.get_default("nalpha", 21)
         self.nbeta = pset.get_default("nbeta", 31)
 
-        # Mesh grid of the vectorized angle values
+        # Mesh grid of the vectorized angle values for volume flaws
         self.A, self.B = np.meshgrid(
             np.linspace(0, np.pi, self.nalpha),
             np.linspace(0, 2 * np.pi, self.nbeta, endpoint=False),
             indexing="ij",
         )
 
-        # Increment of angles to be used in evaluating integral
+        # Vectorized angle values for surface flaws
+        self.C = np.linspace(0, 2 * np.pi, self.nbeta)
+
+        # Increment of angles to be used in evaluating integral for volume flaws
         self.dalpha = (self.A[-1, -1] - self.A[0, 0]) / (self.nalpha - 1)
         self.dbeta = (self.B[-1, -1] - self.B[0, 0]) / (self.nbeta - 1)
 
-        # Direction cosines
+        # Increment of angles to be used in evaluating integral for surface flaws
+        self.ddelta = (self.C[-1] - self.C[0]) / (self.nbeta - 1)
+
+        # Direction cosines for volume flaws
         self.l = np.cos(self.A)
         self.m = np.sin(self.A) * np.cos(self.B)
         self.n = np.sin(self.A) * np.sin(self.B)
 
-    def calculate_normal_stress(self, mandel_stress):
+        # Direction cosines for surface flaws
+        self.o = np.sin(self.C)
+        self.p = np.cos(self.C)
+
+    def calculate_volume_normal_stress(self, mandel_stress):
         """
         Use direction cosines to calculate the normal stress to
         a crack given the Mandel vector
@@ -280,6 +526,28 @@ class CrackShapeIndependent(WeibullFailureModel):
             + pstress[..., 1, None, None] * (self.m**2)
             + pstress[..., 2, None, None] * (self.n**2)
         )
+
+    def calculate_surface_normal_stress(self, mandel_stress, surface, normals):
+        """
+        Use direction cosines to calculate the normal stress to
+        a crack in surface elements given the Mandel vector
+        """
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+
+        # Principal stresses in surface elements
+        surf_pstress = self.calculate_surface_principal_stress(
+            mandel_stress, surface_elements, surface_normals
+        )
+
+        # Sorting
+        surf_pstress = np.sort(surf_pstress, axis=-1)[..., ::-1]
+
+        # Normal stress
+        return surf_pstress[..., 0, None, None] * (self.p**2) + surf_pstress[
+            ..., 1, None, None
+        ] * (self.o**2)
 
 
 class CrackShapeDependent(WeibullFailureModel):
@@ -313,16 +581,26 @@ class CrackShapeDependent(WeibullFailureModel):
             indexing="ij",
         )
 
-        # Increment of angles to be used in evaluating integral
+        # Vectorized angle values for surface flaws
+        self.C = np.linspace(0, np.pi / 2, self.nbeta)
+
+        # Increment of angles to be used in evaluating integral for volume flaws
         self.dalpha = (self.A[-1, -1] - self.A[0, 0]) / (self.nalpha - 1)
         self.dbeta = (self.B[-1, -1] - self.B[0, 0]) / (self.nbeta - 1)
 
-        # Direction cosines
+        # Increment of angles to be used in evaluating integral for surface flaws
+        self.ddelta = (self.C[-1] - self.C[0]) / (self.nbeta - 1)
+
+        # Direction cosines for volume flaws
         self.l = np.cos(self.A)
         self.m = np.sin(self.A) * np.cos(self.B)
         self.n = np.sin(self.A) * np.sin(self.B)
 
-    def calculate_normal_stress(self, mandel_stress):
+        # Direction cosines for surface flaws
+        self.o = np.sin(self.C)
+        self.p = np.cos(self.C)
+
+    def calculate_volume_normal_stress(self, mandel_stress):
         """
         Use direction cosines to calculate the normal stress to
         a crack given the Mandel vector
@@ -337,7 +615,29 @@ class CrackShapeDependent(WeibullFailureModel):
             + pstress[..., 2, None, None] * (self.n**2)
         )
 
-    def calculate_total_stress(self, mandel_stress):
+    def calculate_surface_normal_stress(self, mandel_stress, surface, normals):
+        """
+        Use direction cosines to calculate the normal stress to
+        a crack in surface elements given the Mandel vector
+        """
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+
+        # Principal stresses in surface elements
+        surf_pstress = self.calculate_surface_principal_stress(
+            mandel_stress, surface_elements, surface_normals
+        )
+
+        # Sorting
+        surf_pstress = np.sort(surf_pstress, axis=-1)[..., ::-1]
+
+        # Normal stress
+        return surf_pstress[..., 0, None, None] * (self.p**2) + surf_pstress[
+            ..., 1, None, None
+        ] * (self.o**2)
+
+    def calculate_volume_total_stress(self, mandel_stress):
         """
         Calculate the total stress given the Mandel vector
         """
@@ -351,20 +651,55 @@ class CrackShapeDependent(WeibullFailureModel):
             + ((pstress[..., 2, None, None] * self.n) ** 2)
         )
 
-    def calculate_shear_stress(self, mandel_stress):
+    def calculate_surface_total_stress(self, mandel_stress, surface, normals):
+        """
+        Calculate the total stress in surface elements given the Mandel vector
+        """
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+
+        # Principal stresses in surface elements
+        surf_pstress = self.calculate_surface_principal_stress(
+            mandel_stress, surface_elements, surface_normals
+        )
+
+        # Sorting
+        surf_pstress = np.sort(surf_pstress, axis=-1)[..., ::-1]
+
+        # Total stress
+        return np.sqrt(
+            ((surf_pstress[..., 0, None, None] * self.p) ** 2)
+            + ((surf_pstress[..., 1, None, None] * self.o) ** 2)
+        )
+
+    def calculate_volume_shear_stress(self, mandel_stress):
         """
         Calculate the shear stress given the normal and total stress
         """
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Total stress
-        sigma = self.calculate_total_stress(mandel_stress)
+        sigma = self.calculate_volume_total_stress(mandel_stress)
 
         # Shear stress
         return np.sqrt(sigma**2 - sigma_n**2)
 
-    def calculate_flattened_eq_stress(
+    def calculate_surface_shear_stress(self, mandel_stress, surface, normals):
+        """
+        Calculate the shear stress in surface elements given the normal and total stress
+        """
+        # Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Total stress
+        sigma = self.calculate_surface_total_stress(mandel_stress, surface, normals)
+
+        # Shear stress
+        return np.sqrt(sigma**2 - sigma_n**2)
+
+    def calculate_volume_flattened_eq_stress(
         self,
         time,
         mandel_stress,
@@ -398,17 +733,18 @@ class CrackShapeDependent(WeibullFailureModel):
         self.temperatures = temperatures
         self.material = material
         self.mandel_stress = mandel_stress
-        self.mvals = material.modulus(temperatures)
-        Nv = material.Nv(temperatures)
-        Bv = material.Bv(temperatures)
+
+        self.mvals = material.modulus_vol(temperatures)
+        N = material.Nv(temperatures)
+        B = material.Bv(temperatures)
 
         # Temperature average values
         mavg = np.mean(self.mvals, axis=0)
-        Nvavg = np.mean(Nv, axis=0)
-        Bvavg = np.mean(Bv, axis=0)
+        Navg = np.mean(N, axis=0)
+        Bavg = np.mean(B, axis=0)
 
         # Projected equivalent stresses
-        sigma_e = self.calculate_eq_stress(
+        sigma_e = self.calculate_volume_eq_stress(
             mandel_stress, self.temperatures, self.material
         )
 
@@ -423,8 +759,7 @@ class CrackShapeDependent(WeibullFailureModel):
             sigma_e[sigma_e < 0] = 0
             g = (
                 np.trapz(
-                    (sigma_e / (sigma_e_max + self.tolerance))
-                    ** Nvavg[..., None, None],
+                    (sigma_e / (sigma_e_max + self.tolerance)) ** Navg[..., None, None],
                     time,
                     axis=0,
                 )
@@ -434,11 +769,11 @@ class CrackShapeDependent(WeibullFailureModel):
             # Time dependent equivalent stress
             sigma_e_0 = (
                 (
-                    ((sigma_e_max ** Nvavg[..., None, None]) * g * tot_time)
-                    / Bvavg[..., None, None]
+                    ((sigma_e_max ** Navg[..., None, None]) * g * tot_time)
+                    / Bavg[..., None, None]
                 )
-                + (sigma_e_max ** (Nvavg[..., None, None] - 2))
-            ) ** (1 / (Nvavg[..., None, None] - 2))
+                + (sigma_e_max ** (Navg[..., None, None] - 2))
+            ) ** (1 / (Navg[..., None, None] - 2))
 
         # Defining area integral element wise
         integral = (
@@ -455,7 +790,102 @@ class CrackShapeDependent(WeibullFailureModel):
         flat = np.nansum(flat, axis=-1)
         return flat
 
-    def calculate_element_log_reliability(
+    def calculate_surface_flattened_eq_stress(
+        self,
+        time,
+        mandel_stress,
+        surface_elements,
+        surface_normals,
+        temperatures,
+        material,
+        tot_time,
+        ddelta,
+    ):
+        """
+        Calculate the integral of equivalent stresses given the material
+        properties and integration limits
+
+        Parameters:
+          time:           time instance variable for each stress/temperature
+          mandel_stress:  element stresses in Mandel convention
+          temperatures:   element temperatures
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals) and Weibull modulus (mvals)
+                          and fatigue parameters Bv and Nv
+          tot_time:       total service time used as input to calculate reliability
+
+        Additional Parameters:
+          A:              mesh grid of vectorized angle values
+          dalpha:         increment of angle alpha to be used in evaluating integral
+          dbeta:          increment of angle beta to be used in evaluating integral
+        """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+
+        mvals = material.modulus_surf(temperatures)
+        N = material.Ns(temperatures)
+        B = material.Bs(temperatures)
+
+        # Surface normals and surface elements
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)[:count_surface_elements]
+        Navg = np.mean(N, axis=0)[:count_surface_elements]
+        Bavg = np.mean(B, axis=0)[:count_surface_elements]
+
+        # Projected equivalent stresses
+        sigma_e = self.calculate_surface_eq_stress(
+            mandel_stress,
+            surface_elements,
+            surface_normals,
+            self.temperatures,
+            self.material,
+        )
+
+        # Max principal stresss over all time steps for each element
+        sigma_e_max = np.max(sigma_e, axis=0)
+
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
+        if np.all(time == 0):
+            sigma_e_0 = sigma_e
+        else:
+            sigma_e[sigma_e < 0] = 0
+            g = (
+                np.trapz(
+                    (sigma_e / (sigma_e_max + self.tolerance))
+                    ** Navg[..., None, None, None],
+                    time,
+                    axis=0,
+                )
+                / time[-1]
+            )
+
+            # Time dependent equivalent stress
+            sigma_e_0 = (
+                (
+                    ((sigma_e_max ** Navg[..., None, None, None]) * g * tot_time)
+                    / Bavg[..., None, None, None]
+                )
+                + (sigma_e_max ** (Navg[..., None, None, None] - 2))
+            ) ** (1 / (Navg[..., None, None, None] - 2))
+
+        # Defining area integral element wise
+        integral = (sigma_e_0 ** mavg[..., None, None, None]) * self.ddelta
+
+        # Flatten the last axis and calculate the mean of the positive values along that axis
+        flat = integral.reshape(integral.shape[:-2] + (-1,))
+
+        # Summing over area integral elements ignoring NaN values
+        flat = np.nansum(flat, axis=(-1, -2))
+
+        return flat
+
+    def calculate_volume_element_log_reliability(
         self, time, mandel_stress, temperatures, volumes, material, tot_time
     ):
         """
@@ -477,8 +907,8 @@ class CrackShapeDependent(WeibullFailureModel):
         self.mandel_stress = mandel_stress
 
         # Material parameters
-        svals = material.strength(temperatures)
-        mvals = material.modulus(temperatures)
+        svals = material.strength_vol(temperatures)
+        mvals = material.modulus_vol(temperatures)
         kvals = svals ** (-mvals)
 
         # Temperature average values
@@ -488,7 +918,7 @@ class CrackShapeDependent(WeibullFailureModel):
         # shear_sensitive = True
 
         if self.shear_sensitive is True:
-            kbar = self.calculate_kbar(
+            kbar = self.calculate_volume_kbar(
                 self.temperatures, self.material, self.A, self.dalpha, self.dbeta
             )
         else:
@@ -498,7 +928,7 @@ class CrackShapeDependent(WeibullFailureModel):
 
         # Equivalent stress raied to exponent mv
         flat = (
-            self.calculate_flattened_eq_stress(
+            self.calculate_volume_flattened_eq_stress(
                 time,
                 mandel_stress,
                 self.temperatures,
@@ -512,6 +942,78 @@ class CrackShapeDependent(WeibullFailureModel):
 
         return -(2 * kpvals / np.pi) * (flat**mavg) * volumes
 
+    def calculate_surface_element_log_reliability(
+        self,
+        time,
+        mandel_stress,
+        surface,
+        normals,
+        temperatures,
+        surface_areas,
+        material,
+        tot_time,
+    ):
+        """
+        Calculate the element log reliability given the equivalent stress
+
+        Parameters:
+          mandel_stress:    element stresses in Mandel convention
+          temperatures:     element temperatures
+          volumes:          element volumes
+          material:         material model object with required data that includes
+                            Weibull scale parameter (svals), Weibull modulus (mvals)
+                            and uniaxial and polyaxial crack density coefficient (kvals,kpvals)
+          shear_sensitive:  shear sensitivity condition for evaluating normalized
+                            crack density coefficient (kbar) using a
+                            numerically (when True) or using a fixed expression (when False)
+        """
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+
+        # Material parameters
+        svals = material.strength_surf(temperatures)
+        mvals = material.modulus_surf(temperatures)
+        kvals = svals ** (-mvals)
+
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)[:count_surface_elements]
+        kavg = np.mean(kvals, axis=0)[:count_surface_elements]
+
+        if self.shear_sensitive is True:
+            kbar = self.calculate_surface_kbar(
+                self.temperatures, self.material, self.A, self.dalpha
+            )
+        else:
+            # kbar = 2 * mavg + 1
+            kbar = (mavg * gamma(mavg) * np.sqrt(np.pi)) / (gamma(mavg + 0.5))
+
+        kbar = kbar[:count_surface_elements]
+        kpvals = kbar * kavg
+
+        # Equivalent stress raied to exponent mv
+        flat = (
+            self.calculate_surface_flattened_eq_stress(
+                time,
+                mandel_stress,
+                surface_elements,
+                surface_normals,
+                self.temperatures,
+                self.material,
+                tot_time,
+                self.ddelta,
+            )
+        ) ** (
+            1 / mavg
+        )  # mavg[..., None, None], axis=(-1, -2)
+
+        return -(2 * kpvals / np.pi) * (flat**mavg) * surface_areas
+
 
 class PIAModel(CrackShapeIndependent):
     """
@@ -521,11 +1023,11 @@ class PIAModel(CrackShapeIndependent):
     that are assumed to act independently on cracks
     """
 
-    def calculate_element_log_reliability(
+    def calculate_volume_element_log_reliability(
         self, time, mandel_stress, temperatures, volumes, material, tot_time
     ):
         """
-        Calculate the element log reliability
+        Calculate the element log reliability from volume elements only
 
         Parameters:
           time:           time instance variable for each stress/temperature
@@ -538,21 +1040,21 @@ class PIAModel(CrackShapeIndependent):
           tot_time:       total service time used as input to calculate reliability
         """
 
-        # Principal stresses
+        # Principal stresses in volume elements
         pstress = self.calculate_principal_stress(mandel_stress)
 
         # Material parameters
-        svals = material.strength(temperatures)
-        mvals = material.modulus(temperatures)
+        svals = material.strength_vol(temperatures)
+        mvals = material.modulus_vol(temperatures)
         kvals = svals ** (-mvals)
-        Nv = material.Nv(temperatures)
-        Bv = material.Bv(temperatures)
+        N = material.Nv(temperatures)
+        B = material.Bv(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
         kavg = np.mean(kvals, axis=0)
-        Nvavg = np.mean(Nv, axis=0)
-        Bvavg = np.mean(Bv, axis=0)
+        Navg = np.mean(N, axis=0)
+        Bavg = np.mean(B, axis=0)
 
         # Only tension
         pstress[pstress < 0] = 0
@@ -562,25 +1064,108 @@ class PIAModel(CrackShapeIndependent):
 
         # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
         # for time-independent and time-dependent cases
-        if np.all(time == 0):
-            pstress_0 = pstress
-        else:
-            g = (
-                np.trapz(
-                    (pstress / (pstress_max + 1.0e-14)) ** Nvavg[..., None],
-                    time,
-                    axis=0,
-                )
-                / time[-1]
+        g = (
+            np.trapz(
+                (pstress / (pstress_max + 1.0e-14)) ** Navg[..., None],
+                time,
+                axis=0,
             )
+            / time[-1]
+        )
 
-            # Time dependent principal stress
-            pstress_0 = (
-                (pstress_max ** Nvavg[..., None] * g * tot_time) / Bvavg[..., None]
-                + (pstress_max ** (Nvavg[..., None] - 2))
-            ) ** (1 / (Nvavg[..., None] - 2))
+        # Time dependent principal stress
+        pstress_0 = (
+            (pstress_max ** Navg[..., None] * g * tot_time) / Bavg[..., None]
+            + (pstress_max ** (Navg[..., None] - 2))
+        ) ** (1 / (Navg[..., None] - 2))
 
         return -kavg * np.sum(pstress_0 ** mavg[..., None], axis=-1) * volumes
+
+    def calculate_surface_element_log_reliability(
+        self,
+        time,
+        mandel_stress,
+        surface,
+        normals,
+        temperatures,
+        surface_areas,
+        material,
+        tot_time,
+    ):
+        """
+        Calculate the element log reliability from surface elements only
+
+        Parameters:
+          time:             time instance variable for each stress/temperature
+          mandel_stress:    element stresses in Mandel convention
+          temperatures:     element temperatures
+          volumes:          element volumes
+          material:         material model object with required data that includes
+                            Weibull scale parameter (svals), Weibull modulus (mvals)
+                            and fatigue parameters (Bv,Nv)
+          tot_time:         total service time used as input to calculate reliability
+          surface_normals:  np.array of surface normals (zeros for solids)
+          surface_elements: logical indexing array, True if on surface
+        """
+
+        # Material parameters
+        svals = material.strength_surf(temperatures)
+        mvals = material.modulus_surf(temperatures)
+        kvals = svals ** (-mvals)
+        N = material.Ns(temperatures)
+        B = material.Bs(temperatures)
+
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        # surface_areas = areas
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)[:count_surface_elements]
+        kavg = np.mean(kvals, axis=0)[:count_surface_elements]
+        Navg = np.mean(N, axis=0)[:count_surface_elements]
+        Bavg = np.mean(B, axis=0)[:count_surface_elements]
+
+        # Principal stresses in surface elements
+        surf_pstress = self.calculate_surface_principal_stress(
+            mandel_stress, surface_elements, surface_normals
+        )
+
+        # Only tension
+        surf_pstress[surf_pstress < 0] = 0
+
+        # Sorting
+        surf_pstress = np.sort(surf_pstress, axis=-1)[..., ::-1]
+
+        # Max principal surface stresss over all time steps for each element
+        surf_pstress_max = np.max(surf_pstress, axis=0)
+
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
+        g = (
+            np.trapz(
+                (surf_pstress / (surf_pstress_max + 1.0e-14)) ** Navg[..., None, None],
+                time,
+                axis=0,
+            )
+            / time[-1]
+        )
+
+        # Time dependent principal stress
+        surf_pstress_0 = (
+            (surf_pstress_max ** Navg[..., None, None] * g * tot_time)
+            / Bavg[..., None, None]
+            + (surf_pstress_max ** (Navg[..., None, None] - 2))
+        ) ** (1 / (Navg[..., None, None] - 2))
+
+        # Summing up over last two axes i.e. over the elements of surface stress and
+        # surfaces for which normals are there
+        return (
+            -kavg
+            * np.sum(surf_pstress_0 ** mavg[..., None, None], axis=(-1, -2))
+            * surface_areas
+        )
 
 
 class WNTSAModel(CrackShapeIndependent):
@@ -591,7 +1176,7 @@ class WNTSAModel(CrackShapeIndependent):
     area of a sphere, and uses it to calculate the element reliability
     """
 
-    def calculate_avg_normal_stress(
+    def calculate_volume_avg_normal_stress(
         self, time, mandel_stress, temperatures, material, tot_time
     ):
         """
@@ -611,17 +1196,17 @@ class WNTSAModel(CrackShapeIndependent):
         self.material = material
         self.mandel_stress = mandel_stress
 
-        mvals = material.modulus(temperatures)
-        Nv = material.Nv(temperatures)
-        Bv = material.Bv(temperatures)
+        mvals = material.modulus_vol(temperatures)
+        N = material.Nv(temperatures)
+        B = material.Bv(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
-        Nvavg = np.mean(Nv, axis=0)
-        Bvavg = np.mean(Bv, axis=0)
+        Navg = np.mean(N, axis=0)
+        Bavg = np.mean(B, axis=0)
 
         # Time dependent Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Considering only tensile stresses
         sigma_n[sigma_n < 0] = 0
@@ -636,8 +1221,7 @@ class WNTSAModel(CrackShapeIndependent):
         else:
             g = (
                 np.trapz(
-                    (sigma_n / (sigma_n_max + self.tolerance))
-                    ** Nvavg[..., None, None],
+                    (sigma_n / (sigma_n_max + self.tolerance)) ** Navg[..., None, None],
                     time,
                     axis=0,
                 )
@@ -647,11 +1231,11 @@ class WNTSAModel(CrackShapeIndependent):
             # Time dependent equivalent stress
             sigma_n_0 = (
                 (
-                    ((sigma_n_max ** Nvavg[..., None, None]) * g * tot_time)
-                    / Bvavg[..., None, None]
+                    ((sigma_n_max ** Navg[..., None, None]) * g * tot_time)
+                    / Bavg[..., None, None]
                 )
-                + (sigma_n_max ** (Nvavg[..., None, None] - 2))
-            ) ** (1 / (Nvavg[..., None, None] - 2))
+                + (sigma_n_max ** (Navg[..., None, None] - 2))
+            ) ** (1 / (Navg[..., None, None] - 2))
 
         integral = (
             (sigma_n_0 ** mavg[..., None, None])
@@ -666,7 +1250,92 @@ class WNTSAModel(CrackShapeIndependent):
         # Average stress from summing while ignoring NaN values
         return np.nansum(np.where(flat >= 0.0, flat, np.nan), axis=-1)
 
-    def calculate_element_log_reliability(
+    def calculate_surface_avg_normal_stress(
+        self,
+        time,
+        mandel_stress,
+        surface_elements,
+        surface_normals,
+        temperatures,
+        material,
+        tot_time,
+    ):
+        """
+        Calculate the average normal tensile stresses from the pricipal stresses
+
+        Parameters:
+          mandel_stress:  element stresses in Mandel convention
+          temperatures:   element temperatures
+          material:       material model object with required data that includes
+                          Weibull scale parameter (svals), Weibull modulus (mvals)
+                          and fatigue parameters (Bv,Nv)
+          tot_time:       total service time used as input to calculate reliability
+        """
+
+        # Material parameters
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+
+        mvals = material.modulus_surf(temperatures)
+        N = material.Ns(temperatures)
+        B = material.Bs(temperatures)
+
+        # Surface normals and surface elements
+        normals = surface_normals
+        surface = surface_elements
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)[:count_surface_elements]
+        Navg = np.mean(N, axis=0)[:count_surface_elements]
+        Bavg = np.mean(B, axis=0)[:count_surface_elements]
+
+        # Time dependent Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Considering only tensile stresses
+        sigma_n[sigma_n < 0] = 0
+
+        # Max normal stresss over all time steps for each element
+        sigma_n_max = np.max(sigma_n, axis=0)
+
+        # Calculating ratio of cyclic stress to max cyclic stress (in one cycle)
+        # for time-independent and time-dependent cases
+
+        if np.all(time == 0):
+            sigma_n_0 = sigma_n
+        else:
+            g = (
+                np.trapz(
+                    (sigma_n / (sigma_n_max + self.tolerance))
+                    ** Navg[..., None, None, None],
+                    time,
+                    axis=0,
+                )
+                / time[-1]
+            )
+
+            # Time dependent equivalent stress
+            sigma_n_0 = (
+                (
+                    ((sigma_n_max ** Navg[..., None, None, None]) * g * tot_time)
+                    / Bavg[..., None, None, None]
+                )
+                + (sigma_n_max ** (Navg[..., None, None, None] - 2))
+            ) ** (1 / (Navg[..., None, None, None] - 2))
+
+        integral = ((sigma_n_0 ** mavg[..., None, None, None]) * self.ddelta) / (
+            2 * np.pi
+        )
+
+        # Flatten the last axis and calculate the mean of the positive values along that axis
+        flat = integral.reshape(integral.shape[:-2] + (-1,))
+
+        # Average stress from summing while ignoring NaN values
+        return np.nansum(np.where(flat >= 0.0, flat, np.nan), axis=(-1, -2))
+
+    def calculate_volume_element_log_reliability(
         self, time, mandel_stress, temperatures, volumes, material, tot_time
     ):
         """
@@ -686,8 +1355,8 @@ class WNTSAModel(CrackShapeIndependent):
         self.mandel_stress = mandel_stress
 
         # Material parameters
-        svals = material.strength(temperatures)
-        mvals = material.modulus(temperatures)
+        svals = material.strength_vol(temperatures)
+        mvals = material.modulus_vol(temperatures)
         kvals = svals ** (-mvals)
 
         # Temperature average values
@@ -699,7 +1368,7 @@ class WNTSAModel(CrackShapeIndependent):
 
         # Average normal tensile stress raied to exponent mv
         avg_nstress = (
-            self.calculate_avg_normal_stress(
+            self.calculate_volume_avg_normal_stress(
                 time,
                 mandel_stress,
                 self.temperatures,
@@ -710,6 +1379,65 @@ class WNTSAModel(CrackShapeIndependent):
 
         return -kpvals * (avg_nstress**mavg) * volumes
 
+    def calculate_surface_element_log_reliability(
+        self,
+        time,
+        mandel_stress,
+        surface,
+        normals,
+        temperatures,
+        surface_areas,
+        material,
+        tot_time,
+    ):
+        """
+        Calculate the element log reliability
+
+        Parameters:
+          mandel_stress:    element stresses in Mandel convention
+          temperatures:     element temperatures
+          volumes:          element volumes
+          material:         material model object with required data that includes
+                            Weibull scale parameter (svals), Weibull modulus (mvals)
+                            and uniaxial and polyaxial crack density coefficient (kvals,kpvals)
+          tot_time:       total time at which to calculate reliability
+        """
+        self.temperatures = temperatures
+        self.material = material
+        self.mandel_stress = mandel_stress
+
+        # Material parameters
+        svals = material.strength_surf(temperatures)
+        mvals = material.modulus_surf(temperatures)
+        kvals = svals ** (-mvals)
+
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)[:count_surface_elements]
+        kavg = np.mean(kvals, axis=0)[:count_surface_elements]
+
+        # Polyaxial Batdorf crack density coefficient
+        kpvals = ((mavg * gamma(mavg) * np.sqrt(np.pi)) / (gamma(mavg + 0.5))) * kavg
+
+        # Average normal tensile stress raied to exponent mv
+        avg_nstress = (
+            self.calculate_surface_avg_normal_stress(
+                time,
+                mandel_stress,
+                surface_elements,
+                surface_normals,
+                self.temperatures,
+                self.material,
+                tot_time,
+            )
+        ) ** (1 / mavg)
+
+        return -kpvals * (avg_nstress**mavg) * surface_areas
+
 
 class MTSModelGriffithFlaw(CrackShapeDependent):
     """
@@ -719,20 +1447,20 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
     shear stresses in the maximum tensile stress fracture criterion for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
         """
         Calculate the equivalent stresses from the normal and shear stresses
         """
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_volume_shear_stress(mandel_stress)
 
         # Projected equivalent stress
         return 0.5 * (sigma_n + np.sqrt((sigma_n**2) + (tau**2)))
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
         using the Weibull scale parameter (svals), Weibull modulus (mvals),
@@ -743,7 +1471,7 @@ class MTSModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -780,7 +1508,7 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
     shear stresses in the maximum tensile stress fracture criterion for a penny shaped flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
         """
         Calculate the average normal tensile stresses from the normal and shear stresses
 
@@ -792,10 +1520,10 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         nu = np.mean(material.nu(temperatures), axis=0)
 
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_volume_shear_stress(mandel_stress)
 
         # Projected equivalent stress
         return 0.5 * (
@@ -803,7 +1531,7 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
             + np.sqrt((sigma_n**2) + ((tau / (1 - (0.5 * nu[..., None, None]))) ** 2))
         )
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
 
@@ -817,7 +1545,7 @@ class MTSModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -861,20 +1589,20 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
     for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
         """
         Calculate the equivalent stresses from the normal and shear stresses
         """
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_volume_shear_stress(mandel_stress)
 
         # Projected equivalent stress
         return np.sqrt((sigma_n**2) + (tau**2))
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
 
@@ -888,7 +1616,7 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -904,6 +1632,51 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
 
         return kbar
 
+    def calculate_surface_eq_stress(
+        self, mandel_stress, surface, normals, temperatures, material
+    ):
+        """
+        Calculate the equivalent stresses from the normal and shear stresses in surface elements
+        """
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+
+        # Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Shear stress
+        tau = self.calculate_surface_shear_stress(mandel_stress, surface, normals)
+
+        # Projected equivalent stress
+        return np.sqrt((sigma_n**2) + (tau**2))
+
+    def calculate_surface_kbar(self, temperatures, material, C, ddelta):
+        """
+        Calculate the evaluating normalized crack density coefficient (kbar)
+
+        Parameters:
+        temperatures:   element temperatures
+        material:       material model object with required data that includes
+                        Weibull modulus (mvals)
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus_surf(temperatures)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)
+
+        # Calculating kbar
+        integral2 = 2 * (((np.cos(self.C)) ** mavg[..., None, None]) * self.ddelta)
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
+
+        # remove 1 None and take sum over axis=(1) only
+        return kbar
+
 
 class CSEModelPennyShapedFlaw(CrackShapeDependent):
     """
@@ -914,7 +1687,7 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
     for a penny shaped flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
         """
         Calculate the equivalent stresses from the normal and shear stresses
 
@@ -926,15 +1699,15 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         nu = np.mean(material.nu(temperatures), axis=0)
 
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_volume_shear_stress(mandel_stress)
 
         # Projected equivalent stress
         return np.sqrt((sigma_n**2) + (tau / (1 - (0.5 * nu[..., None, None]))) ** 2)
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
 
@@ -948,7 +1721,7 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -979,6 +1752,86 @@ class CSEModelPennyShapedFlaw(CrackShapeDependent):
         return kbar
 
 
+class CSEModelGriffithNotch(CrackShapeDependent):
+    """
+    Coplanar strain energy failure model with a Griffith notch
+
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the coplanar strain energy fracture criterion
+    for a penny shaped flaw
+    """
+
+    def calculate_surface_eq_stress(
+        self, mandel_stress, surface, normals, temperatures, material
+    ):
+        """
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameter:
+        nu:     Poisson ratio
+        """
+
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Material parameters
+        nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
+
+        # Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Shear stress
+        tau = self.calculate_surface_shear_stress(mandel_stress, surface, normals)
+
+        # Projected equivalent stress
+        return np.sqrt(
+            (sigma_n**2) + (0.7951 / (1 - nu[..., None, None, None])) * tau**2
+        )
+        # remove 1 None
+
+    def calculate_surface_kbar(self, temperatures, material, C, ddelta):
+        """
+        Calculate the evaluating normalized crack density coefficient (kbar)
+
+        Parameters:
+        temperatures:   element temperatures
+        material:       material model object with required data that includes
+                        Weibull modulus (mvals), poisson ratio (nu)
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus_surf(temperatures)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)
+
+        # Material parameters
+        nu = np.mean(material.nu(temperatures), axis=0)
+
+        # Evaluating integral for kbar
+        integral2 = 2 * (
+            (
+                np.sqrt(
+                    ((np.cos(self.C)) ** 4)
+                    - (
+                        (0.198775 * (np.sin(2 * self.C)) ** 2)
+                        / (nu[..., None, None] - 1)
+                    )
+                )
+                ** mavg[..., None, None]
+            )
+            * self.ddelta
+        )
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
+        # remove 1 None and take sum over axis=(1) only
+        return kbar
+
+
 class SMMModelGriffithFlaw(CrackShapeDependent):
     """
     Shetty mixed-mod failure model with a Griffith flaw
@@ -988,7 +1841,7 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
     for a Griffith flaw
     """
 
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
         """
         Calculate the equivalent stresses from the normal and shear stresses
 
@@ -1000,17 +1853,17 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         cbar = np.mean(material.c_bar(temperatures), axis=0)
 
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_volume_shear_stress(mandel_stress)
 
         # Projected equivalent stress
         return 0.5 * (
             sigma_n + np.sqrt((sigma_n**2) + ((2 * tau / cbar[..., None, None]) ** 2))
         )
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
 
@@ -1025,7 +1878,7 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -1059,45 +1912,38 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
 
         return kbar
 
-
-class SMMModelPennyShapedFlaw(CrackShapeDependent):
-    """
-    Shetty mixed mode failure model with a penny shaped flaw
-
-    Evaluates an equivalent stress (acting on the cracks) using the normal and
-    shear stresses in the Shetty mixed-mode fracture criterion
-    for a Griffith flaw
-    """
-
-    def calculate_eq_stress(self, mandel_stress, temperatures, material):
+    def calculate_surface_eq_stress(
+        self, mandel_stress, surface, normals, temperatures, material
+    ):
         """
         Calculate the equivalent stresses from the normal and shear stresses
 
         Additional parameters:
-        nu:     Poisson ratio
         cbar:   Shetty model empirical constant (cbar)
         """
 
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
         # Material parameters
-        nu = np.mean(material.nu(temperatures), axis=0)
-        cbar = np.mean(material.c_bar(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
 
         # Normal stress
-        sigma_n = self.calculate_normal_stress(mandel_stress)
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
 
         # Shear stress
-        tau = self.calculate_shear_stress(mandel_stress)
+        tau = self.calculate_surface_shear_stress(mandel_stress, surface, normals)
 
         # Projected equivalent stress
         return 0.5 * (
             sigma_n
-            + np.sqrt(
-                (sigma_n**2)
-                + ((4 * tau / (cbar[..., None, None] * (2 - nu[..., None, None]))) ** 2)
-            )
+            + np.sqrt((sigma_n**2) + (4 * (tau / cbar[..., None, None, None]) ** 2))
         )
+        # removed 1 None
 
-    def calculate_kbar(self, temperatures, material, A, dalpha, dbeta):
+    def calculate_surface_kbar(self, temperatures, material, C, ddelta):
         """
         Calculate the evaluating normalized crack density coefficient (kbar)
 
@@ -1112,7 +1958,184 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         self.material = material
 
         # Weibull modulus
-        mvals = self.material.modulus(temperatures)
+        mvals = self.material.modulus_vol(temperatures)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)
+
+        # Material parameters
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
+
+        # Evaluating integral for kbar
+        integral2 = 2 * (
+            (
+                (
+                    0.5
+                    * (
+                        ((np.cos(self.C)) ** 2)
+                        + np.sqrt(
+                            ((np.cos(self.C)) ** 4)
+                            + (
+                                ((np.sin(2 * self.C)) ** 2)
+                                / (cbar[..., None, None] ** 2)
+                            )
+                        )
+                    )
+                )
+                ** mavg[..., None, None]
+            )
+            * self.ddelta
+        )
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
+        # remove 1 None and take sum over axis=(1) only
+        return kbar
+
+
+class SMMModelGriffithNotch(CrackShapeDependent):
+    """
+    Shetty mixed mode failure model with a Griffith Notch
+
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the Shetty mixed-mode fracture criterion
+    for a Griffith flaw
+    """
+
+    def calculate_surface_eq_stress(
+        self, mandel_stress, surface, normals, temperatures, material
+    ):
+        """
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameters:
+        nu:     Poisson ratio
+        cbar:   Shetty model empirical constant (cbar)
+        """
+
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Material parameters
+        nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
+        cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
+
+        # Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Shear stress
+        tau = self.calculate_surface_shear_stress(mandel_stress, surface, normals)
+
+        # Projected equivalent stress
+        return 0.5 * (
+            sigma_n
+            + np.sqrt(
+                (sigma_n**2) + (3.1803 * (tau / cbar[..., None, None, None]) ** 2)
+            )
+        )
+
+    def calculate_surface_kbar(self, temperatures, material, C, ddelta):
+        """
+        Calculate the evaluating normalized crack density coefficient (kbar)
+
+        Parameters:
+        temperatures:   element temperatures
+        material:       material model object with required data that includes
+                        Weibull modulus (mvals), poisson ratio (nu),
+                        Shetty model empirical constant (cbar)
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus_surf(temperatures)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)
+
+        # Material parameters
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
+
+        # Evaluating integral for kbar
+        integral2 = 2 * (
+            (
+                (
+                    0.5
+                    * (
+                        ((np.cos(self.C)) ** 2)
+                        + np.sqrt(
+                            ((np.cos(self.C)) ** 4)
+                            + (
+                                0.795075
+                                * ((np.sin(2 * self.C)) ** 2)
+                                / (cbar[..., None, None] ** 2)
+                            )
+                        )
+                    )
+                )
+                ** mavg[..., None, None]
+            )
+            * self.ddelta
+        )
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
+        # remove 1 None and take sum over axis=(1) only
+        return kbar
+
+
+class SMMModelPennyShapedFlaw(CrackShapeDependent):
+    """
+    Shetty mixed mode failure model with a penny shaped flaw
+
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the Shetty mixed-mode fracture criterion
+    for a Griffith flaw
+    """
+
+    def calculate_volume_eq_stress(self, mandel_stress, temperatures, material):
+        """
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameters:
+        nu:     Poisson ratio
+        cbar:   Shetty model empirical constant (cbar)
+        """
+
+        # Material parameters
+        nu = np.mean(material.nu(temperatures), axis=0)
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
+
+        # Normal stress
+        sigma_n = self.calculate_volume_normal_stress(mandel_stress)
+
+        # Shear stress
+        tau = self.calculate_volume_shear_stress(mandel_stress)
+
+        # Projected equivalent stress
+        return 0.5 * (
+            sigma_n
+            + np.sqrt(
+                (sigma_n**2)
+                + ((4 * tau / (cbar[..., None, None] * (2 - nu[..., None, None]))) ** 2)
+            )
+        )
+
+    def calculate_volume_kbar(self, temperatures, material, A, dalpha, dbeta):
+        """
+        Calculate the evaluating normalized crack density coefficient (kbar)
+
+        Parameters:
+        temperatures:   element temperatures
+        material:       material model object with required data that includes
+                        Weibull modulus (mvals), poisson ratio (nu),
+                        Shetty model empirical constant (cbar)
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus_vol(temperatures)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)
@@ -1148,6 +2171,97 @@ class SMMModelPennyShapedFlaw(CrackShapeDependent):
         )
         kbar = np.pi / np.sum(integral2, axis=(1, 2))
 
+        return kbar
+
+
+class SMMModelSemiCircularCrack(CrackShapeDependent):
+    """
+    Shetty mixed mode failure model with a semi-circular crack
+
+    Evaluates an equivalent stress (acting on the cracks) using the normal and
+    shear stresses in the Shetty mixed-mode fracture criterion
+    for a Griffith flaw
+    """
+
+    def calculate_surface_eq_stress(
+        self, mandel_stress, surface, normals, temperatures, material
+    ):
+        """
+        Calculate the equivalent stresses from the normal and shear stresses
+
+        Additional parameters:
+        nu:     Poisson ratio
+        cbar:   Shetty model empirical constant (cbar)
+        """
+        # Surface normals and surface elements
+        surface_normals = normals
+        surface_elements = surface
+        count_surface_elements = np.count_nonzero(surface_elements == True)
+
+        # Material parameters
+        nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
+        cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
+
+        # Normal stress
+        sigma_n = self.calculate_surface_normal_stress(mandel_stress, surface, normals)
+
+        # Shear stress
+        tau = self.calculate_surface_shear_stress(mandel_stress, surface, normals)
+
+        # Projected equivalent stress
+        return 0.5 * (
+            sigma_n
+            + np.sqrt(
+                (sigma_n**2) + (3.301 * (tau / cbar[..., None, None, None]) ** 2)
+            )
+        )
+
+    def calculate_surface_kbar(self, temperatures, material, C, ddelta):
+        """
+        Calculate the evaluating normalized crack density coefficient (kbar)
+
+        Parameters:
+        temperatures:   element temperatures
+        material:       material model object with required data that includes
+                        Weibull modulus (mvals), poisson ratio (nu),
+                        Shetty model empirical constant (cbar)
+        """
+
+        self.temperatures = temperatures
+        self.material = material
+
+        # Weibull modulus
+        mvals = self.material.modulus_surf(temperatures)
+
+        # Temperature average values
+        mavg = np.mean(mvals, axis=0)
+
+        # Material parameters
+        cbar = np.mean(material.c_bar(temperatures), axis=0)
+
+        # Evaluating integral for kbar
+        integral2 = 2 * (
+            (
+                (
+                    0.5
+                    * (
+                        ((np.cos(self.C)) ** 2)
+                        + np.sqrt(
+                            ((np.cos(self.C)) ** 4)
+                            + (
+                                0.82525
+                                * ((np.sin(2 * self.C)) ** 2)
+                                / (cbar[..., None, None] ** 2)
+                            )
+                        )
+                    )
+                )
+                ** mavg[..., None, None]
+            )
+            * self.ddelta
+        )
+        kbar = np.pi / np.sum(integral2, axis=(1, 2))
+        # remove 1 None and take sum over axis=(1) only
         return kbar
 
 
