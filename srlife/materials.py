@@ -797,7 +797,7 @@ class StandardCeramicMaterial:
         Fatigue exponent parameter for volume flaws as a function of temperature
         """
         return self.Nv(T)
-    
+
     def fatigue_Ns(self, T):
         """
         Fatigue exponent parameter for surface flaws as a function of temperature
@@ -809,7 +809,7 @@ class StandardCeramicMaterial:
         Fatigue parameter for volume flaws as a function of temperature
         """
         return self.Bv(T)
-    
+
     def fatigue_Bs(self, T):
         """
         Fatigue parameter for surface flaws as a function of temperature
@@ -933,6 +933,6 @@ class StandardCeramicMaterial:
         # Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
         Bsvals = ET.SubElement(Bs, "values")
         Bsvals.text = " ".join(map(str, self.Bsvals))
-        
+
         tree = ET.ElementTree(element=root)
         tree.write(fname)

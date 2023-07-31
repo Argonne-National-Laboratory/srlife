@@ -542,7 +542,7 @@ class Tube:
             surface = np.zeros((self.nr - 1,), dtype=bool)
             surface[0] = True
             surface[-1] = True
-            
+
             # Surface normals
             n = np.array([1.0, 0, 0])
             normals = np.zeros((self.nr - 1, 3))
@@ -551,11 +551,10 @@ class Tube:
 
             # Surface areas
             r = np.linspace(self.r - self.t, self.r, self.nr)
-            surface_area = np.zeros(self.nr-1)
-            surface_area[0] = 2* np.pi * (r[0]) * self.h
-            surface_area[-1] = 2* np.pi * (r[-1]) * self.h
-            surface_area = np.concatenate((surface_area[0],surface_area[-1]))
-            
+            surface_area = np.zeros(self.nr - 1)
+            surface_area[0] = 2 * np.pi * (r[0]) * self.h
+            surface_area[-1] = 2 * np.pi * (r[-1]) * self.h
+            surface_area = np.concatenate((surface_area[0], surface_area[-1]))
 
         elif self.ndim == 2:
             # Surface elements
@@ -564,7 +563,6 @@ class Tube:
             r[-1] = True
             theta = np.ones((self.nt,), dtype=bool)
             surface = np.outer(r, theta).flatten()
-            
 
             # Surface normals
             t = np.linspace(0, 2 * np.pi, self.nt)
@@ -575,16 +573,15 @@ class Tube:
             normals = normals.reshape((-1, 3))
 
             # Surface areas
-            t = np.linspace(0, 2 * np.pi, self.nt+1)
+            t = np.linspace(0, 2 * np.pi, self.nt + 1)
             r = np.linspace(self.r - self.t, self.r, self.nr)
             theta = np.diff(t)
-                        
-            surface_area = np.zeros((self.nr-1,self.nt))
-            surface_area[0,:] = theta*r[0]*self.h
-            surface_area[-1,:] = theta*r[-1]*self.h
-            surface_area = np.concatenate((surface_area[0,:],surface_area[-1,:]))
+
+            surface_area = np.zeros((self.nr - 1, self.nt))
+            surface_area[0, :] = theta * r[0] * self.h
+            surface_area[-1, :] = theta * r[-1] * self.h
+            surface_area = np.concatenate((surface_area[0, :], surface_area[-1, :]))
             surface_area = surface_area.flatten()
-            
 
         elif self.ndim == 3:
             # Surface elements
@@ -602,27 +599,31 @@ class Tube:
             normals[0] = -ns[:, None]
             normals[-1] = ns[:, None]
             normals = normals.reshape((-1, 3))
-       
+
             # Surface areas
-            t = np.linspace(0, 2 * np.pi, self.nt+1)
+            t = np.linspace(0, 2 * np.pi, self.nt + 1)
             r = np.linspace(self.r - self.t, self.r, self.nr)
             z = np.linspace(0, self.h, self.nz)
             theta = np.diff(t)
             heights = np.diff(z)
-            
+
             # r = np.zeros((self.nr - 1))
             # theta = np.zeros((self.nt))
             # z = np.zeros((self.nz - 1))
-            surface_area = np.zeros((self.nr-1,self.nz-1,self.nt))
-            surface_area[0,:,:] = heights[:,np.newaxis]*theta[np.newaxis,:]*r[0]
-            surface_area[-1,:,:] = heights[:,np.newaxis]*theta[np.newaxis,:]*r[-1]
-            surface_area = np.concatenate((surface_area[0,:,:],surface_area[-1,:,:]))
+            surface_area = np.zeros((self.nr - 1, self.nz - 1, self.nt))
+            surface_area[0, :, :] = heights[:, np.newaxis] * theta[np.newaxis, :] * r[0]
+            surface_area[-1, :, :] = (
+                heights[:, np.newaxis] * theta[np.newaxis, :] * r[-1]
+            )
+            surface_area = np.concatenate(
+                (surface_area[0, :, :], surface_area[-1, :, :])
+            )
             surface_area = surface_area.flatten()
-       
+
         else:
             raise ValueError("Internal error: tube dimension is %i" % self.ndim)
 
-        return surface, normals, surface_area 
+        return surface, normals, surface_area
 
     def element_volumes(self):
         """Calculate the element volumes

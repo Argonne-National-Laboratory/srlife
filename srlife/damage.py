@@ -296,7 +296,7 @@ class WeibullFailureModel:
         )
         # Getting surface elements, surface normals and surface areas from surface_elements function
         surface_elements, surface_normals, surface_areas = tube.surface_elements()
-        
+
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
         # Figure out the number of repetitions of the load cycle
@@ -307,7 +307,7 @@ class WeibullFailureModel:
             )
 
         # Surface element log reliability
-        # Write a condition here to check here for 
+        # Write a condition here to check here for
         # presence of function calculate_surface_element_log_reliability
         # in each fracture criteria
         inc_prob = self.calculate_surface_element_log_reliability(
@@ -354,7 +354,7 @@ class WeibullFailureModel:
         )
         # Getting surface elements, surface normals and surface areas from surface_elements function
         surface_elements, surface_normals, surface_areas = tube.surface_elements()
-        
+
         # Indices where surface elements is True
         surface_indices = np.where(surface_elements)[0]
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
