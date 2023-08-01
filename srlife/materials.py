@@ -880,27 +880,27 @@ class StandardCeramicMaterial:
 
         base = ET.SubElement(root, modelname, {"type": "StandardModel"})
 
+        # Volume flaw properties
         strength_v = ET.SubElement(base, "strength_vol")
         s_temps = ET.SubElement(strength_v, "temperatures")
         s_temps.text = " ".join(map(str, self.s_temperatures))
         svals_v = ET.SubElement(strength_v, "values")
         svals_v.text = " ".join(map(str, self.strengths_v))
 
+        # Surface flaw properties
         strength_s = ET.SubElement(base, "strength_surf")
-        # s_temps = ET.SubElement(strength_vol, "temperatures")
-        # s_temps.text = " ".join(map(str, self.s_temperatures))
         svals_s = ET.SubElement(strength_s, "values")
         svals_s.text = " ".join(map(str, self.strengths_s))
 
+        # Volume flaw properties
         m_v = ET.SubElement(base, "modulus_vol")
         m_temps = ET.SubElement(m_v, "temperatures")
         m_temps.text = " ".join(map(str, self.m_temperatures))
         mvals_v = ET.SubElement(m_v, "values")
         mvals_v.text = " ".join(map(str, self.mvals_v))
 
+        # Surface flaw properties
         m_s = ET.SubElement(base, "modulus_surf")
-        # m_temps = ET.SubElement(m_v, "temperatures")
-        # m_temps.text = " ".join(map(str, self.m_temperatures))
         mvals_s = ET.SubElement(m_s, "values")
         mvals_s.text = " ".join(map(str, self.mvals_s))
 
@@ -910,27 +910,27 @@ class StandardCeramicMaterial:
         nu = ET.SubElement(base, "nu")
         nu.text = str(self.nu_val)
 
+        # Volume flaw properties
         Nv = ET.SubElement(base, "fatigue_Nv")
         Nvtemps = ET.SubElement(Nv, "temperatures")
         Nvtemps.text = " ".join(map(str, self.Nv_temperatures))
         Nvvals = ET.SubElement(Nv, "values")
         Nvvals.text = " ".join(map(str, self.Nvvals))
 
+        # Surface flaw properties
         Ns = ET.SubElement(base, "fatigue_Ns")
-        # Nvtemps = ET.SubElement(Nv, "temperatures")
-        # Nvtemps.text = " ".join(map(str, self.Nv_temperatures))
         Nsvals = ET.SubElement(Ns, "values")
         Nsvals.text = " ".join(map(str, self.Nsvals))
 
+        # Volume flaw properties
         Bv = ET.SubElement(base, "fatigue_Bv")
         Bvtemps = ET.SubElement(Bv, "temperatures")
         Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
         Bvvals = ET.SubElement(Bv, "values")
         Bvvals.text = " ".join(map(str, self.Bvvals))
 
+        # Surface flaw properties
         Bs = ET.SubElement(base, "fatigue_Bs")
-        # Bvtemps = ET.SubElement(Bv, "temperatures")
-        # Bvtemps.text = " ".join(map(str, self.Bv_temperatures))
         Bsvals = ET.SubElement(Bs, "values")
         Bsvals.text = " ".join(map(str, self.Bsvals))
 

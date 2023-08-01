@@ -259,6 +259,7 @@ class WeibullFailureModel:
             )
 
         # Volume element log reliability
+        # write condition here
         inc_prob = self.calculate_volume_element_log_reliability(
             tube.times, stresses, temperatures, volumes, material, time
         )
@@ -917,28 +918,34 @@ class CrackShapeDependent(WeibullFailureModel):
         # shear_sensitive = True
 
         if self.shear_sensitive is True:
-            kbar = self.calculate_volume_kbar(
-                self.temperatures, self.material, self.A, self.dalpha, self.dbeta
-            )
+            try:
+                kbar = self.calculate_volume_kbar(
+                    self.temperatures, self.material, self.A, self.dalpha, self.dbeta
+                )
+            except AttributeError:
+                kbar = 0.
         else:
             kbar = 2 * mavg + 1
 
         kpvals = kbar * kavg
 
         # Equivalent stress raied to exponent mv
-        flat = (
-            self.calculate_volume_flattened_eq_stress(
-                time,
-                mandel_stress,
-                self.temperatures,
-                self.material,
-                tot_time,
-                self.A,
-                self.dalpha,
-                self.dbeta,
-            )
-        ) ** (1 / mavg)
-
+        try:
+            flat = (
+                self.calculate_volume_flattened_eq_stress(
+                    time,
+                    mandel_stress,
+                    self.temperatures,
+                    self.material,
+                    tot_time,
+                    self.A,
+                    self.dalpha,
+                    self.dbeta,
+                )
+            ) ** (1 / mavg)
+        except AttributeError:
+            flat = 0.
+        
         return -(2 * kpvals / np.pi) * (flat**mavg) * volumes
 
     def calculate_surface_element_log_reliability(
@@ -985,31 +992,37 @@ class CrackShapeDependent(WeibullFailureModel):
         kavg = np.mean(kvals, axis=0)[:count_surface_elements]
 
         if self.shear_sensitive is True:
-            kbar = self.calculate_surface_kbar(
-                self.temperatures, self.material, self.A, self.dalpha
-            )
+            try:
+                kbar = self.calculate_surface_kbar(
+                    self.temperatures, self.material, self.A, self.dalpha
+                )
+            except AttributeError:
+                kbar = 0.
         else:
             # kbar = 2 * mavg + 1
             kbar = (mavg * gamma(mavg) * np.sqrt(np.pi)) / (gamma(mavg + 0.5))
 
-        kbar = kbar[:count_surface_elements]
+        # kbar = kbar[:count_surface_elements]
         kpvals = kbar * kavg
 
         # Equivalent stress raied to exponent mv
-        flat = (
-            self.calculate_surface_flattened_eq_stress(
-                time,
-                mandel_stress,
-                surface_elements,
-                surface_normals,
-                self.temperatures,
-                self.material,
-                tot_time,
-                self.ddelta,
-            )
-        ) ** (
-            1 / mavg
-        )  # mavg[..., None, None], axis=(-1, -2)
+        try:
+            flat = (
+                self.calculate_surface_flattened_eq_stress(
+                    time,
+                    mandel_stress,
+                    surface_elements,
+                    surface_normals,
+                    self.temperatures,
+                    self.material,
+                    tot_time,
+                    self.ddelta,
+                )
+            ) ** (
+                1 / mavg
+            )  
+        except AttributeError:
+            flat = 0.
 
         return -(2 * kpvals / np.pi) * (flat**mavg) * surface_areas
 
