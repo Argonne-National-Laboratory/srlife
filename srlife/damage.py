@@ -295,7 +295,8 @@ class WeibullFailureModel:
             axes=(1, 2, 0),
         )
         # Getting surface elements, surface normals and surface areas from surface_elements function
-        surface_elements, surface_normals, surface_areas = tube.surface_elements()
+        surface_elements, surface_normals = tube.surface_elements()
+        surface_areas = tube.element_surface_areas()
 
         temperatures = np.mean(tube.quadrature_results["temperature"], axis=-1)
 
@@ -353,7 +354,8 @@ class WeibullFailureModel:
             axes=(1, 2, 0),
         )
         # Getting surface elements, surface normals and surface areas from surface_elements function
-        surface_elements, surface_normals, surface_areas = tube.surface_elements()
+        surface_elements, surface_normals = tube.surface_elements()
+        surface_areas = tube.element_surface_areas()
 
         # Indices where surface elements is True
         surface_indices = np.where(surface_elements)[0]

@@ -78,11 +78,11 @@ if __name__ == "__main__":
     system_solver = system.SpringSystemSolver(params["system"])
     # Damage model to use in calculating life
     damage_models = [
-        # damage.PIAModel(params["damage"]),
+        damage.PIAModel(params["damage"]),
         # damage.WNTSAModel(params["damage"]),
         # damage.MTSModelGriffithFlaw(params["damage"]),
         # damage.MTSModelPennyShapedFlaw(params["damage"]),
-        damage.CSEModelGriffithFlaw(params["damage"]),
+        # damage.CSEModelGriffithFlaw(params["damage"]),
         # damage.CSEModelPennyShapedFlaw(params["damage"]),
         # damage.CSEModelGriffithNotch(params["damage"]),
         # damage.SMMModelGriffithFlaw(params["damage"]),
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     file.close()
 
     # Create bar plot of the reliabilities and save as .pdf
-    damage_model = "CSEModelGriffithFlaw"
+    damage_model = "PIAModel"
     # Calculate the width for side-by-side bars
     bar_width = 0.4  # Adjust the width as needed
     bar_spacing = 0.1
