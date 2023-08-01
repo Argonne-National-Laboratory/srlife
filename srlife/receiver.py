@@ -585,7 +585,7 @@ class Tube:
         else:
             raise ValueError("Internal error: tube dimension is %i" % self.ndim)
 
-        return surface, normals, surface_area
+        return surface, normals
     
     def element_surface_areas(self):
         """Calculate the element surface areas
