@@ -138,9 +138,8 @@ class WeibullFailureModel:
                 )
             )
 
-        ''' 
-            Volume flaw calculations
-        '''
+        ###    Volume flaw calculations
+
         p_tube_volume = np.array([res[0] for res in volume_results])
         tube_fields_volume = [res[1] for res in volume_results]
 
@@ -165,9 +164,8 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_volume):
             tubei.add_quadrature_results("log_reliability", field)
 
-        ''' 
-            Surface flaw calculations
-        '''
+        ###    Surface flaw calculations
+
         p_tube_surface = np.array([res[0] for res in surface_results])
         tube_fields_surface = [res[1] for res in surface_results]
 
@@ -192,9 +190,8 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_surface):
             tubei.add_quadrature_results("log_reliability", field)
 
-        ''' 
-            Combined volume and surface flaw calculations
-        '''
+        ###    Combined volume and surface flaw calculations
+
         p_tube_total = np.array([res[0] for res in total_results])
         tube_fields_total = [res[1] for res in total_results]
 
@@ -929,7 +926,7 @@ class CrackShapeDependent(WeibullFailureModel):
                     self.temperatures, self.material, self.A, self.dalpha, self.dbeta
                 )
             except AttributeError:
-                kbar = 0.
+                kbar = 0.0
         else:
             kbar = 2 * mavg + 1
 
@@ -950,8 +947,8 @@ class CrackShapeDependent(WeibullFailureModel):
                 )
             ) ** (1 / mavg)
         except AttributeError:
-            flat = 0.
-        
+            flat = 0.0
+
         return -(2 * kpvals / np.pi) * (flat**mavg) * volumes
 
     def calculate_surface_element_log_reliability(
@@ -1003,7 +1000,7 @@ class CrackShapeDependent(WeibullFailureModel):
                     self.temperatures, self.material, self.A, self.dalpha
                 )
             except AttributeError:
-                kbar = 0.
+                kbar = 0.0
         else:
             # kbar = 2 * mavg + 1
             kbar = (mavg * gamma(mavg) * np.sqrt(np.pi)) / (gamma(mavg + 0.5))
@@ -1024,11 +1021,9 @@ class CrackShapeDependent(WeibullFailureModel):
                     tot_time,
                     self.ddelta,
                 )
-            ) ** (
-                1 / mavg
-            )  
+            ) ** (1 / mavg)
         except AttributeError:
-            flat = 0.
+            flat = 0.0
 
         return -(2 * kpvals / np.pi) * (flat**mavg) * surface_areas
 
