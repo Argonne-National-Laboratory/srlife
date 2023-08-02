@@ -138,7 +138,9 @@ class WeibullFailureModel:
                 )
             )
 
-        # Volume
+        ''' 
+            Volume flaw calculations
+        '''
         p_tube_volume = np.array([res[0] for res in volume_results])
         tube_fields_volume = [res[1] for res in volume_results]
 
@@ -163,7 +165,9 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_volume):
             tubei.add_quadrature_results("log_reliability", field)
 
-        # Surface
+        ''' 
+            Surface flaw calculations
+        '''
         p_tube_surface = np.array([res[0] for res in surface_results])
         tube_fields_surface = [res[1] for res in surface_results]
 
@@ -188,7 +192,9 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_surface):
             tubei.add_quadrature_results("log_reliability", field)
 
-        # Total
+        ''' 
+            Combined volume and surface flaw calculations
+        '''
         p_tube_total = np.array([res[0] for res in total_results])
         tube_fields_total = [res[1] for res in total_results]
 
