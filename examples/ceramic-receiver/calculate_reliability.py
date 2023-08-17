@@ -22,7 +22,7 @@ from srlife import (
 def sample_parameters():
     params = solverparams.ParameterSet()
 
-    params["nthreads"] = 2
+    params["nthreads"] = 1
     params["progress_bars"] = True
     # If true store results on disk (slower, but less memory)
     params["page_results"] = True  # False
@@ -79,16 +79,16 @@ if __name__ == "__main__":
     # Damage model to use in calculating life
     damage_models = [
         damage.PIAModel(params["damage"]),
-        # damage.WNTSAModel(params["damage"]),
-        # damage.MTSModelGriffithFlaw(params["damage"]),
-        # damage.MTSModelPennyShapedFlaw(params["damage"]),
-        # damage.CSEModelGriffithFlaw(params["damage"]),
-        # damage.CSEModelPennyShapedFlaw(params["damage"]),
-        # damage.CSEModelGriffithNotch(params["damage"]),
-        # damage.SMMModelGriffithFlaw(params["damage"]),
-        # damage.SMMModelGriffithNotch(params["damage"]),
-        # damage.SMMModelPennyShapedFlaw(params["damage"]),
-        # damage.SMMModelSemiCircularCrack(params["damage"]),
+        damage.WNTSAModel(params["damage"]),
+        damage.MTSModelGriffithFlaw(params["damage"]),
+        damage.MTSModelPennyShapedFlaw(params["damage"]),
+        damage.CSEModelGriffithFlaw(params["damage"]),
+        damage.CSEModelPennyShapedFlaw(params["damage"]),
+        damage.CSEModelGriffithNotch(params["damage"]),
+        damage.SMMModelGriffithFlaw(params["damage"]),
+        damage.SMMModelGriffithNotch(params["damage"]),
+        damage.SMMModelPennyShapedFlaw(params["damage"]),
+        damage.SMMModelSemiCircularCrack(params["damage"]),
     ]
 
     # Load the materials
@@ -167,74 +167,74 @@ if __name__ == "__main__":
         print("Minimum tube reliabilities (total):")
         print(min(reliability["tube_reliability_total"]))
 
-        file.write("model = %s \n" % (damage_model))
-        file.write(
-            # "Individual tube reliabilities (volume): "
-            "minimum tube reliability (volume)= %f \n" % (min(reliability["tube_reliability_volume"]))
-        )      
+        # file.write("model = %s \n" % (damage_model))
+        # file.write(
+        #     # "Individual tube reliabilities (volume): "
+        #     "minimum tube reliability (volume)= %f \n" % (min(reliability["tube_reliability_volume"]))
+        # )      
             
-    file.close()
+        # Create bar plot of the reliabilities and save as .pdf
+        # damage_model = "PIAModel"
+        # Calculate the width for side-by-side bars
+        bar_width = 0.4  # Adjust the width as needed
+        bar_spacing = 0.1
 
-    # Create bar plot of the reliabilities and save as .pdf
-    damage_model = "PIAModel"
-    # Calculate the width for side-by-side bars
-    bar_width = 0.4  # Adjust the width as needed
-    bar_spacing = 0.1
+        # Tube
+        # Create a list of indices to be used as x-axis labels
+        indices = [x + 1 for x in range(len(reliability["tube_reliability_volume"]))]
+        x = np.arange(len(indices))
+        # Create the bar plot
+        plt.figure()
+        plt.bar(x - bar_width/3, reliability["tube_reliability_volume"],width=bar_width,label="Volume")
+        plt.bar(x, reliability["tube_reliability_surface"],width=bar_width,label="Surface")
+        plt.bar(x + bar_width/3, reliability["tube_reliability_total"],width=bar_width,label="Total")
+        plt.xticks(x,indices,rotation=45, ha='right')
+        # Add labels and title
+        plt.xlabel("Tube numbers")
+        plt.ylabel("Reliability")
+        plt.legend(loc='lower right')
+        # plt.ylim(0.9,1.01)
+        plt.title("Tube reliablities")
+        # Save the plot
+        plt.savefig(f"tube_reliability_{damage_model}.png")
+        # plt.savefig("tube_reliability_volume.eps", format="eps")
 
-    # Tube
-    # Create a list of indices to be used as x-axis labels
-    indices = [x + 1 for x in range(len(reliability["tube_reliability_volume"]))]
-    x = np.arange(len(indices))
-    # Create the bar plot
-    plt.figure()
-    plt.bar(x - bar_width/3, reliability["tube_reliability_volume"],width=bar_width,label="Volume")
-    plt.bar(x, reliability["tube_reliability_surface"],width=bar_width,label="Surface")
-    plt.bar(x + bar_width/3, reliability["tube_reliability_total"],width=bar_width,label="Total")
-    plt.xticks(x,indices,rotation=45, ha='right')
-    # Add labels and title
-    plt.xlabel("Tube numbers")
-    plt.ylabel("Reliability")
-    plt.legend(loc='lower right')
-    # plt.ylim(0.9,1.01)
-    plt.title("Tube reliablities")
-    # Save the plot
-    plt.savefig(f"tube_reliability_{damage_model}.png")
-    # plt.savefig("tube_reliability_volume.eps", format="eps")
+        # Panel
+        # Create the bar plot
+        plt.figure()
+        indices = [x + 1 for x in range(len(reliability["panel_reliability_volume"]))]
+        x = np.arange(len(indices))
+        plt.bar(x - bar_width/3, reliability["panel_reliability_volume"],width=bar_width,label="Volume")
+        plt.bar(x, reliability["panel_reliability_surface"],width=bar_width,label="Surface")
+        plt.bar(x + bar_width/3, reliability["panel_reliability_total"],width=bar_width,label="Total")
+        # Add labels and title
+        plt.xticks(x,indices,rotation=45, ha='right')
+        plt.xlabel("Panel numbers")
+        plt.ylabel("Reliability")
+        plt.legend(loc='lower right')
+        # plt.ylim(0.9,1.01)
+        plt.title("Panel reliablities")
+        # Save the plot
+        plt.savefig(f"panel_reliability_{damage_model}.png")
+        # plt.savefig("panel_reliability_volume.eps", format="eps")
 
-    # Panel
-    # Create the bar plot
-    plt.figure()
-    indices = [x + 1 for x in range(len(reliability["panel_reliability_volume"]))]
-    x = np.arange(len(indices))
-    plt.bar(x - bar_width/3, reliability["panel_reliability_volume"],width=bar_width,label="Volume")
-    plt.bar(x, reliability["panel_reliability_surface"],width=bar_width,label="Surface")
-    plt.bar(x + bar_width/3, reliability["panel_reliability_total"],width=bar_width,label="Total")
-    # Add labels and title
-    plt.xticks(x,indices,rotation=45, ha='right')
-    plt.xlabel("Panel numbers")
-    plt.ylabel("Reliability")
-    plt.legend(loc='lower right')
-    # plt.ylim(0.9,1.01)
-    plt.title("Panel reliablities")
-    # Save the plot
-    plt.savefig(f"panel_reliability_{damage_model}.png")
-    # plt.savefig("panel_reliability_volume.eps", format="eps")
+        # Overall
+        # Create the bar plot
+        plt.figure()
+        plt.bar(-bar_width/3,reliability["overall_reliability_volume"],width=bar_width,label="Volume")
+        plt.bar(0,reliability["overall_reliability_surface"],width=bar_width,label="Surface")
+        plt.bar(bar_width/3,reliability["overall_reliability_total"],width=bar_width,label="Total")
+        # Add labels and title
+        # plt.xlabel("Tube numbers")
+        plt.ylabel("Reliability")
+        plt.legend(loc='lower right')
+        # plt.ylim(0.9,1.01)
+        plt.title("Overall reliablity")
+        # Save the plot
+        plt.savefig(f"overall_reliability_{damage_model}.png")
+        # plt.savefig("overall_reliability_volume.eps", format="eps")
 
-    # Overall
-    # Create the bar plot
-    plt.figure()
-    plt.bar(-bar_width/3,reliability["overall_reliability_volume"],width=bar_width,label="Volume")
-    plt.bar(0,reliability["overall_reliability_surface"],width=bar_width,label="Surface")
-    plt.bar(bar_width/3,reliability["overall_reliability_total"],width=bar_width,label="Total")
-    # Add labels and title
-    # plt.xlabel("Tube numbers")
-    plt.ylabel("Reliability")
-    plt.legend(loc='lower right')
-    # plt.ylim(0.9,1.01)
-    plt.title("Overall reliablity")
-    # Save the plot
-    plt.savefig(f"overall_reliability_{damage_model}.png")
-    # plt.savefig("overall_reliability_volume.eps", format="eps")
+        # Show the plot
+        # plt.show()
 
-    # Show the plot
-    # plt.show()
+    # file.close()

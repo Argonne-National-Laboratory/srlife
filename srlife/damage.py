@@ -262,7 +262,6 @@ class WeibullFailureModel:
             )
 
         # Volume element log reliability
-        # write condition here
         inc_prob = self.calculate_volume_element_log_reliability(
             tube.times, stresses, temperatures, volumes, material, time
         )
@@ -312,9 +311,6 @@ class WeibullFailureModel:
             )
 
         # Surface element log reliability
-        # Write a condition here to check here for
-        # presence of function calculate_surface_element_log_reliability
-        # in each fracture criteria
         inc_prob = self.calculate_surface_element_log_reliability(
             tube.times,
             stresses,
@@ -386,6 +382,8 @@ class WeibullFailureModel:
             material,
             time,
         )
+        # ensuring no None values in inc_prob
+        inc_prob = [i for i in inc_prob if not None]
 
         # Return the sums as a function of time along with the field itself
         inc_prob = np.array(list(inc_prob) * len(tube.times)).reshape(
@@ -999,13 +997,14 @@ class CrackShapeDependent(WeibullFailureModel):
                 kbar = self.calculate_surface_kbar(
                     self.temperatures, self.material, self.A, self.dalpha
                 )
+                kbar = kbar[:count_surface_elements]
             except AttributeError:
                 kbar = 0.0
         else:
             # kbar = 2 * mavg + 1
             kbar = (mavg * gamma(mavg) * np.sqrt(np.pi)) / (gamma(mavg + 0.5))
+            kbar = kbar[:count_surface_elements]
 
-        # kbar = kbar[:count_surface_elements]
         kpvals = kbar * kavg
 
         # Equivalent stress raied to exponent mv
