@@ -137,7 +137,7 @@ class SolutionManager:
             decorator=self.progress_decorator,
         )
 
-    def solve_reliability(self, time):
+    def solve_reliability_volume(self, time):
         """User interface: solve everything and return receiver reliability
 
         The trigger for everything: solve the complete problem and report the
@@ -152,7 +152,41 @@ class SolutionManager:
         self.solve_heat_transfer()
         self.solve_structural()
 
-        return self.calculate_reliability(time)
+        return self.calculate_reliability_volume(time)
+    
+    def solve_reliability_surface(self, time):
+        """User interface: solve everything and return receiver reliability
+
+        The trigger for everything: solve the complete problem and report the
+        best-estimate reliability.
+
+        Args:
+            time (float): time at which to report reliability
+
+        Returns:
+          float:  Reliability between 0 and 1
+        """
+        self.solve_heat_transfer()
+        self.solve_structural()
+
+        return self.calculate_reliability_surface(time)
+    
+    def solve_reliability_combined(self, time):
+        """User interface: solve everything and return receiver reliability
+
+        The trigger for everything: solve the complete problem and report the
+        best-estimate reliability.
+
+        Args:
+            time (float): time at which to report reliability
+
+        Returns:
+          float:  Reliability between 0 and 1
+        """
+        self.solve_heat_transfer()
+        self.solve_structural()
+
+        return self.calculate_reliability_combined(time)
 
     def calculate_reliability_volume(self, time):
         """Calculate reliability from the results
@@ -164,7 +198,7 @@ class SolutionManager:
           float:    Reliability between 0 and 1
         """
         if self.progress:
-            print("Calculating reliability :")
+            print("Calculating reliability (volume):")
         return self.damage_model.determine_reliability_volume(
             self.receiver,
             self.damage_material,
@@ -183,7 +217,7 @@ class SolutionManager:
           float:    Reliability between 0 and 1
         """
         if self.progress:
-            print("Calculating reliability :")
+            print("Calculating reliability (surface):")
         return self.damage_model.determine_reliability_surface(
             self.receiver,
             self.damage_material,
@@ -202,7 +236,7 @@ class SolutionManager:
           float:    Reliability between 0 and 1
         """
         if self.progress:
-            print("Calculating reliability :")
+            print("Calculating reliability (combined):")
         return self.damage_model.determine_reliability_combined(
             self.receiver,
             self.damage_material,
