@@ -80,7 +80,7 @@ class WeibullFailureModel:
 
         return pstress
 
-    def determine_reliability(
+    def determine_reliability_volume(
         self, receiver, material, time, nthreads=1, decorator=lambda x, n: x
     ):
         """
@@ -97,7 +97,6 @@ class WeibullFailureModel:
           decorator       progress bar
         """
 
-        # Volume results
         with multiprocess.Pool(nthreads) as p:
             volume_results = list(
                 decorator(
@@ -110,35 +109,6 @@ class WeibullFailureModel:
                     receiver.ntubes,
                 )
             )
-
-        # Surface results
-        with multiprocess.Pool(nthreads) as p:
-            surface_results = list(
-                decorator(
-                    p.imap(
-                        lambda x: self.tube_surface_log_reliability(
-                            x, material, receiver, time
-                        ),
-                        receiver.tubes,
-                    ),
-                    receiver.ntubes,
-                )
-            )
-        # Total results
-        with multiprocess.Pool(nthreads) as p:
-            total_results = list(
-                decorator(
-                    p.imap(
-                        lambda x: self.tube_total_log_reliability(
-                            x, material, receiver, time
-                        ),
-                        receiver.tubes,
-                    ),
-                    receiver.ntubes,
-                )
-            )
-
-        ###    Volume flaw calculations
 
         p_tube_volume = np.array([res[0] for res in volume_results])
         tube_fields_volume = [res[1] for res in volume_results]
@@ -164,7 +134,42 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_volume):
             tubei.add_quadrature_results("log_reliability", field)
 
-        ###    Surface flaw calculations
+        # Convert back from log-prob as we go
+        return {
+            "tube_reliability_volume": np.exp(tube_volume),
+            "panel_reliability_volume": np.exp(panel_volume),
+            "overall_reliability_volume": np.exp(overall_volume),
+        }
+
+    def determine_reliability_surface(
+        self, receiver, material, time, nthreads=1, decorator=lambda x, n: x
+    ):
+        """
+        Determine the reliability of the tubes in the receiver by calculating individual
+        material point reliabilities and finding the minimum of all points.
+
+        Parameters:
+          receiver        fully-solved receiver object
+          material        material model to use
+          time (float):   time in service
+
+        Additional Parameters:
+          nthreads        number of threads
+          decorator       progress bar
+        """
+
+        with multiprocess.Pool(nthreads) as p:
+            surface_results = list(
+                decorator(
+                    p.imap(
+                        lambda x: self.tube_surface_log_reliability(
+                            x, material, receiver, time
+                        ),
+                        receiver.tubes,
+                    ),
+                    receiver.ntubes,
+                )
+            )
 
         p_tube_surface = np.array([res[0] for res in surface_results])
         tube_fields_surface = [res[1] for res in surface_results]
@@ -190,13 +195,48 @@ class WeibullFailureModel:
         for tubei, field in zip(receiver.tubes, tube_fields_surface):
             tubei.add_quadrature_results("log_reliability", field)
 
-        ###    Combined volume and surface flaw calculations
+        # Convert back from log-prob as we go
+        return {
+            "tube_reliability_surface": np.exp(tube_surface),
+            "panel_reliability_surface": np.exp(panel_surface),
+            "overall_reliability_surface": np.exp(overall_surface),
+        }
 
-        p_tube_total = np.array([res[0] for res in total_results])
-        tube_fields_total = [res[1] for res in total_results]
+    def determine_reliability_combined(
+        self, receiver, material, time, nthreads=1, decorator=lambda x, n: x
+    ):
+        """
+        Determine the reliability of the tubes in the receiver by calculating individual
+        material point reliabilities and finding the minimum of all points.
+
+        Parameters:
+          receiver        fully-solved receiver object
+          material        material model to use
+          time (float):   time in service
+
+        Additional Parameters:
+          nthreads        number of threads
+          decorator       progress bar
+        """
+
+        with multiprocess.Pool(nthreads) as p:
+            total_results = list(
+                decorator(
+                    p.imap(
+                        lambda x: self.tube_combined_log_reliability(
+                            x, material, receiver, time
+                        ),
+                        receiver.tubes,
+                    ),
+                    receiver.ntubes,
+                )
+            )
+
+        p_tube_combined = np.array([res[0] for res in total_results])
+        tube_fields_combined = [res[1] for res in total_results]
 
         # Tube reliability is the minimum of all the time steps
-        tube_total = np.min(p_tube_total, axis=1)
+        tube_combined = np.min(p_tube_combined, axis=1)
 
         # Panel reliability
         tube_multipliers = np.array(
@@ -205,28 +245,22 @@ class WeibullFailureModel:
                 for (pi, p) in receiver.panels.items()
             ]
         )
-        panel_total = np.sum(
-            tube_total.reshape(receiver.npanels, -1) * tube_multipliers, axis=1
+        panel_combined = np.sum(
+            tube_combined.reshape(receiver.npanels, -1) * tube_multipliers, axis=1
         )
 
         # Overall reliability
-        overall_total = np.sum(panel_total)
+        overall_combined = np.sum(panel_combined)
 
         # Add the field to the tubes
-        for tubei, field in zip(receiver.tubes, tube_fields_total):
+        for tubei, field in zip(receiver.tubes, tube_fields_combined):
             tubei.add_quadrature_results("log_reliability", field)
 
         # Convert back from log-prob as we go
         return {
-            "tube_reliability_volume": np.exp(tube_volume),
-            "panel_reliability_volume": np.exp(panel_volume),
-            "overall_reliability_volume": np.exp(overall_volume),
-            "tube_reliability_surface": np.exp(tube_surface),
-            "panel_reliability_surface": np.exp(panel_surface),
-            "overall_reliability_surface": np.exp(overall_surface),
-            "tube_reliability_total": np.exp(tube_total),
-            "panel_reliability_total": np.exp(panel_total),
-            "overall_reliability_total": np.exp(overall_total),
+            "tube_reliability_combined": np.exp(tube_combined),
+            "panel_reliability_combined": np.exp(panel_combined),
+            "overall_reliability_combined": np.exp(overall_combined),
         }
 
     def tube_volume_log_reliability(self, tube, material, receiver, time):
@@ -331,7 +365,7 @@ class WeibullFailureModel:
             np.stack((inc_prob, inc_prob)), axes=(1, 2, 0)
         )
 
-    def tube_total_log_reliability(self, tube, material, receiver, time):
+    def tube_combined_log_reliability(self, tube, material, receiver, time):
         """
         Calculate the log reliability of a single tube
         """

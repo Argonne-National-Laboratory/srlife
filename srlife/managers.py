@@ -154,7 +154,7 @@ class SolutionManager:
 
         return self.calculate_reliability(time)
 
-    def calculate_reliability(self, time):
+    def calculate_reliability_volume(self, time):
         """Calculate reliability from the results
 
         Args:
@@ -165,7 +165,45 @@ class SolutionManager:
         """
         if self.progress:
             print("Calculating reliability :")
-        return self.damage_model.determine_reliability(
+        return self.damage_model.determine_reliability_volume(
+            self.receiver,
+            self.damage_material,
+            time,
+            nthreads=self.nthreads,
+            decorator=self.progress_decorator,
+        )
+
+    def calculate_reliability_surface(self, time):
+        """Calculate reliability from the results
+
+        Args:
+            time (float): time at which to report reliability
+
+        Returns:
+          float:    Reliability between 0 and 1
+        """
+        if self.progress:
+            print("Calculating reliability :")
+        return self.damage_model.determine_reliability_surface(
+            self.receiver,
+            self.damage_material,
+            time,
+            nthreads=self.nthreads,
+            decorator=self.progress_decorator,
+        )
+
+    def calculate_reliability_combined(self, time):
+        """Calculate reliability from the results
+
+        Args:
+            time (float): time at which to report reliability
+
+        Returns:
+          float:    Reliability between 0 and 1
+        """
+        if self.progress:
+            print("Calculating reliability :")
+        return self.damage_model.determine_reliability_combined(
             self.receiver,
             self.damage_material,
             time,
