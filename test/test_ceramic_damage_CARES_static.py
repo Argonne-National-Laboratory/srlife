@@ -84,7 +84,7 @@ class TestPIAModel(unittest.TestCase):
         surface_area2[0,:,:] = heights[:,np.newaxis]*theta[np.newaxis,:]*r[0]
         surface_area2[-1,:,:] = heights[:,np.newaxis]*theta[np.newaxis,:]*r[-1]
         surface_area2 = np.concatenate((surface_area2[0,:,:],surface_area2[-1,:,:]))
-        print("surface_area2 =",surface_area2)
+    
         self.stress = data.reshape(data.shape[0], 8, -1)
 
         vol_factor = 360 / 15
@@ -140,7 +140,7 @@ class TestPIAModel(unittest.TestCase):
         self.model_time_dep = damage.PIAModel(solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -150,7 +150,7 @@ class TestPIAModel(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -288,7 +288,7 @@ class TestWNTSAModel(unittest.TestCase):
         self.model_time_dep = damage.WNTSAModel(solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -298,7 +298,7 @@ class TestWNTSAModel(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -437,7 +437,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         self.model_time_dep = damage.MTSModelGriffithFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -447,7 +447,7 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -457,14 +457,14 @@ class TestMTSModelGriffithFlaw(unittest.TestCase):
         )
 
         # Summing up log probabilities over nelem and taking the value of one
-        R_MTS_GF_s = np.exp(np.sum(actual1))
+        R_MTS_GF_s = np.exp(np.sum(actual1)) if actual1 is not None else print("surface reliability cannot be calculated")
         print("Time dep surface Reliability MTS_GF = ", R_MTS_GF_s)
 
         R_MTS_GF_v = np.exp(np.sum(actual2))
         print("Time dep volume Reliability MTS_GF = ", R_MTS_GF_v)
 
         # Evaluating Probability of Failure
-        Pf_MTS_GF_s = 1 - R_MTS_GF_s
+        Pf_MTS_GF_s = 1 - R_MTS_GF_s if R_MTS_GF_s is not None else print("surface failure probability cannot be calculated")
         print("Time dep surface Probability of failure MTS_GF = ", Pf_MTS_GF_s)
 
         Pf_MTS_GF_v = 1 - R_MTS_GF_v
@@ -585,7 +585,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
         self.model_time_dep = damage.MTSModelPennyShapedFlaw(solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -595,7 +595,7 @@ class TestMTSModelPennyShapedFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -734,7 +734,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -744,7 +744,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -883,7 +883,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -893,7 +893,7 @@ class TestCSEModelPennyShapedFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -1032,7 +1032,7 @@ class TestCSEModelGriffithNotch(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -1042,7 +1042,7 @@ class TestCSEModelGriffithNotch(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -1181,7 +1181,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -1191,7 +1191,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -1330,7 +1330,7 @@ class TestSMMModelGriffithNotch(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -1340,7 +1340,7 @@ class TestSMMModelGriffithNotch(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -1479,7 +1479,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -1489,7 +1489,7 @@ class TestSMMModelPennyShapedFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -1629,7 +1629,7 @@ class TestSMMModelSemiCircularCrack(unittest.TestCase):
         )
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -1639,7 +1639,7 @@ class TestSMMModelSemiCircularCrack(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,

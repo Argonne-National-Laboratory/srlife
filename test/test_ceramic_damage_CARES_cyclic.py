@@ -146,7 +146,7 @@ class TestPIAModel(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -287,7 +287,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -297,7 +297,7 @@ class TestCSEModelGriffithFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -438,7 +438,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -448,7 +448,7 @@ class TestSMMModelGriffithFlaw(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
@@ -601,7 +601,7 @@ class TestSMMModelSemiCircularCrack(unittest.TestCase):
             self.material,
             self.nf * self.period,
         )
-        actual2 = self.model_time_dep.calculate_volume_element_log_reliability(
+        actual2 = self.model_time_dep.calculate_volume_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.temperatures,
