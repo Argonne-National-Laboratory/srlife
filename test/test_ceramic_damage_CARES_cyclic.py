@@ -136,7 +136,7 @@ class TestPIAModel(unittest.TestCase):
         self.model_time_dep = damage.PIAModel(solverparams.ParameterSet())
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
@@ -591,7 +591,7 @@ class TestSMMModelSemiCircularCrack(unittest.TestCase):
         )
 
     def test_definition(self):
-        actual1 = self.model_time_dep.calculate_surface_element_log_reliability(
+        actual1 = self.model_time_dep.calculate_surface_flaw_element_log_reliability(
             self.time,
             self.stress,
             self.surface,
