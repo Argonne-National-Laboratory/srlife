@@ -884,13 +884,13 @@ class StandardCeramicMaterial:
         strength_v = ET.SubElement(base, "strength_vol")
         s_temps = ET.SubElement(strength_v, "temperatures")
         s_temps.text = " ".join(map(str, self.s_temperatures))
-        svals_v = ET.SubElement(strength_v, "values")
-        svals_v.text = " ".join(map(str, self.strengths_v))
+        strengths_v = ET.SubElement(strength_v, "values")
+        strengths_v.text = " ".join(map(str, self.strengths_v))
 
         # Surface flaw properties
         strength_s = ET.SubElement(base, "strength_surf")
-        svals_s = ET.SubElement(strength_s, "values")
-        svals_s.text = " ".join(map(str, self.strengths_s))
+        strengths_s = ET.SubElement(strength_s, "values")
+        strengths_s.text = " ".join(map(str, self.strengths_s))
 
         # Volume flaw properties
         m_v = ET.SubElement(base, "modulus_vol")
