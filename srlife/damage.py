@@ -105,11 +105,13 @@ class WeibullFailureModel:
         # Zero initialization of surface stresses
         surf_stress = np.zeros_like(full_stress.shape)
 
-        # If surface stresses do not have the number of surfaces as a dimensions add a new axis for them
+        # If surface stresses do not have the number of surfaces as a dimensions 
+        # add a new axis for them
         if surf_stress.ndim == 4:
             surf_stress = surf_stress[..., np.newaxis, :]
 
-        # If surface normals do not have the number of surfaces as a dimensions add a new axis for them
+        # If surface normals do not have the number of surfaces as a dimensions 
+        # add a new axis for them
         if surface_normals.ndim == 2:
             nx = surface_normals[..., np.newaxis, 0]
             ny = surface_normals[..., np.newaxis, 1]
@@ -2231,11 +2233,6 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses from the normal and shear stresses in surface elements
         """
-
-        # Principal stresses in surface elements
-        surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface, normals
-        )
 
         # Normal stress
         sigma_n = self.calculate_surface_flaw_normal_stress(
