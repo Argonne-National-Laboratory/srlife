@@ -1352,10 +1352,8 @@ class CrackShapeDependent(WeibullFailureModel):
         mvals = material.modulus_surf(temperatures)
         kvals = svals ** (-mvals)
 
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements)
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1382,8 +1380,8 @@ class CrackShapeDependent(WeibullFailureModel):
                 self.calculate_surface_flaw_flattened_eq_stress(
                     time,
                     mandel_stress,
-                    surface_elements,
-                    surface_normals,
+                    surface,
+                    normals,
                     self.temperatures,
                     self.material,
                     tot_time,
@@ -1504,11 +1502,8 @@ class PIAModel(CrackShapeIndependent):
         N = material.Ns(temperatures)
         B = material.Bs(temperatures)
 
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        # surface_areas = areas
-        count_surface_elements = np.count_nonzero(surface_elements)
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1518,7 +1513,7 @@ class PIAModel(CrackShapeIndependent):
 
         # Principal stresses in surface elements
         surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface_elements, surface_normals
+            mandel_stress, surface, normals
         )
 
         # Only tension
@@ -1726,7 +1721,9 @@ class WNTSAModel(CrackShapeIndependent):
         # Surface normals and surface elements
         normals = surface_normals
         surface = surface_elements
-        count_surface_elements = np.count_nonzero(surface_elements)
+
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Temperature average values
         mavg = np.mean(mvals, axis=0)[:count_surface_elements]
@@ -1935,6 +1932,8 @@ class WNTSAModel(CrackShapeIndependent):
         # Surface normals and surface elements
         surface_normals = normals
         surface_elements = surface
+
+        # Count number of surface elements
         count_surface_elements = np.count_nonzero(surface_elements)
 
         # Temperature average values
@@ -2232,9 +2231,6 @@ class CSEModelGriffithFlaw(CrackShapeDependent):
         """
         Calculate the equivalent stresses from the normal and shear stresses in surface elements
         """
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
 
         # Principal stresses in surface elements
         surf_pstress = self.calculate_surface_principal_stress(
@@ -2404,15 +2400,8 @@ class CSEModelGriffithNotch(CrackShapeDependent):
         nu:     Poisson ratio
         """
 
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements)
-
-        # Principal stresses in surface elements
-        surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface, normals
-        )
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Material parameters
         nu = np.mean(material.nu(temperatures), axis=0)[:count_surface_elements]
@@ -2591,15 +2580,8 @@ class SMMModelGriffithFlaw(CrackShapeDependent):
         cbar:   Shetty model empirical constant (cbar)
         """
 
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements)
-
-        # Principal stresses in surface elements
-        surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface, normals
-        )
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Material parameters
         cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
@@ -2701,15 +2683,8 @@ class SMMModelGriffithNotch(CrackShapeDependent):
         cbar:   Shetty model empirical constant (cbar)
         """
 
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements)
-
-        # Principal stresses in surface elements
-        surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface, normals
-        )
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Material parameters
         cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
@@ -2919,15 +2894,9 @@ class SMMModelSemiCircularCrack(CrackShapeDependent):
         nu:     Poisson ratio
         cbar:   Shetty model empirical constant (cbar)
         """
-        # Surface normals and surface elements
-        surface_normals = normals
-        surface_elements = surface
-        count_surface_elements = np.count_nonzero(surface_elements)
 
-        # Principal stresses in surface elements
-        surf_pstress = self.calculate_surface_principal_stress(
-            mandel_stress, surface, normals
-        )
+        # Count number of surface elements
+        count_surface_elements = np.count_nonzero(surface)
 
         # Material parameters
         cbar = np.mean(material.c_bar(temperatures), axis=0)[:count_surface_elements]
