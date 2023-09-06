@@ -22,7 +22,7 @@ class WeibullFailureModel:
 
     tolerance = 1.0e-16
 
-    def __init__(self, pset, *args, cares_cutoff=True, page=True):
+    def __init__(self, pset, *args, cares_cutoff=True, page=False):
         """Initialize the Weibull Failure Model
 
         Boolean:
