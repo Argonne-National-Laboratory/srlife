@@ -87,8 +87,8 @@ if __name__ == "__main__":
     inlet_temp = inlet_temp * np.ones_like(times)
 
     model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
-    model.save("example-with-flowpath-constant_flow.hdf")
-    model = receiver.Receiver.load("example-with-flowpath-constant_flow.hdf")
+    model.save("example-with-flowpath-constant_flow.hdf5")
+    model = receiver.Receiver.load("example-with-flowpath-constant_flow.hdf5")
 
     # Cut down on run time for now
     # for panel in model.panels.values():
@@ -137,7 +137,7 @@ if __name__ == "__main__":
 
     print("Best estimate life: %f daily cycles" % life)
 
-    model.save("example-with-results-constant_flow.hdf")
+    model.save("example-with-results-constant_flow.hdf5")
 
     for pi, panel in model.panels.items():
         for ti, tube in panel.tubes.items():

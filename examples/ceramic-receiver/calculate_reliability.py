@@ -62,8 +62,8 @@ def sample_parameters():
 
 
 if __name__ == "__main__":
-    # model = receiver.Receiver.load("SiC_1pt00mm_spath_Sresults.hdf")
-    model = receiver.Receiver.load("example-structural-thermal.hdf")
+    # model = receiver.Receiver.load("SiC_1pt00mm_spath_Sresults.hdf5")
+    model = receiver.Receiver.load("example-structural-thermal.hdf5")
 
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
@@ -118,8 +118,8 @@ if __name__ == "__main__":
 
         # Report the best-estimate life of the receiver
         reliability = solver.calculate_reliability(time=100.0)
-        model.save("example_with_Rresults.hdf")
-        # model.save("SiC_1pt00mm_spath_Rresults.hdf")
+        model.save("example_with_Rresults.hdf5")
+        # model.save("SiC_1pt00mm_spath_Rresults.hdf5")
 
         # for pi, panel in model.panels.items():
         #     for ti, tube in panel.tubes.items():

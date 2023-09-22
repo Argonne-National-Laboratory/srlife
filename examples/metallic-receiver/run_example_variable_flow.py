@@ -90,8 +90,8 @@ if __name__ == "__main__":
     inlet_temp = inlet_temp * np.ones_like(times)
 
     model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
-    model.save("example-with-flowpath-variable_flow.hdf")
-    model = receiver.Receiver.load("example-with-flowpath-variable_flow.hdf")
+    model.save("example-with-flowpath-variable_flow.hdf5")
+    model = receiver.Receiver.load("example-with-flowpath-variable_flow.hdf5")
 
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     print("Best estimate life: %f daily cycles" % life)
 
-    model.save("example-with-results-variable_flow.hdf")
+    model.save("example-with-results-variable_flow.hdf5")
 
     for pi, panel in model.panels.items():
         for ti, tube in panel.tubes.items():

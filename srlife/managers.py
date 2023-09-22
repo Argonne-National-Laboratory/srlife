@@ -188,7 +188,7 @@ class SolutionManager:
 
         return self.calculate_reliability_combined(time)
 
-    def calculate_reliability_volume(self, time):
+    def calculate_reliability_volume_flaw(self, time):
         """Calculate reliability from the results
 
         Args:
@@ -199,7 +199,7 @@ class SolutionManager:
         """
         if self.progress:
             print("Calculating reliability (volume):")
-        return self.damage_model.determine_reliability_volume(
+        return self.damage_model.determine_reliability_volume_flaw(
             self.receiver,
             self.damage_material,
             time,
@@ -207,7 +207,7 @@ class SolutionManager:
             decorator=self.progress_decorator,
         )
 
-    def calculate_reliability_surface(self, time):
+    def calculate_reliability_surface_flaw(self, time):
         """Calculate reliability from the results
 
         Args:
@@ -218,7 +218,7 @@ class SolutionManager:
         """
         if self.progress:
             print("Calculating reliability (surface):")
-        return self.damage_model.determine_reliability_surface(
+        return self.damage_model.determine_reliability_surface_flaw(
             self.receiver,
             self.damage_material,
             time,
