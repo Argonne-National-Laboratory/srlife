@@ -152,7 +152,7 @@ class SolutionManager:
         self.solve_heat_transfer()
         self.solve_structural()
 
-        return self.calculate_reliability_volume(time)
+        return self.calculate_reliability_volume_flaw(time)
     
     def solve_reliability_surface(self, time):
         """User interface: solve everything and return receiver reliability
@@ -169,7 +169,7 @@ class SolutionManager:
         self.solve_heat_transfer()
         self.solve_structural()
 
-        return self.calculate_reliability_surface(time)
+        return self.calculate_reliability_surface_flaw(time)
     
     def solve_reliability_combined(self, time):
         """User interface: solve everything and return receiver reliability
