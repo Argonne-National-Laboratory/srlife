@@ -212,7 +212,7 @@ class SolutionManager:
                             self.thermal_material,
                             self.fluid_material,
                             **merge_dicts(
-                                h.args_for_thermal_solver(self.receiver, x)
+                                h.args_for_tube_thermal_solver(self.receiver, x)
                                 for h in self.heuristics
                             )
                         ),
