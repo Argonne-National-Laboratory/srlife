@@ -84,8 +84,8 @@ if __name__ == "__main__":
     inlet_temp = inlet_temp * np.ones_like(times)
 
     model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
-    model.save("example-with-flowpath-variable_flow.hdf")
-    model = receiver.Receiver.load("example-with-flowpath-variable_flow.hdf")
+    model.save("example-with-flowpath-variable_flow.hdf5")
+    model = receiver.Receiver.load("example-with-flowpath-variable_flow.hdf5")
 
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     structural_solver = structural.PythonTubeSolver(params["structural"])
     # Define the system solver to use in solving the coupled structural system
     system_solver = system.SpringSystemSolver(params["system"])
-
+    
     # Damage model to use in calculating reliability
     # damage_model = damage.TimeFractionInteractionDamage(params["damage"])
     damage_model = damage.PIAModel(params["damage"])
@@ -132,17 +132,23 @@ if __name__ == "__main__":
 
     # Heuristics
     solver.add_heuristic(managers.CycleResetHeuristic())
+    # solver.solve_heat_transfer()
+    # solver.solve_structural()
+    # model.save("example-structural-thermal.hdf5")
 
     # Report tube reliability
-    reliability = solver.solve_reliability()
+    # reliability = solver.solve_reliability()
+    reliability_volume = solver.calculate_reliability_volume_flaw(time=100.0)
+    reliability_surface = solver.calculate_reliability_surface_flaw(time=100.0)
+    reliability_combined = solver.calculate_reliability_combined(time=100.0)
 
-    print("Individual tube reliabilities:")
-    print(reliability["tube_reliability"])
+    # print("Individual tube reliabilities:")
+    # print(reliability["tube_reliability"])
 
-    print("Overall structure reliability:")
-    print(reliability["overall_reliability"])
+    # print("Overall structure reliability:")
+    # print(reliability["overall_reliability"])
 
-    model.save("example-with-results-variable_flow.hdf")
+    model.save("example-with-results-variable_flow.hdf5")
 
     for pi, panel in model.panels.items():
         for ti, tube in panel.tubes.items():

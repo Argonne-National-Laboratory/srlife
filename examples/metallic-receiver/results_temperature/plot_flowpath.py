@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
     flow_type = sys.argv[1] #'constant' or 'variable'
 
-    results_fname = os.path.join("example-with-results-"+str(flow_type)+"_flow.hdf")
+    results_fname = os.path.join("example-with-results-"+str(flow_type)+"_flow.hdf5")
     model = receiver.Receiver.load(results_fname)
 
     for pi, panel in model.panels.items():
