@@ -708,6 +708,9 @@ class StandardCeramicMaterial:
 
     def __init__(
         self,
+        su_temperatures,
+        threshold_v,
+        threshold_s,
         s_temperatures,
         strengths_v,
         strengths_s,
@@ -727,6 +730,11 @@ class StandardCeramicMaterial:
     ):
         super().__init__(*args, **kwargs)
 
+        self.su_temperatures = su_temperatures
+        self.threhold_v = threshold_v
+        self.threhold_s = threshold_s
+        self.su_v = inter.interp1d(s_temperatures, threshold_v)
+        self.su_s = inter.interp1d(s_temperatures, threshold_s)
         self.s_temperatures = s_temperatures
         self.strengths_v = strengths_v
         self.strengths_s = strengths_s
@@ -749,6 +757,18 @@ class StandardCeramicMaterial:
         self.Bsvals = Bsvals
         self.Bv = inter.interp1d(Bv_temperatures, Bvvals)
         self.Bs = inter.interp1d(Bv_temperatures, Bsvals)
+
+    def threshold_vol(self, T):
+        """
+        Weibull threshold parameter for volume flaws as a function of temperature
+        """
+        return self.su_v(T)
+    
+    def threshold_surf(self, T):
+        """
+        Weibull threshold parameter for surface flaws as a function of temperature
+        """
+        return self.su_s(T)
 
     def strength_vol(self, T):
         """
@@ -824,6 +844,13 @@ class StandardCeramicMaterial:
         Parameters:
           node:    node with model
         """
+        threshold_v = node.find("threshold_vol")
+        su_temps = threshold_v.find("temperatures")
+        su_vals_v = threshold_v.find("values")
+
+        threshold_s = node.find("threshold_surf")
+        su_vals_s = threshold_s.find("values")
+
         strength_v = node.find("strength_vol")
         s_temps = strength_v.find("temperatures")
         svals_v = strength_v.find("values")
@@ -856,6 +883,9 @@ class StandardCeramicMaterial:
         Bsvals = Bs.find("values")
 
         return StandardCeramicMaterial(
+            np.array(list(map(float, su_temps.text.strip().split()))),
+            np.array(list(map(float, su_vals_v.text.strip().split()))),
+            np.array(list(map(float, su_vals_s.text.strip().split()))),
             np.array(list(map(float, s_temps.text.strip().split()))),
             np.array(list(map(float, svals_v.text.strip().split()))),
             np.array(list(map(float, svals_s.text.strip().split()))),
