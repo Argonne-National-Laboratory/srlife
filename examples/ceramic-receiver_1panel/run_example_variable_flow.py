@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-import numpy as np
-
-import sys
-
-sys.path.append("../..")
-
 from srlife import (
     receiver,
     solverparams,
@@ -17,15 +11,18 @@ from srlife import (
     managers,
     damage,
 )
+import numpy as np
+
+import sys
+
+sys.path.append("../..")
 
 
 def sample_parameters():
     params = solverparams.ParameterSet()
 
-    params["nthreads"] = 2
+    params["nthreads"] = 12
     params["progress_bars"] = True
-    # If true store results on disk (slower, but less memory)
-    params["page_results"] = False
 
     params["thermal"]["miter"] = 200
     params["thermal"]["verbose"] = False
@@ -48,13 +45,10 @@ def sample_parameters():
     params["system"]["miter"] = 10
     params["system"]["verbose"] = False
 
-    # How to extrapolate damage forward in time based on the cycles provided
-    # Options:
-    #     "lump" = D_future = sum(D_simulated) / N * days
-    #     "last" = D_future = sum(D_simulated[:-1]) + D_simulated[-1] * days
-    #     "poly" = polynomial extrapolation with order given by the "order" param
-    params["damage"]["extrapolate"] = "lump"
-    params["damage"]["order"] = 2
+    # If true store results on disk (slower, but less memory)
+    params["page_results"] = False
+
+    params["damage"]["shear_sensitive"] = True
 
     return params
 
@@ -66,7 +60,8 @@ if __name__ == "__main__":
     #     Thermal boundary conditions
     #     Pressure boundary conditions
     #     Interconnect stiffnesses
-    model = receiver.Receiver.load("example-receiver.hdf5")
+    # model = receiver.Receiver.load("example-receiver.hdf5")     #9 panels
+    model = receiver.Receiver.load("Tube_st.hdf5")     #1 panel
 
     # Demonstration on how to setup a flowpath
     # Setup the flow path information
@@ -76,24 +71,22 @@ if __name__ == "__main__":
         for name_tube, tube in panel.tubes.items():
             times = tube.times
             tube.multiplier_val = 16
-            tube.T0 = 300 # K
+            tube.T0 = 300  # k
 
-    mass_flow = 460 # kg/s
-    inlet_temp = 550 # C
+    mass_flow = 460  # kg/s
+    inlet_temp = 550  # C
 
-    mass_flow *= 3600.0 # kg/hr
-    mass_flow *= np.ones_like(times)
-    inlet_temp += 273.15 # k
+    mass_flow *= 3600.0  # kg/hr
+    mass_flow *= np.copy(tube.outer_bc.data[:, 0, 0])
+    mass_flow /= np.copy(tube.outer_bc.data[:, 0, 0]).max()
+    mass_flow[0] = mass_flow[1]
+    mass_flow[-1] = mass_flow[-2]
+    inlet_temp += 273.15  # K
     inlet_temp = inlet_temp * np.ones_like(times)
 
     model.add_flowpath(flowpath, times, mass_flow, inlet_temp)
-    model.save("example-with-flowpath-constant_flow.hdf5")
-    model = receiver.Receiver.load("example-with-flowpath-constant_flow.hdf5")
-
-    # Cut down on run time for now
-    # for panel in model.panels.values():
-    #    for tube in panel.tubes.values():
-    #        tube.make_1D(tube.h/2,0.0)
+    model.save("example-with-flowpath-variable_flow_1panel.hdf5")
+    model = receiver.Receiver.load("example-with-flowpath-variable_flow_1panel.hdf5")
 
     # Load some customized solution parameters
     # These are all optional, all the solvers have default values
@@ -106,13 +99,22 @@ if __name__ == "__main__":
     structural_solver = structural.PythonTubeSolver(params["structural"])
     # Define the system solver to use in solving the coupled structural system
     system_solver = system.SpringSystemSolver(params["system"])
-    # Damage model to use in calculating life
-    damage_model = damage.TimeFractionInteractionDamage(params["damage"])
+
+    # Damage model to use in calculating reliability
+    # damage_model = damage.TimeFractionInteractionDamage(params["damage"])
+    damage_model = damage.PIAModel(params["damage"])
+    # damage_model = damage.WNTSAModel(params["damage"])
+    # damage_model = damage.MTSModelGriffithFlaw(params["damage"])
+    # damage_model = damage.MTSModelPennyShapedFlaw(params["damage"])
+    # damage_model = damage.CSEModelGriffithFlaw(params["damage"])
+    # damage_model = damage.CSEModelPennyShapedFlaw(params["damage"])
+    # damage_model = damage.SMMModelGriffithFlaw(params["damage"])
+    # damage_model = damage.SMMModelPennyShapedFlaw(params["damage"])
 
     # Load the materials
     fluid = library.load_thermal_fluid("32MgCl2-68KCl", "base")
     thermal, deformation, damage = library.load_material(
-        "740H", "base", "elastic_model", "base"
+        "SiC", "base", "cares", "cares"
     )
 
     # The solution manager
@@ -131,14 +133,31 @@ if __name__ == "__main__":
 
     # Heuristics
     solver.add_heuristic(managers.CycleResetHeuristic())
+    solver.solve_heat_transfer()
+    solver.solve_structural()
+    model.save("example-structural-thermal_1panel.hdf5")
+    # Report tube reliability
+    # reliability = solver.solve_reliability(time=100000.0)
+    reliability_volume = solver.calculate_reliability_volume_flaw(time=100.0)
+    reliability_surface = solver.calculate_reliability_surface_flaw(time=100.0)
+    reliability_combined = solver.calculate_reliability_combined(time=100.0)
 
-    # Report the best-estimate life of the receiver
-    life = solver.solve_life()
+    print(damage_model)
 
-    print("Best estimate life: %f daily cycles" % life)
+    # print("Individual tube reliabilities:")
+    # print(reliability["tube_reliability"])
 
-    model.save("example-with-results-constant_flow.hdf5")
+    # print("Individual panel reliabilities:")
+    # print(reliability["panel_reliability"])
+
+    # print("Overall reliability:")
+    # print(reliability["overall_reliability"])
+
+    # print("Minimum tube reliabilities:")
+    # print(min(reliability["tube_reliability"]))
+
+    model.save("example-with-results-variable_flow_1panel.hdf5")
 
     for pi, panel in model.panels.items():
         for ti, tube in panel.tubes.items():
-            tube.write_vtk("constant_flow-tube-%s-%s" % (pi, ti))
+            tube.write_vtk("variable_flow_tube_1panel-%s-%s" % (pi, ti))

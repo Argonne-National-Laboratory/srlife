@@ -1,43 +1,91 @@
 <!-- Weibull strength should be compatible with units of K, MPa, and mm -->
 <models type="ceramic">
   <base type="StandardModel">
-    <strength>
+    <threshold_vol>
+      <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
+      <values>0.0 0.0 0.0 0.0 0.0 0.0</values>
+    </threshold_vol>
+    <threshold_surf>
+      <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
+      <values>0.0 0.0 0.0 0.0 0.0 0.0</values>
+    </threshold_surf>
+    <strength_vol>
       <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
       <values>507.0 467.0 528.0 570.0 476.0 471.0</values>
-    </strength>
-    <modulus>
+    </strength_vol>
+    <strength_surf>
+      <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
+      <values>507.0 467.0 528.0 570.0 476.0 471.0</values>
+    </strength_surf>
+    <modulus_vol>
       <temperatures>298.15 1273.15 1773.15</temperatures>
       <values>10.7 10.7 10.7</values>
-    </modulus>
+    </modulus_vol>
+    <modulus_surf>
+      <temperatures>298.15 1273.15 1773.15</temperatures>
+      <values>10.7 10.7 10.7</values>
+    </modulus_surf>
     <c_bar>1.5</c_bar>
     <nu>0.16</nu>
     <fatigue_Nv>
       <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
       <values>30 30 30 30</values>
     </fatigue_Nv>
+    <fatigue_Ns>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>30 30 30 30</values>
+    </fatigue_Ns>
     <fatigue_Bv>
       <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
       <values>320 320 320 320</values>
     </fatigue_Bv>
+    <fatigue_Bs>
+      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
+      <values>320 320 320 320</values>
+    </fatigue_Bs>
   </base>
   <cares type="StandardModel">
-    <strength>
-      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
-      <values>552.94 552.94 552.94 552.94</values>
-    </strength>
-    <modulus>
-      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
-      <values>8.6 8.6 8.6 8.6</values>
-    </modulus>
+    <threshold_vol>
+      <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
+      <values>0.0 0.0 0.0 0.0 0.0 0.0</values>
+    </threshold_vol>
+    <threshold_surf>
+      <temperatures>298.15 1073.15 1273.15 1473.15 1673.15 1773.15</temperatures>
+      <values>0.0 0.0 0.0 0.0 0.0 0.0</values>
+    </threshold_surf>
+    <strength_vol>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>552.94 552.94 552.94 552.94 552.94</values>
+    </strength_vol>
+    <strength_surf>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>669.78 669.78 669.78 669.78 669.78</values>
+    </strength_surf>
+    <modulus_vol>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>8.6 8.6 8.6 8.6 8.6</values>
+    </modulus_vol>
+    <modulus_surf>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>8.6 8.6 8.6 8.6 8.6</values>
+    </modulus_surf>
     <c_bar>0.82</c_bar>
     <nu>0.16</nu>
     <fatigue_Nv>
-      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
-      <values>56 56 47 38</values>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>56 56 47 38 38</values>
     </fatigue_Nv>
+    <fatigue_Ns>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>56 56 47 38 38</values>
+    </fatigue_Ns>
     <fatigue_Bv>
-      <temperatures>298.15 811.15 1089.15 1366.15</temperatures>
-      <values>1275 1275 1850 520</values>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>1275 1275 1850 520 520</values>
     </fatigue_Bv>
+    <fatigue_Bs>
+      <temperatures>298.15 811.15 1089.15 1366.15 1566.15</temperatures>
+      <values>520 520 750 210 210</values>
+    </fatigue_Bs>
   </cares>
 </models>
