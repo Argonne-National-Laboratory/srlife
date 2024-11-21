@@ -1,7 +1,0 @@
-include LICENSE
-include *.py
-include *.txt *.md
-recursive-include srlife *.py *.xml
-recursive-include test *.py *.i *.e *.xml
-prune doc 
-prune examples
